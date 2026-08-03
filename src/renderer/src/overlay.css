@@ -1,0 +1,94 @@
+/*
+ * Global styling shared by both windows.
+ *
+ * The :root palette is ported verbatim from the original StS2 companion so the
+ * overlays render with identical character-frame colours and accent hues. The
+ * overlay window is transparent + click-through (pointer-events:none) with
+ * children opting back in; the dashboard window paints its own solid surface.
+ */
+:root {
+  /* character frame palettes (oklch, relative-color derived) */
+  --sts-ironclad-frame-edge: oklch(0.574 0.129 33.2);
+  --sts-ironclad-frame: oklch(0.444 0.119 32.7);
+  --sts-ironclad-primary: oklch(from var(--sts-ironclad-frame) calc(l * 1.55) calc(c * 1.65) h);
+  --sts-silent-frame-edge: oklch(0.662 0.141 133.8);
+  --sts-silent-frame: oklch(0.51 0.125 134.7);
+  --sts-silent-primary: oklch(from var(--sts-silent-frame) calc(l * 1.55) calc(c * 1.65) h);
+  --sts-regent-frame-edge: oklch(0.709 0.161 63.5);
+  --sts-regent-frame: oklch(0.553 0.133 57);
+  --sts-regent-primary: oklch(from var(--sts-regent-frame) calc(l * 1.55) calc(c * 1.55) h);
+  --sts-necrobinder-frame-edge: oklch(0.63 0.115 357.9);
+  --sts-necrobinder-frame: oklch(0.482 0.108 358.7);
+  --sts-necrobinder-primary: oklch(from var(--sts-necrobinder-frame) calc(l * 1.5) calc(c * 1.65) h);
+  --sts-defect-frame-edge: oklch(0.589 0.11 239);
+  --sts-defect-frame: oklch(0.462 0.095 238);
+  --sts-defect-primary: oklch(from var(--sts-defect-frame) calc(l * 1.6) calc(c * 1.6) h);
+  --sts-colorless-frame-edge: oklch(0.631 0 0);
+  --sts-colorless-frame: oklch(0.467 0 0);
+  --sts-colorless-primary: oklch(from var(--sts-colorless-frame) calc(l * 1.6) c h);
+
+  /* named accent colours */
+  --sts-color-aqua: #2aebbe;
+  --sts-color-cream: #fff6e2;
+  --sts-color-gold: #efc851;
+  --sts-color-red: #ff5555;
+  --sts-color-green: #7fff00;
+  --sts-color-blue: #87ceeb;
+  --sts-color-darkblue: #67aeeb;
+  --sts-color-orange: #ffa518;
+  --sts-color-pink: #ff78a0;
+  --sts-color-purple: #ee82ee;
+
+  /* base surfaces / brand accents */
+  --sts-bg: #262321;
+  --accent-orange: #ff6a00;
+  --accent-teal: #1691cc;
+
+  /* Reliquary brand accent (violet relic-orb). Used for app chrome + overlay
+     decorative accents. The A–F tier scale and character-frame palettes above
+     are semantic/game-authentic and intentionally stay as they are. */
+  --brand: #b47bff;
+  --brand-deep: #6b3fbe;
+  --brand-soft: #d8c2ff;
+
+  font-family: 'Montserrat', 'Open Sans', system-ui, sans-serif;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  margin: 0;
+  padding: 0;
+  width: 100vw;
+  height: 100vh;
+  overflow: hidden;
+  background: transparent;
+}
+
+/* Overlay window: whole surface is click-through unless a child opts in. */
+.sts2-overlay {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  user-select: none;
+}
+.sts2-overlay .interactive {
+  pointer-events: auto;
+}
+
+/*
+ * Dashboard window is frameless + opaque: Windows 11 draws the native drop shadow
+ * and rounded corners. The Shell fills the whole surface (no CSS shadow/rounding);
+ * its styled background gradient provides the panel look.
+ */
+.dashboard {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  color: var(--sts-color-cream);
+  font-family: 'Montserrat', system-ui, sans-serif;
+}
