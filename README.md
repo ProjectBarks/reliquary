@@ -115,6 +115,16 @@ Reliquary is an **unofficial**, personal/educational project. It is not affiliat
 endorsed by MegaCrit (Slay the Spire) or Untapped.gg. Reading game memory and using third-party
 APIs may conflict with a game's or a service's terms of use — use at your own risk.
 
+## Acknowledgements
+
+Reliquary is only possible thanks to the data behind it:
+
+- 💜 **[Spire Codex](https://spire-codex.com)** — for the card stats and deck-conditioned
+  draft-advice API that powers every recommendation Reliquary makes. Thank you!
+- **[Untapped.gg](https://untapped.gg)** — for the Slay the Spire 2 card-metadata CDN, and for
+  the Companion overlay that inspired this project.
+- **[MegaCrit](https://www.megacrit.com)** — for making Slay the Spire 2.
+
 ## License
 
 [MIT](LICENSE) © Brandon Barker — for the application code in this repository. The vendored
