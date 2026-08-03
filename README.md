@@ -64,7 +64,6 @@ rebuilt from scratch on Electron + React.
 - Windows 10/11
 - Node.js 20+
 - Slay the Spire 2
-- ⚠️ The native memory-reader module is **not included** — see [The native module](#the-native-module).
 
 ## Getting started
 
@@ -94,10 +93,11 @@ npm run icon
 
 ## The native module
 
-Reliquary reads game memory through a vendored native module in `vendor/untapped-scry`, which is
-**proprietary and not distributed with this repository** (it's git-ignored). Without it the app
-still launches — the dashboard runs, `SPECTRA_STUB` demo mode works, and the overlay simply waits
-for the game — but it cannot read live state. Supply your own compatible reader in `vendor/`.
+Reliquary reads game memory through small vendored native modules in `vendor/`
+(`untapped-scry` — the memory reader — and `untapped-node-native` — Win32 window helpers).
+They're bundled into the packaged app (electron-builder `extraResources`), so the installer
+works out of the box with no extra setup. If the module ever fails to load, the app still
+launches: the dashboard runs, `SPECTRA_STUB` demo mode works, and the overlay waits for the game.
 
 ## Hotkeys
 

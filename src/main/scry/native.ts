@@ -27,7 +27,13 @@ function firstExisting(...candidates: string[]): string | null {
 }
 
 function vendorRoots(): string[] {
-  return [join(app.getAppPath(), 'vendor'), join(process.cwd(), 'vendor')]
+  const roots: string[] = []
+  // Packaged: the native module ships as an extraResource at
+  // `<resources>/vendor` (electron-builder `extraResources: from vendor to vendor`),
+  // NOT inside app.asar — so look there first.
+  if (app.isPackaged) roots.push(join(process.resourcesPath, 'vendor'))
+  roots.push(join(app.getAppPath(), 'vendor'), join(process.cwd(), 'vendor'))
+  return roots
 }
 
 // ── untapped-scry (memory reader) ──────────────────────────────────────────

@@ -5,6 +5,3 @@ release/
 *.log
 *.tsbuildinfo
 .DS_Store
-
-# Proprietary vendored native modules (personal/local use only — never commit)
-vendor/

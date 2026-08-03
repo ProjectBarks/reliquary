@@ -1,0 +1,49 @@
+{
+  "version": "6.12.6",
+  "name": "untapped-scry",
+  "main": "./lib/index.js",
+  "types": "./index.d.ts",
+  "repository": "git@github.com:HearthSim/untapped-scry.git",
+  "author": "Julian Graham <julian@hearthsim.net>",
+  "license": "UNLICENSED",
+  "dependencies": {
+    "@mapbox/node-pre-gyp": "1.0.8"
+  },
+  "devDependencies": {
+    "aws-sdk": "2.828.0",
+    "cross-spawn": "^5.1.0",
+    "napi-headers": "^0.5.0",
+    "node-addon-api": "^4.3.0",
+    "prettier": "^2.0.5"
+  },
+  "files": [
+    "lib",
+    "src",
+    "index.d.ts",
+    "binding.gyp"
+  ],
+  "prettier": {
+    "useTabs": true,
+    "trailingComma": "all",
+    "overrides": [
+      {
+        "files": "*.gyp",
+        "options": {
+          "parser": "json"
+        }
+      }
+    ]
+  },
+  "private": true,
+  "binary": {
+    "bucket": "libs.hearthsim.net",
+    "host": "https://s3.amazonaws.com",
+    "module_name": "untapped-scry",
+    "module_path": "./lib/binding/napi-v{napi_build_version}",
+    "napi_versions": [
+      5
+    ],
+    "package_name": "{module_name}-{platform}-{arch}-napi-v{napi_build_version}-{version}.tar.gz",
+    "remote_path": "libs.hearthsim.net"
+  }
+}

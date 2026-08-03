@@ -29,16 +29,6 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      # The untapped-scry native module is proprietary and git-ignored, so it is
-      # absent in CI. Stub the dir so electron-builder's extraResources copy step
-      # succeeds; the resulting installer runs but ships without the memory reader.
-      - name: Stub vendor directory
-        shell: pwsh
-        run: |
-          New-Item -ItemType Directory -Force vendor | Out-Null
-          Set-Content -Path vendor/NATIVE_MODULE_NOT_INCLUDED.txt `
-            -Value "The untapped-scry native module is proprietary and is not bundled in CI builds."
-
       - name: Typecheck
         run: npm run typecheck
 

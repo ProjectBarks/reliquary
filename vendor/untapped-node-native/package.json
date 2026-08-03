@@ -1,0 +1,47 @@
+{
+  "name": "untapped-node-native",
+  "version": "2.3.0",
+  "main": "./lib/index.js",
+  "types": "./index.d.ts",
+  "repository": "git@github.com:HearthSim/untapped-node-native.git",
+  "author": "Benedict Etzel <benedict@hearthsim.net>",
+  "license": "UNLICENSED",
+  "dependencies": {
+    "@mapbox/node-pre-gyp": "1.0.8"
+  },
+  "devDependencies": {
+    "cross-spawn": "^5.1.0",
+    "prettier": "^2.0.5",
+    "node-addon-api": "^4.3.0"
+  },
+  "files": [
+    "lib",
+    "src",
+    "index.d.ts",
+    "binding.gyp"
+  ],
+  "prettier": {
+    "useTabs": true,
+    "trailingComma": "all",
+    "overrides": [
+      {
+        "files": "*.gyp",
+        "options": {
+          "parser": "json"
+        }
+      }
+    ]
+  },
+  "private": true,
+  "binary": {
+    "bucket": "libs.hearthsim.net",
+    "host": "https://s3.amazonaws.com",
+    "module_name": "untapped-node-native",
+    "module_path": "./lib/binding/napi-v{napi_build_version}",
+    "napi_versions": [
+      5
+    ],
+    "package_name": "{module_name}-{platform}-{arch}-napi-v{napi_build_version}-{version}.tar.gz",
+    "remote_path": "libs.hearthsim.net"
+  }
+}
