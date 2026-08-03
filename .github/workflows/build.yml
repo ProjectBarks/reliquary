@@ -1,0 +1,66 @@
+name: build
+
+on:
+  push:
+    branches: [main]
+    tags: ['v*']
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: build-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: write
+
+jobs:
+  windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      # The untapped-scry native module is proprietary and git-ignored, so it is
+      # absent in CI. Stub the dir so electron-builder's extraResources copy step
+      # succeeds; the resulting installer runs but ships without the memory reader.
+      - name: Stub vendor directory
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force vendor | Out-Null
+          Set-Content -Path vendor/NATIVE_MODULE_NOT_INCLUDED.txt `
+            -Value "The untapped-scry native module is proprietary and is not bundled in CI builds."
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Build renderer + main (electron-vite)
+        run: npm run build
+
+      - name: Package Windows installer (electron-builder, NSIS)
+        run: npx electron-builder --win nsis --publish never
+        env:
+          # Unsigned build — don't attempt cert auto-discovery.
+          CSC_IDENTITY_AUTO_DISCOVERY: false
+
+      - name: Upload installer artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: Reliquary-windows-installer
+          path: release/*.exe
+          if-no-files-found: error
+
+      # On a version tag (e.g. v0.1.0), attach the installer to a GitHub Release.
+      - name: Attach installer to GitHub Release
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: release/*.exe
