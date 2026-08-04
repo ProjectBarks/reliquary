@@ -315,7 +315,7 @@ export class Heap {
    * per-qword JS loop — same result, but the search runs at memcpy speed, which
    * is the difference between a 50 s scan and a sub-second one.
    */
-  instances(typeName, { limit = 0, regions = null } = {}) {
+  instances(typeName, { limit = 0, regions = null, verify = null } = {}) {
     const list = this.mtOfName.get(typeName)
     if (!list) return []
     const CHUNK = 0x100000
@@ -337,7 +337,8 @@ export class Heap {
         }
       }
     }
-    const scored = found.map((a) => ({ addr: a, score: this.score(a) })).sort((x, y) => y.score - x.score)
+    const kept = verify ? found.filter((a) => { try { return verify(a) } catch { return false } }) : found
+    const scored = kept.map((a) => ({ addr: a, score: this.score(a) })).sort((x, y) => y.score - x.score)
     return limit ? scored.slice(0, limit) : scored
   }
 
@@ -350,12 +351,19 @@ export class Heap {
    * cached address is re-validated every call and only triggers a rescan when
    * it actually goes stale — which turns the common case into a few reads.
    */
-  root(typeName, { minScore = 0.6 } = {}) {
+  root(typeName, { minScore = 0.6, verify = null } = {}) {
+    const ok = (a) => {
+      const mt = this.mtOf(a)
+      if (!mt || this.nameOfMT.get(mt.toString()) !== typeName) return false
+      // A caller-supplied semantic check beats any score threshold: the real
+      // NRun is the one whose _state is actually a RunState. Scores fluctuate
+      // during scene transitions and would reject the right object.
+      return verify ? (() => { try { return verify(a) } catch { return false } })() : this.score(a) >= minScore
+    }
     const c = this._roots ?? (this._roots = new Map())
     const hit = c.get(typeName)
     if (hit != null) {
-      const mt = this.mtOf(hit)
-      if (mt && this.nameOfMT.get(mt.toString()) === typeName && this.score(hit) >= minScore) return hit
+      if (ok(hit)) return hit
       c.delete(typeName)
     }
     // Rescan, nearest first: the object usually reappears in the same region.
@@ -363,8 +371,8 @@ export class Heap {
     const near = hit == null ? [] : regs.filter((x) => hit >= x.base - 0x400000n && hit < x.base + x.size + 0x400000n)
     for (const set of [near, regs]) {
       if (!set.length) continue
-      const best = this.instances(typeName, { limit: 1, regions: set })[0]
-      if (best && best.score >= minScore) {
+      const best = this.instances(typeName, { limit: 1, regions: set, verify })[0]
+      if (best && (verify || best.score >= minScore)) {
         c.set(typeName, best.addr)
         return best.addr
       }

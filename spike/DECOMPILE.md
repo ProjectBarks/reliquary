@@ -674,3 +674,61 @@ string table lookup is needed.
 - screen/layout state off `NGame` (card reward, merchant, grid, capstone)
 - enemy state from `CombatState`
 - feed snapshots to `compareCandidate` and drive diffs to zero
+
+## Verified against live play
+
+`watch.mjs` polled a real run at 4 Hz for 75 s during an Act 2 elite fight:
+
+```
+ticks=288 failures=0 (100.0% ok)  snapshot p50=3ms p95=4ms max=110ms
+```
+
+It tracked, frame by frame: block swinging 19 -> 23 -> 14 -> 7 -> 12, SoulNexus
+falling 404 -> 80 of 842 HP, energy burning 3 -> 0, turn and round advancing, and
+draw/hand/discard counts shifting card by card as they were drawn and played.
+
+### Runtime bootstrap
+
+MethodTable addresses are per-process, so they are rediscovered each launch.
+The bootstrap works entirely inside the loader-heap band (`> 0x7F0000000000`)
+and never touches the GC heap.
+
+Identifying which Module is sts2 matters because **TypeDef rids collide across
+assemblies** — a CoreLib type can masquerade as `NGame` on rid alone. The
+discriminator: for a correctly identified type, `MT -> EEClass -> FieldDescList`
+and resolving the first FieldDesc's token must yield a field whose declaring
+type is that same type. sts2's module scores **100%**; every other module in the
+process scores 13% or less. Unambiguous.
+
+| stage | cost |
+| --- | --- |
+| bootstrap (5410 types named) | 0.7 s |
+| narrow 2767 MB -> 87 MB of GC heap | 5.0 s |
+| first snapshot | 94 ms |
+| **steady-state snapshot** | **3 ms** |
+
+Cold start is ~6.5 s, once, and the poll budget is 250 ms.
+
+### Instance identification
+
+Score thresholds proved wrong: during scene transitions `NRun`'s fields go
+briefly null and its score collapses to 0.375, below any useful cutoff. The fix
+is a per-type semantic anchor — the real `NRun` is the one whose `_state` is
+genuinely a `RunState`. `root()` takes a `verify` predicate and re-validates the
+cached address every tick, rescanning only when GC has actually moved it.
+
+### Covered today
+
+run (act, floor, ascension, mode, map), player (character, gold, energy, HP,
+block, relics, potions, full deck with upgrades/cost/rarity/type), combat
+(encounter, round, turn, energy, phase, enemies with HP/block/powers), piles
+(draw/hand/discard/exhaust), screen (room class, overlay stack, map open,
+capstone screen).
+
+### Not yet covered
+
+Screen **geometry** — where each offered card sits on screen. The native reader
+derives this from Godot `Control` rects, which live on the engine side rather
+than in managed memory, so it needs a Godot object read rather than a CoreCLR
+one. This is the only remaining gap before the proprietary binary can be
+dropped.

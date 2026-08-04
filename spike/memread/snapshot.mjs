@@ -23,8 +23,13 @@ function card(h, c) {
   }
 }
 
+const RUNSTATE = 'MegaCrit.Sts2.Core.Runs.RunState'
+
 export function snapshot(h) {
-  const nrun = h.root(NRUN)
+  // The real NRun is the one whose _state is genuinely a RunState. Anchoring on
+  // that instead of a score threshold survives scene transitions, where many of
+  // NRun's fields are briefly null and its score collapses.
+  const nrun = h.root(NRUN, { verify: (a) => h.typeOf(h.get(a, '_state')) === RUNSTATE })
   if (!nrun) return { ok: false, reason: 'NRun not resolved' }
   const st = h.get(nrun, '_state')
   if (!st) return { ok: false, reason: 'RunState not resolved' }
@@ -35,17 +40,57 @@ export function snapshot(h) {
 
   const pile = (owner, name) => h.items(h.get(h.get(owner, name), '_cards')).map((c) => card(h, c)).filter(Boolean)
 
-  const combat = p ? h.get(p, 'PlayerCombatState') : null
+  const combatState = p ? h.get(p, 'PlayerCombatState') : null
   const piles = {}
-  if (combat) {
+  if (combatState) {
     for (const n of ['DrawPile', 'Hand', 'DiscardPile', 'ExhaustPile']) {
-      const cp = h.get(combat, n)
+      const cp = h.get(combatState, n)
       if (cp) piles[n[0].toLowerCase() + n.slice(1)] = h.items(h.get(cp, '_cards')).map((c) => card(h, c)).filter(Boolean)
     }
   }
 
+  // Room type comes from the current scene's own class name, which is how the
+  // native reader identifies it too (NCombatRoom / NMerchantRoom / NMapRoom...).
+  const scene = h.get(h.get(nrun, '_roomContainer'), '_currentScene')
+  const roomClass = short(h, scene)
+
+  const ui = h.get(nrun, 'GlobalUi')
+  const mapScreen = ui && h.get(ui, 'MapScreen')
+  const overlays = ui ? h.items(h.get(h.get(ui, 'Overlays'), '_overlays')).map((o) => short(h, o)) : []
+  const screen = {
+    roomType: roomClass,
+    overlays,
+    topOverlay: overlays[overlays.length - 1] ?? null,
+    isMapOpen: mapScreen ? !!h.get(mapScreen, 'IsOpen') : false,
+    isTravelEnabled: mapScreen ? !!h.get(mapScreen, 'IsTravelEnabled') : false,
+    capstoneScreen: ui ? short(h, h.get(h.get(ui, 'CapstoneContainer'), 'CurrentCapstoneScreen')) : null
+  }
+
+  // Enemies + intents, from the combat state hanging off the player's creature.
+  const cs = creature ? h.get(creature, 'CombatState') : null
+  const combat = cs && {
+    encounter: short(h, h.get(cs, '_encounter')),
+    round: h.get(cs, 'RoundNumber'),
+    currentSide: h.get(cs, 'CurrentSide'),
+    turn: combatState ? h.get(combatState, 'TurnNumber') : null,
+    energy: combatState ? h.get(combatState, '_energy') : null,
+    phase: combatState ? h.get(combatState, '_phase') : null,
+    enemies: h.items(h.get(cs, '_enemies')).filter(Boolean).map((e) => {
+      const mon = h.get(e, 'Monster')
+      return {
+        id: short(h, mon) ?? short(h, e),
+        hp: h.get(e, '_currentHp'),
+        maxHp: h.get(e, '_maxHp'),
+        block: h.get(e, '_block'),
+        powers: h.items(h.get(e, '_powers')).filter(Boolean).map((p) => short(h, p))
+      }
+    })
+  }
+
   return {
     ok: true,
+    screen,
+    combat,
     run: {
       act: h.get(st, '_currentActIndex'),
       floor: h.get(st, 'ActFloor'),
