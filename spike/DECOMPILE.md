@@ -117,3 +117,111 @@ They keep **per-version offsets** — independent confirmation that the layout c
 Trace `findField` (`0x180036930` → `0x1800369f0`, `0x180037c90`) to recover the
 name → FieldDesc lookup: whether it walks `EEClass`'s FieldDescList or a metadata-built map.
 Then `FieldDesc+0x0C & 0x7FFFFFF` should yield the instance offset, completing the chain.
+
+---
+
+# Research findings (external)
+
+## 🔑 `untapped-scry`'s lineage is PUBLIC — and there's an MIT rewrite
+
+Nothing exists publicly under the name `untapped-scry` (npm: no package; GitHub: 0 repos; the
+`D:\a\...` PDB path just confirms a GitHub-Actions build). **But its ancestry is documented:**
+
+```
+HearthMirror (HearthSim, OPEN SOURCE C#)   ← MonoClass, MonoClassField, MonoImage,
+   → C++ port (ifeherva, 2017)                MonoObject, MonoStruct — an EXACT match
+   → closed-sourced, rebranded "Scry"         for untapped-scry's RTTI names
+   → ScryDotNet (.NET binding)
+   → untapped-scry (our N-API binding)
+```
+
+- HearthMirror mirror: <https://github.com/Bright1992/HearthMirror> (`Mono/MonoClass.cs`,
+  `MonoClassField.cs`, `MonoImage.cs`, `MonoObject.cs`, `MonoStruct.cs`, `Mirror.cs`,
+  `Cache.cs`, `Offsets.cs`, `ProcessView.cs`) — original repo now 404s
+- C++ port announced: <https://hearthsim.info/blog/2017/2017-update/>
+- **MIT rewrite of the closed-source version: <https://github.com/hackf5/unityspy>**
+- "Scry integration" PR: <https://github.com/HearthSim/Hearthstone-Deck-Tracker/pull/4486>
+  → Scry runs **out-of-process** and talks IPC/RPC to the host app
+- `ScryDotNet.ScryInitializationException` leaks in
+  <https://github.com/HearthSim/Hearthstone-Deck-Tracker/issues/4628>
+
+`Scry*/ScryCached/WinNativeInterface` mirror HearthMirror's `Mirror`/`Cache`/`ProcessView`.
+The `*FingerprintHeuristic` classes are bespoke (no public project uses that terminology) —
+structural fingerprinting instead of AOB signatures, which is why it survives engine churn.
+**Not** derived from Il2CppDumper / Il2CppInspector / MelonLoader / frida-il2cpp-bridge.
+
+HearthSim's own description (<https://help.hearthsim.net/en/articles/8377705>): *"standard
+Windows and macOS APIs to access the game's memory in read-only mode"*, *"does not inject or
+'hook' any code"* — same architecture as ours.
+
+## 🔑 LiveSplit `asr` — the only real external Godot 4 reader (Apache-2.0)
+
+<https://github.com/LiveSplit/asr> → `src/game_engine/godot/`. **Includes a Node → C# object
+chain.** Verified offsets (Godot **4.2**, x64):
+
+| Struct | Field | Offset |
+| --- | --- | --- |
+| `Object` | `_instance_id` / `script_instance` / class-name ptr | `0x58` / `0x68` / `0xE8` |
+| `Node` | parent / owner / children(HashMap) / index / name / tree | `0x128` / `0x130` / `0x138` / `0x1C4` / `0x1D0` / `0x1D8` |
+| `CanvasItem` | `global_transform` | `0x450` |
+| `SceneTree` | `root` (Window*) | `0x2B0` |
+| `CSharpScriptInstance` | `script` / `gchandle` | `0x18` / `0x20` |
+| `CSharpGCHandle` | → raw managed instance data | `[gchandle+0x00]` |
+
+⚠️ `asr` does **not** implement `Control`, is 4.2-only, and anchors on a hardcoded
+`main_module + 0x0424BE40`.
+
+### Godot 4.5 deltas that break the 4.2 numbers
+
+- `CowData::USize` became **uint64** with `DATA_OFFSET` 16 ⇒ **size at `ptr-8` (u64)**,
+  not `ptr-4` (u32) as `asr` hardcodes.
+- `StringName::_Data` **dropped `cname`** ⇒ 4.5 is `refcount`(0x00), `static_count`(0x04),
+  **`String name` ptr (0x08)**, `hash`(0x10). `asr`'s `CNAME 0x08 / NAME 0x10` is wrong for 4.5.
+- `Control` position/size = `data.pos_cache` / `data.size_cache` (`Vector2` each).
+- `Node::children` is a **HashMap** in Godot 4 (`children_cache` is a flat array but is
+  lazily rebuilt — check `children_cache_dirty`).
+- `CanvasItem::global_transform` is lazily computed — check `global_invalid`.
+
+### Better anchor than `SceneTree::singleton`: **`ObjectDB::object_slots`**
+
+`core/object/object.h` — `static ObjectSlot *object_slots; static uint32_t slot_count, slot_max;`
+16 bytes/slot, `Object*` at slot+0x8. Walking it enumerates **every live Object** with no tree
+traversal. The research notes this appears **unused by the public tooling community**.
+
+## ✅ Toolchain check (run locally): RTTI is STRIPPED from MegaDot
+
+```
+MSVC   '.?AV' count : 0
+Itanium '_ZTV' count: 0     (in SlayTheSpire2.exe)
+```
+
+So **neither** RTTI walk is available on the Godot side — `asr`'s `vtable[-8] → type_info`
+trick will NOT work here. Class identity must come from **`Object::_class_name_ptr`**.
+(RTTI *is* intact in `untapped-scry.node` itself, which is how we decoded it.)
+
+## MegaDot specifics
+
+- Godot **4.5.1**, C#/.NET 9. Fork source unpublished, **but the NuGet packages are public**:
+  `MegaDot.NET.Sdk`, `MegaDot.SourceGenerators`, `MegaDotSharpEditor` — all `4.5.1.5`
+  (<https://www.nuget.org/profiles/danielle_megacrit>), verbatim rebrands of the Godot ones.
+- The `.5` past upstream + "tweaks for their pipeline" ⇒ **assume offsets need calibration,
+  not parity**.
+
+## Strategic implication
+
+`untapped-scry`'s RTTI contains `GodotScry/GodotNode/GodotControl/GodotCanvasItem/GodotLabel/
+GodotRichTextLabel` **and** `DotNetCore*`. Combined with our disassembly (the `get(name)` path
+goes through `findField` → FieldDesc), the design is:
+
+> **Godot side** → locate nodes / on-screen positions (for tip anchors)
+> **CoreCLR side** → read the managed game state by FIELD NAME
+
+C# field *names* are stable across game patches; native Godot offsets are not. So the CoreCLR
+half is the durable one and should be built first — which matches where our own spike already is.
+
+### Ranked next steps
+1. Read **`unityspy`** (MIT) — a working, readable implementation of the same Mono/CLR
+   external-read design this binary descends from.
+2. Port `asr`'s Godot module for node/position reads, fixing the 4.5 `CowData`/`StringName`
+   deltas and swapping the hardcoded anchor for an `ObjectDB::object_slots` scan.
+3. Finish `findField` (`0x180036930`) → `FieldDesc+0x0C & 0x7FFFFFF` for instance offsets.
