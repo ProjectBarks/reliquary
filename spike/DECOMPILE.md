@@ -438,3 +438,42 @@ The cDAC descriptor is what makes a DAC-free reader maintainable — it's new in
 | MethodTable → EEClass → FieldDesc → offset | 📋 fully specified above, not yet coded |
 | Godot node/position reads | 📋 offsets extracted from shipped DWARF |
 | Snapshots → shadow diffs | ⬜ next |
+
+## Prior-art survey (final) — and a caveat on the cDAC
+
+Only **two** OSS projects read live CoreCLR externally without the DAC:
+
+| Project | Approach | .NET |
+| --- | --- | --- |
+| **[tosu](https://github.com/tosuapp/tosu)** (osu!lazer) | hardcoded BCL layouts + **per-game-version offset JSON** (generator is private) + AoB scan + MethodTable flags/BaseSize fingerprinting | 8 |
+| **[chrisnas/RuntimeDataContract](https://github.com/chrisnas/RuntimeDataContract)** | parses the cDAC descriptor — the only OSS consumer outside dotnet/runtime | 9/10/11 |
+
+Everything else routes through the DAC: Cheat Engine's `DotNetDataCollector` (ICorDebug —
+and **broken on .NET 7/8/9**: `dbgshim` left the shared runtime in .NET 7, and
+`ICorDebugHeapEnum` was broken by GC Regions), `DotNetDataCollectorEx` (ClrMD),
+ReClass.NET's plugin (vendored ClrMD 0.8, dead since 2021), dnSpy (ICorDebug).
+**No Rust crate, no CoreCLR equivalent of Il2CppDumper, no offline field-layout computer.**
+
+### ⚠️ The cDAC does NOT publish FieldDesc until .NET 11
+
+| Runtime | descriptor | EEClass fields published |
+| --- | --- | --- |
+| 8.0 | **absent** | — |
+| **9.0** (ours) | 3,201 B | `MethodTable, NumMethods, CorTypeAttr, InternalCorElementType, NumNonVirtualSlots` — **no FieldDescList** |
+| 10.0 | 10,826 B | adds `FieldDescList/NumInstanceFields/NumStaticFields`, but still no `sizeof(FieldDesc)` |
+| 11 (main) | — | first to emit `CDAC_TYPE_BEGIN(FieldDesc)` |
+
+**So the split is:**
+- **From the cDAC (self-updating):** `MethodTable` (MTFlags/BaseSize/MTFlags2/Module/
+  EEClassOrCanonMT/ParentMethodTable/NumVirtuals…), `Object.m_pMethTab`, `String`, `Array`,
+  and globals `ObjectToMethodTableUnmask=0x7`, `ObjectHeaderSize=0x8`.
+- **Hardcoded from v9.0.7 source (version-gated):** `EEClass+0x18 = m_pFieldDescList`,
+  `EEClass+0x42/0x46` field counts, `FieldDesc` = 0x10 bytes with
+  `offset = u32[fd+0x0C] & 0x07FFFFFF`, `isStatic = (u32[fd+0x08] >> 24) & 1`,
+  `Module+0x150 = m_TypeDefToMethodTableMap`.
+
+Note `ObjectToMethodTableUnmask = 0x7` — mask the low 3 bits off `obj[0]`, not just bit 0.
+
+**We would be building something genuinely novel**: a DAC-free, cDAC-driven external CoreCLR
+reader. tosu proves the category works; the cDAC is what makes it maintainable instead of
+requiring a private per-build offset generator.
