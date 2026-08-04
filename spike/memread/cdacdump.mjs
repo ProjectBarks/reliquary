@@ -1,0 +1,22 @@
+import { ProcessReader, findGamePid } from './reader.mjs'
+import { exports_ } from './pe.mjs'
+const pid = findGamePid()
+if (!pid) { console.error('game not running'); process.exit(1) }
+const r = new ProcessReader(pid)
+const clr = r.module('coreclr.dll')
+const cd = exports_(r, clr.base).get('DotNetRuntimeContractDescriptor')
+const size = r.readU32(cd + 12n)
+const jsonPtr = r.readU64(cd + 16n)
+const json = r.read(jsonPtr, size).toString('utf8')
+const o = JSON.parse(json)
+console.log('=== contracts ==='); console.log(Object.keys(o.contracts||{}).join(', '))
+console.log('\n=== types published ==='); console.log(Object.keys(o.types||{}).join(', '))
+console.log('\n=== statics-related types ===')
+for (const [k,v] of Object.entries(o.types||{}))
+  if (/static|Statics|Aux|DynamicStatics|ThreadStatic/i.test(k)) console.log(`  ${k}: ${JSON.stringify(v)}`)
+console.log('\n=== MethodTableAuxiliaryData / EEClass / FieldDesc ===')
+for (const k of ['MethodTableAuxiliaryData','EEClass','FieldDesc','Object','Module','MethodTable'])
+  if (o.types?.[k]) console.log(`  ${k}: ${JSON.stringify(o.types[k])}`)
+console.log('\n=== globals ===')
+console.log(Object.entries(o.globals||{}).map(([k,v])=>`${k}=${JSON.stringify(v)}`).join('\n'))
+r.close()

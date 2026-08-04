@@ -559,3 +559,60 @@ more maintainable than theirs, not a prerequisite.
 | Separate Mono / IL2CPP / CoreCLR / Godot backends | CoreCLR + Godot only |
 | ECMA-335 signature parser for field types | needed too — `getFieldNames` returns typed info |
 | `>k__BackingField` handling | needed — the game uses auto-properties heavily |
+
+## Full cDAC descriptor dump (`spike/memread/cdacdump.mjs`) — .NET 9.0.7, live
+
+```
+contracts : DacStreams, EcmaMetadata, Exception, Loader, Object, RuntimeTypeSystem, Thread
+types     : Thread, ThreadStore, GCHandle, Object, String, Array, SyncBlock, Module,
+            ModuleLookupMap, MethodTable, EEClass, ArrayClass, TypeDesc, MethodDesc, …
+```
+
+| Published | Value |
+| --- | --- |
+| `MethodTable` | `MTFlags:0, BaseSize:4, MTFlags2:8, ParentMethodTable:16, Module:24, EEClassOrCanonMT:40, NumVirtuals:12, NumInterfaces:14, PerInstInfo:48` |
+| `Module` | `TypeRefToMethodTableMap:8, MemberRefToDescMap:72, LoaderAllocator:152, Path:176, Base:192, Flags:200, Assembly:216, **TypeDefToMethodTableMap:336**, MethodDefToDescMap:368, FieldDefToDescMap:432` |
+| `EEClass` | `MethodTable:16, CorTypeAttr:56, InternalCorElementType:64, NumMethods:68, NumNonVirtualSlots:78` — **no FieldDescList** ⚠️ |
+| `Object` | `m_pMethTab:0` |
+| globals | `ObjectToMethodTableUnmask=0x7`, `ObjectHeaderSize=0x8`, `MethodDescAlignment=0x8`, `MethodDescTokenRemainderBitCount=0xc` |
+| pointer globals | **`AppDomain`**, `ThreadStore`, `FinalizerThread`, `StringMethodTable`, `ObjectMethodTable`, `FreeObjectMethodTable`, `SyncTableEntries` |
+
+Confirms: `EEClass+0x18 (FieldDescList)` and all of `FieldDesc` must be hardcoded from source
+(Novus is the reference); **no statics types are published at all**.
+
+## 🔑 The statics gap is AVOIDABLE — go in through Godot
+
+I flagged "static field access" (`NGame.Instance`, `RunManager.Instance`) as the blocking
+unknown. **It isn't blocking, because we never need to read a CLR static.**
+
+`NGame` and every game node is a **Godot `Object`**, and Godot keeps its own registry:
+
+```
+ObjectDB::object_slots        ← 16-byte slots, Object* at +0x08, validator!=0 == live
+  → enumerate EVERY live Godot Object in one bulk read (no tree walk)
+  → Object + 0xD8  = _class_name_ptr   → "NGame" / "NRun" / "NGridCardHolder"
+  → Object + 0x68  = script_instance   → CSharpInstance
+                                        → +0x20 gchandle → [gchandle] = MANAGED OBJECT
+  → then the CoreCLR path: managed obj → MethodTable → EEClass → FieldDesc → field values
+```
+
+So the **root comes from Godot's registry, not from a CLR static** — then we cross into
+CoreCLR for the field reads. That is exactly why `untapped-scry` ships **both** `GodotScry`
+*and* `DotNetCoreScry`: the Godot half solves rooting (and on-screen positions), the CoreCLR
+half solves typed field access. It also explains why they never needed statics support.
+
+Bonus: `ObjectSlot` layout is unchanged across all of Godot 4.x, so this root path is more
+stable than anything anchored in CLR internals.
+
+### Revised remaining work (statics removed)
+
+1. Locate `ObjectDB::object_slots` — from the game's **shipped DWARF** (static address), with an
+   AoB scan as fallback.
+2. Enumerate slots → filter by `_class_name_ptr` == `NGame`/`NRun`.
+3. `script_instance` → `gchandle` → managed object (re-read each tick; the GC moves objects).
+4. Managed object → `MethodTable` (`obj[0] & ~0x7`) → `EEClass+0x18` → `FieldDesc[]` →
+   `offset = u32[fd+0x0C] & 0x07FFFFFF` → value at `obj + 8 + offset`.
+5. Feed snapshots to the shadow comparer.
+
+**No unsolved unknowns remain in that list** — every step is either working code, a published
+cDAC offset, a DWARF-extractable address, or a source-documented layout.
