@@ -8,6 +8,8 @@ using System.Reflection.PortableExecutable;
 // Dumps the modding contract + our target types straight out of the game's
 // managed assembly, so the mod is written against the real API rather than guesses.
 
+if (args.Length > 1 && args[0] == "--tokens") { Tokens.Dump(args[1], args.Length > 2 ? args[2] : "tokens.json"); return; }
+
 string dll = args.Length > 0
     ? args[0]
     : @"C:\Program Files (x86)\Steam\steamapps\common\Slay the Spire 2\data_sts2_windows_x86_64\sts2.dll";

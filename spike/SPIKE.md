@@ -474,3 +474,36 @@ end-to-end (e.g. `NGame`) via the EEClass → name path.
 The bootstrap (the part everyone says is hardest) is done. What remains is the CoreCLR type
 system walk, which is well-documented in MIT-licensed runtime source but is genuinely
 multi-day work — it is NOT a session-scale task.
+
+### Token-based MethodTable validation — methodology proven, offsets WRONG
+
+`spike/dumpmeta --tokens` emits TypeDef-token → type-name for all **9,410** sts2 types.
+CoreCLR stores a type's TypeDef token inside its MethodTable, so this turns identification
+from guesswork into an **exact match** — the right methodology.
+
+`spike/memread/validate.mjs` applies it, and the first run looked like success:
+
+```
+TYPE TABLE VALIDATED @0x239ef2d4aa8   25/25 entries resolve to REAL sts2 type names
+   tok=0x081f size=32760  MegaCrit.Sts2.Core.Models.Events.RanwidTheElder   (×25)
+```
+
+**It was a false positive.** All 25 entries shared one token and `baseSize = 0x7FF8` —
+uninitialised memory that happened to satisfy loose shape checks. Tightened the validator to
+require a sane base size (0x18..0x2000, 8-aligned) *and* mostly-distinct tokens:
+
+```
+no validated type table found
+```
+
+**Conclusion: the assumed MethodTable layout is wrong for .NET 9.** The guessed offsets
+(`+0x04` base size, `+0x0A` token) do not hold. They must be taken from CoreCLR's
+`vm/methodtable.h` for the exact runtime version (9.0.7), not from recollection.
+
+This is a *useful* negative: the validator now rejects plausible-looking garbage, which is the
+exact failure mode that would otherwise ship a reader that silently returns wrong card ids.
+
+**Next concrete step:** pin `MethodTable` / `EEClass` / `FieldDesc` offsets from CoreCLR 9.0.7
+source (or cross-check against the shipped `mscordaccore.dll`, whose DAC structures mirror
+them), then re-run `validate.mjs` — it will confirm the layout the moment the offsets are right,
+because token→name matching is exact.
