@@ -342,3 +342,99 @@ independent validator so offsets can be self-checked on a new build rather than 
 3. Identify classes via `_class_name_ptr`, validate via Itanium RTTI.
 4. For managed state: `Object.script_instance (0x68)` → `CSharpInstance` → `gchandle` →
    raw managed object, then the CoreCLR field-name path we decoded from `untapped-scry`.
+
+---
+
+# 🎉 BLOCKER SOLVED — name → MethodTable works
+
+## The token bug: .NET 9 merged two fields
+
+`.NET 8` had `WORD m_wFlags2` + `WORD m_wToken`. **.NET 9 merged them into one DWORD**, with
+the rid in bits 8-31 (`methodtable.h:2825`):
+
+```cpp
+unsigned GetTypeDefRid() { return m_dwFlags2 >> 8; }   // m_dwFlags2 is at +0x08
+mdTypeDef GetCl()        { return TokenFromRid(GetTypeDefRid(), mdtTypeDef); }
+```
+
+```
+rid   = ReadU32(mt + 0x08) >> 8
+token = 0x02000000 | rid
+```
+
+Reading a WORD at `+0x0A` (the .NET 8 location) returns `rid >> 8` — garbage. **That single
+mistake caused every false positive in this spike.**
+
+### Verified live — `spike/memread/cdac.mjs`
+
+```
+1554/1743 MethodTables resolved to REAL sts2 type names (1059 distinct)
+   MegaCrit.Sts2.Core.Nodes.Cards.Holders.NGridCardHolder
+   MegaCrit.Sts2.Core.Nodes.Cards.Holders.NHandCardHolder
+   MegaCrit.Sts2.Core.Nodes.Cards.NCard  …
+```
+
+1,059 **distinct** names (vs. the old `RanwidTheElder ×25` false positive), including the exact
+types the reader needs. The remaining ~11% are CoreLib/GodotSharp types, correctly absent from
+the sts2 token map.
+
+## 🔑 cDAC contract descriptor — no hardcoding needed
+
+`coreclr.dll` **exports `DotNetRuntimeContractDescriptor`**, publishing authoritative offsets
+for the exact running build. Verified live at `0x7fff64861d30`:
+
+```
+magic "DNCCDAC\0" OK · flags 0x1 (64-bit) · descriptor_size 3201 · 14 pointer_data entries
+"MethodTable":{"MTFlags":0,"BaseSize":4,"MTFlags2":8,"EEClassOrCanonMT":40,
+               "Module":24,"ParentMethodTable":16,"NumInterfaces":14,
+               "NumVirtuals":12,"PerInstInfo":48}
+```
+
+**Parse this instead of hardcoding** — it survives game/runtime updates. Struct:
+`uint64 magic; uint32 flags; uint32 descriptor_size; const char* descriptor;
+uint32 pointer_data_count; uint32 pad; uintptr_t* pointer_data;` (descriptor → UTF-8 JSON).
+
+## Complete chain (all offsets now known)
+
+```
+metadata #~/#Strings  →  name → TypeDef rid
+Module + 0x150        →  m_TypeDefToMethodTableMap  (LookupMapBase, size 0x20:
+                            pNext@0, pTable@8, dwCount@0x10, supportedFlags@0x18)
+                         GetElementPtr: walk pNext chain subtracting dwCount
+                         ⚠ TYPE_DEF_MAP_ALL_FLAGS = NO_MAP_FLAGS → NO low-bit tagging here
+MethodTable + 0x28    →  EEClass (bit0: 0=EEClass, 1=canonical MT → read ITS +0x28)
+EEClass + 0x18        →  m_pFieldDescList       (m_pGuidInfo is declared FIRST at 0x00)
+FieldDesc (0x10 each) →  +0x00 m_pMTOfEnclosingClass
+                         +0x08 dword1: m_mb:24, m_isStatic:1, …
+                         +0x0C dword2: m_dwOffset:27, m_type:5
+                         offset  = dword2 & 0x07FFFFFF
+                         isStatic= (dword1 >> 24) & 1      ← matches the disassembly exactly
+field address         =  objAddr + 8 + offset      (ObjectHeaderSize = 0x8)
+```
+
+Field count = `m_NumInstanceFields - parent->m_NumInstanceFields + m_NumStaticFields`
+(EEClass `+0x42` / `+0x46`). Skip `m_dwOffset >= (1<<27)-7` (unplaced/EnC/RVA sentinels).
+
+`Module` (verified against the descriptor): `m_pPEAssembly` `0xB8` · `m_baseAddress` `0xC0` ·
+`m_pAssembly` `0xD8` · `m_TypeDefToMethodTableMap` **`0x150`** · `m_FieldDefToDescMap` `0x1B0`.
+
+`MethodTableAuxiliaryData` (size 0x18): flags `0x00` · **`m_pLoaderModule` `0x08`** ·
+`m_hExposedClassObject` `0x10` — confirms our empirical `aux+0x08` finding.
+
+## Prior art: essentially none (we'd be building something novel)
+
+No maintained OSS project reads live CoreCLR objects externally without the DAC.
+Cheat Engine's `DotNetDataCollector` uses ICorDebug; `DotNetDataCollectorEx` uses ClrMD (DAC).
+The cDAC descriptor is what makes a DAC-free reader maintainable — it's new in .NET 8/9.
+
+## Status
+
+| Layer | State |
+| --- | --- |
+| Win32 attach / read / regions | ✅ koffi, no C++ toolchain |
+| `g_dacTable` → DacGlobals → Module | ✅ |
+| **cDAC descriptor → authoritative offsets** | ✅ **live-verified** |
+| **name → TypeDef rid → MethodTable** | ✅ **1059 distinct types resolved** |
+| MethodTable → EEClass → FieldDesc → offset | 📋 fully specified above, not yet coded |
+| Godot node/position reads | 📋 offsets extracted from shipped DWARF |
+| Snapshots → shadow diffs | ⬜ next |
