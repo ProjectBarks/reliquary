@@ -216,6 +216,56 @@ nothing loads until the user accepts. Also, an `HttpListener` prefix on `127.0.0
 MegaCrit ships **`sts2.xml`** (5.3 MB of real doc comments for `sts2.dll`) and references an
 official example mod at `gitlab.com/megacrit/sts2/example-mod`.
 
+## Cross-platform: ✅ confirmed Windows + macOS + Linux
+
+StS2 ships **native** builds for all three ([Steam](https://store.steampowered.com/app/2868840/Slay_The_Spire_2/) has three
+System Requirements tabs; [MegaCrit FAQ](https://www.megacrit.com/faq/) confirms). The mod loader is
+managed .NET, so it is portable — with runtime proof, not inference:
+
+- Linux: `--- RUNNING MODDED! --- Loaded 7 mods (7 total)` ([ModConfig-STS2 #3](https://github.com/xhyrzldf/ModConfig-STS2/issues/3))
+- macOS + Linux: [STS2FirstMod](https://github.com/jiegec/STS2FirstMod) — *"Tested to build & run in both macOS and Linux."*
+- MegaCrit's own [mod uploader](https://github.com/megacrit/sts2-mod-uploader) ships `osx-arm64`, `osx-x64`, `linux-x64` binaries
+- STS2MCP: *"the same DLL … work[s] on Windows, Linux, and macOS."* No repo surveyed claims Windows-only.
+
+**This is the whole reason to switch.** `untapped-scry.node` is a PE32+ Windows DLL using
+`OpenProcess`/`ReadProcessMemory` — macOS was *impossible*. Our mod is `net9.0` with **no
+RuntimeIdentifier** → one platform-agnostic assembly.
+
+| OS | game assemblies | mods folder |
+| --- | --- | --- |
+| Windows | `<game>/data_sts2_windows_x86_64/` | `<game>/mods/` |
+| macOS | `SlayTheSpire2.app/Contents/Resources/data_sts2_macos_arm64/` | `…/SlayTheSpire2.app/Contents/MacOS/mods/` |
+| Linux | `<game>/data_sts2_linuxbsd_x86_64/` | `~/.local/share/Steam/steamapps/common/Slay the Spire 2/mods/` |
+
+Platform gotchas: lowercase `mods` on Unix (case-sensitive FS) · Linux Harmony native detours can
+fail (`mm-exhelper.so` on `noexec /tmp`, `_Unwind_RaiseException`) — *managed loading is portable,
+native detouring is fragile, so prefer semantic hooks over Harmony · possible Apple-Silicon `.pck`
+`binary_format/architecture=msil` requirement (unverified) · one secondary source claims macOS needs
+launching via Finder with Rosetta (unverified).
+
+## Docs reality: there is no public official documentation
+
+- **`gitlab.com/megacrit/sts2/example-mod` is PRIVATE** (403 web/raw, 404 API). The string in the
+  binary is an internal reference — not a public resource.
+- The only official public repo is [sts2-mod-uploader](https://github.com/megacrit/sts2-mod-uploader), which documents
+  *Workshop publishing only* — not the mod API, manifest schema, or hooks.
+- Community wiki, verbatim: *"As STS2 does not have a formal modding API, nearly all of the
+  information here has been gathered and maintained by the modding community."*
+
+**→ `spike/modding-docs.xml` (extracted from the shipped `sts2.xml`) is therefore the most
+authoritative modding documentation available anywhere** — MegaCrit's own doc comments, exactly
+matching your installed build. Regenerate after any patch.
+
+Best community sources: [fresh-milkshake handbook](https://fresh-milkshake.github.io/Modding-Tutorial/) (11 chapters, pinned
+v0.103.3 — Windows-only paths) · [ModSmith](https://cpimhoff.github.io/Sts2-ModSmith/) (**only one documenting all 3
+platforms**) · [BaseLib](https://github.com/Alchyr/BaseLib-StS2) · [RitsuLib](https://github.com/BAKAOLC/STS2-RitsuLib) (only lib that versions
+against game API generation).
+
+**No API stability policy exists.** *"Early Access updates can change signatures and loader
+contracts."* / *"Compilation is only the first compatibility check."* Breakage is already observable
+across releases — re-validate every patch. Also note: **active Workshop mods disable Steam
+achievements**, and mod loading requires the first-run consent popup.
+
 ## Next steps
 
 1. Install [STS2MCP](https://github.com/Gennadiyev/STS2MCP), curl `localhost:15526`, diff its
