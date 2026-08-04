@@ -581,3 +581,56 @@ constants is more reliable. Tooling is now installed (`pip install capstone pefi
 `DotNetCoreModule`, `GodotNode`, …). Walk RTTI → vtables → the member functions of
 `DotNetCoreModule`/`DotNetCoreObject`, and read the CoreCLR offsets straight out of *their*
 code instead of inferring them. That converts guesswork into transcription.
+
+## ✅ RTTI → vtable → disassembly WORKS (transcription, not guessing)
+
+Per the "decompile instead of deriving" direction. Tooling: `pip install capstone pefile`;
+scripts `spike/memread/rtti.py`, `deep.py`.
+
+MSVC RTTI is intact, so `TypeDescriptor → CompleteObjectLocator → vtable` resolves cleanly:
+
+| Class | TypeDescriptor | vtable |
+| --- | --- | --- |
+| `DotNetCoreModuleImpl` | `0x1800d1a28` | `0x1800b4788` (16 virtuals recovered) |
+| `ScryWin64` | `0x1800d1fc0` | `0x1800b4bf8` (16 virtuals recovered) |
+
+Note: only the **`*Impl`** classes carry real logic — the abstract bases are thunks
+(`DotNetCoreModule`'s vtable is 15× the same stub).
+
+### Decoded object layout + call convention
+
+From `DotNetCoreModuleImpl::vt[9]` (`0x1800586f0`), the richest method:
+
+```asm
+mov rdi, [r14 + 0x30]      ; +0x30 = Scry (memory-reader) interface
+mov rbx, [rdi]             ; its vtable
+call [rbx + 0x78]          ; predicate — likely is64Bit()
+mov edx, 4
+add rdx, [r14 + 0x100]     ; +0x100 = TARGET-process base address
+call [rbx + 0x40]          ; read at base+0x04
+mov rdx, [r14 + 0x100]
+add rdx, 0xa
+call [rbx + 0x60]          ; read at base+0x0a
+mov r10, [rdx + 0x10] ; call r10   ; bulk read(dst, size, src)
+```
+
+**Recovered so far**
+
+| Symbol | Meaning |
+| --- | --- |
+| `DotNetCoreModuleImpl+0x30` | pointer to the Scry memory-reader interface |
+| `DotNetCoreModuleImpl+0x100` | a base address in the target process |
+| `DotNetCoreModuleImpl+0xa8` | cache/lookup structure (`+0x8/+0x10/+0x19/+0x20` walked) |
+| `Scry::vt+0x10` | bulk read (dst, size, src) |
+| `Scry::vt+0x40` | read (4-byte) |
+| `Scry::vt+0x60` | read (different width) |
+| `Scry::vt+0x78` | predicate (is64Bit) |
+
+The `base+0x04` / `base+0x0a` reads line up with `m_BaseSize` / `m_wToken` — the same offsets
+my empirical pass confirmed for base size. This is exactly the transcription the direction
+called for: **read their constants instead of inferring ours.**
+
+**Next:** enumerate the remaining `*Impl` vtables (`Il2CppMetadataContextImpl`, `MonoImageImpl`,
+`WinNativeInterfaceDefaultImpl`), and walk `vt[9]`/`vt[13]` fully to recover the complete
+MethodTable→FieldDesc traversal. Then the 78 field names become offsets and the reader can
+emit snapshots into the shadow comparer.
