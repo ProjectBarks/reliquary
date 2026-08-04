@@ -634,3 +634,33 @@ called for: **read their constants instead of inferring ours.**
 `WinNativeInterfaceDefaultImpl`), and walk `vt[9]`/`vt[13]` fully to recover the complete
 MethodTable→FieldDesc traversal. Then the 78 field names become offsets and the reader can
 emit snapshots into the shadow comparer.
+
+### Negative result that reshapes the plan
+
+Searched the entire `.text` for CoreCLR's characteristic bitfield masks
+(`0x7FFFFFF`, `0x3FFFFFF`, `0xFFFFFF`, static-bit tests) — used to unpack
+`FieldDesc::m_dwOffset` and RIDs:
+
+```
+=== CoreCLR-characteristic bitfield constants in code ===
+   (none)
+```
+
+**They do not hand-unpack FieldDescs.** The constant histogram over the
+`DotNetCoreModuleImpl` cluster is dominated by `0x28`, `0x0f`, `0x1f` — MSVC `std::string`
+SSO constants — i.e. much of that region is string handling, consistent with resolving
+**names**, not bit-twiddling offsets.
+
+Combined with the only CLR symbol being `g_dacTable`, the likely design is: use the DAC
+table for runtime roots, and parse **.NET metadata out of the target's mapped image** to map
+names → tokens (which fits the `base+0x04` / `base+0x0a` reads landing on metadata-header
+fields), rather than reimplementing CoreCLR's internal bitfields.
+
+Recovered Scry interface slots (called via `[rbx+N]`): `+0x40` (8×), `+0x78` (12×),
+`+0x70`, `+0x10`. Hot object offsets in the cluster: `+0x0`, `+0x8`, `+0x19`, `+0x20`,
+`+0x10`, `+0x30`, `+0x40`, `+0x78`, `+0x48`.
+
+**Implication:** the remaining work is to determine whether they walk the metadata `#~`
+stream from target memory. If so, our reader can do the same — and we already have a working
+metadata parser (`spike/dumpmeta`) plus `spike/memread` to read target memory, so the two
+halves exist and just need joining.
