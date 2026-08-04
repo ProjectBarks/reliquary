@@ -10,6 +10,7 @@ import { installLogCapture, setLogSink, logHistory } from './logBus'
 import { applyGpuCrashMitigation, installGpuCrashGuard } from './gpuCrashGuard'
 import { SettingsStore } from './settings/SettingsStore'
 import { initShadow, recordPrimary, flushShadowSummary } from './shadow'
+import { ModBridgeSource } from './shadow/ModBridgeSource'
 import {
   IPC,
   type DiagnosticsState,
@@ -50,6 +51,7 @@ let overlayHidden = false
 let scryProvider: Sts2ScryProvider | null = null
 let stub: Sts2Stub | null = null
 let settingsStore: SettingsStore | null = null
+let modBridge: ModBridgeSource | null = null
 let usingScry = false
 
 let scryLoaded = false
@@ -244,7 +246,11 @@ if (hasLock)
   setLogSink((line) => broadcast(IPC.Log, [line]))
 
   // Spike: shadow recorder for the native-reader replacement (SPECTRA_SHADOW=1).
+  // With SPECTRA_BRIDGE=1 our own in-game mod is polled as a read-only candidate
+  // and diffed against the live provider until it reaches parity.
   initShadow()
+  modBridge = new ModBridgeSource()
+  modBridge.start()
 
   // Recover from GPU/renderer crashes (the transparent-window device-loss kill).
   installGpuCrashGuard()
@@ -309,6 +315,7 @@ if (hasLock)
 })
 
 app.on('will-quit', () => {
+  modBridge?.stop()
   flushShadowSummary()
   globalShortcut.unregisterAll()
   scryProvider?.stop()

@@ -266,6 +266,64 @@ contracts."* / *"Compilation is only the first compatibility check."* Breakage i
 across releases — re-validate every patch. Also note: **active Workshop mods disable Steam
 achievements**, and mod loading requires the first-run consent popup.
 
+## Shipping our own binary — what's actually left
+
+**Our binary is `SpectraBridge.dll`** (`spike/mod/`, builds clean). It replaces
+`untapped-scry.node` + `untapped-node-native.node` entirely — no C++, no node-gyp, no
+`OpenProcess`.
+
+### Parity contract — 4 keys
+
+`sts2.cardData` (CDN) and `sts2.settings` (SettingsStore) are **out of scope**; the native reader
+only owns these:
+
+| Key | Source in the mod |
+| --- | --- |
+| `sts2.pileState` | `player.PlayerCombatState` → `Hand`/`DrawPile`/`DiscardPile`/`ExhaustPile` |
+| `sts2.enemiesState` | `CombatManager.Instance.DebugOnlyGetState()` → `Enemies`, `(m.NextMove as MoveState).Intents` |
+| `sts2.nGameState` | `RunManager.Instance.DebugOnlyGetState()` → `CurrentRoom`, `Act`, + `NGame.Instance` screen flags |
+| `sts2.layoutState` | scene-tree walk, `FindAllSortedByPosition<NCardHolder>` + `merchantRoom.GetLocalInventory()` |
+
+`layoutState` is the hard one — it needs on-screen **positions** (`GlobalPosition`/size → screen
+fractions) for tip anchoring, so it must be built on the main thread from `Control` nodes.
+
+### The shadow loop is wired and ready
+
+`src/main/shadow/ModBridgeSource.ts` polls the mod (`http://localhost:17832/state`, 250 ms,
+exponential backoff when absent) and pipes each key into `compareCandidate()` — **read-only and
+non-authoritative**. Every field mismatch lands in `shadow/diffs.jsonl` with an exact path.
+
+```bash
+SPECTRA_DEBUG=1 SPECTRA_SHADOW=1 SPECTRA_BRIDGE=1 npm run dev
+```
+
+Work the loop: play → read `diffs.jsonl` → fix the mod's snapshot builder → repeat until
+`summary.jsonl` fidelity hits 100%.
+
+### Checklist to cut over
+
+1. Build the snapshot builder in `spike/mod/ModEntry.cs` for the 4 keys, emitting **our exact
+   JSON shapes** (`Sts2PileState` etc. in `src/shared/types.ts`) so no translation layer is needed.
+2. `dotnet build -c Release` → copy `SpectraBridge.dll` + `SpectraBridge.json` to
+   `<game>/mods/SpectraBridge/`; accept the in-game consent popup.
+3. Run with `SPECTRA_BRIDGE=1`, drive fidelity to 100% off `diffs.jsonl`.
+4. Add a `ModBridgeProvider` implementing the same `emit()` contract as `Sts2ScryProvider`;
+   select it by setting, defaulting to scry.
+5. Flip the default; keep scry behind a flag for one release.
+6. **Delete** `src/main/scry/native.ts`'s scry paths, `vendor/`, the `asarUnpack`/`extraResources`
+   native config — and drop `vendor/` back into `.gitignore`. This removes the proprietary
+   binaries from the public repo.
+7. Enable macOS/Linux targets in electron-builder (now possible — see cross-platform above).
+
+### Risks to carry
+
+- **No API stability policy** → keep the field map config-driven and make reflection return `null`
+  rather than throw, so a renamed field degrades one widget instead of crashing the game.
+- **Never touch the scene tree off the main thread** — build an immutable snapshot in
+  `ProcessFrame`, publish by one volatile write.
+- `GodotObject.IsInstanceValid` on every node — a freed node is a hard crash.
+- Prefer semantic hooks over Harmony (Linux native-detour fragility).
+
 ## Next steps
 
 1. Install [STS2MCP](https://github.com/Gennadiyev/STS2MCP), curl `localhost:15526`, diff its
