@@ -324,6 +324,61 @@ Work the loop: play → read `diffs.jsonl` → fix the mod's snapshot builder �
 - `GodotObject.IsInstanceValid` on every node — a freed node is a hard crash.
 - Prefer semantic hooks over Harmony (Linux native-detour fragility).
 
+## ✅ Verified schema parity — `spike/paritycheck`
+
+An executable gate that diffs our hand-coded builder against **real recorded output** from the
+proprietary reader (`shadow/primary.jsonl`). Runs without the game; exit 0 = parity.
+
+```bash
+cd spike/paritycheck && dotnet run
+# DERIVED  sts2.layoutState: provider-enriched from _raw.visibleItems (live-verified)
+# SCHEMA PARITY OK — 3 keys match the recorded reader output
+```
+
+| Key | Status |
+| --- | --- |
+| `sts2.nGameState` | ✅ exact — every field + type matches |
+| `sts2.pileState` | ✅ exact (+ additive `exhaust`, which the old reader never read) |
+| `sts2.enemiesState` | ✅ exact |
+| `sts2.layoutState` | ⏳ provider-derived — mod emits `_raw.visibleItems`; needs live run |
+| `sts2.cardData` / `sts2.settings` | n/a — CDN / SettingsStore, never reader-owned |
+
+Field mapping, all verified against the real assembly:
+
+| Ours | Game API |
+| --- | --- |
+| `id` | `Id.Entry` (via `EntryOf`) |
+| `upgradeLevel` | `CardModel.CurrentUpgradeLevel` |
+| `enchantment` | `CardModel.Enchantment.Id` |
+| `isPermanent` | `CardModel.DeckVersion != null` |
+| `cost` / `defaultCost` / `costsX` | `EnergyCost.GetResolved()` / `CanonicalEnergyCost`¹ / `HasEnergyCostX`¹ |
+| piles | `PlayerCombatState.{DrawPile,Hand,DiscardPile,ExhaustPile}.Cards` |
+| enemies / intents | `CombatState.Enemies` → move → `Intents` → `IntentType` + `GetIntentLabel()` |
+| room / act / character | `RunState.CurrentRoom` / `.CurrentActIndex` / `Players[0].Character.Id` |
+
+¹ non-public — reached via the null-safe reflection helper.
+
+`Layout.VisibleItems()` emits the **raw** contract (`source` + items with screen-fraction
+`cx/cy/w/h`), keeping Codex enrichment in Electron so the advice pipeline is untouched. It also
+carries the corrected source taxonomy (`cardReward` / `chooseACard` / `grid`) rather than the
+legacy reader's bug, and sorts holders by on-screen position.
+
+### ⛔ Blocked on a one-time user consent gate
+
+```
+[INFO] Found mod manifest file …\mods\SpectraBridge\SpectraBridge.json
+[INFO]   0: Spectra Bridge (SpectraBridge)
+[INFO] Skipping loading mod SpectraBridge, user has not yet seen the mods warning
+```
+
+StS2 requires the player to accept an in-game "confirm mod loading" popup before it will load any
+third-party DLL. Until that's accepted the mod cannot run, so **live value-level parity and the
+shadow diff cannot be collected**. Everything else is done and armed:
+
+```bash
+SPECTRA_DEBUG=1 SPECTRA_SHADOW=1 SPECTRA_BRIDGE=1 npm run dev   # polls 127.0.0.1:15600
+```
+
 ## Next steps
 
 1. Install [STS2MCP](https://github.com/Gennadiyev/STS2MCP), curl `localhost:15526`, diff its
