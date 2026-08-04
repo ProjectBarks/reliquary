@@ -1,0 +1,1123 @@
+        </member>
+        <member name="T:MegaCrit.Sts2.Core.Hooks.Hook">
+            <summary>
+            A static class containing all of the gameplay hooks.
+            </summary>
+        </member>
+        <member name="M:MegaCrit.Sts2.Core.Hooks.Hook.IterateCombatHookListeners(MegaCrit.Sts2.Core.Combat.ICombatState)">
+             <summary>
+             Iterates combat hook listeners, but yields nothing if combat is over or ending
+             (CombatManager.IsOverOrEnding) when the dispatch begins. Most combat hooks should use this
+             instead of <see cref="M:MegaCrit.Sts2.Core.Combat.ICombatState.IterateHookListeners"/> directly, so a hook dispatched
+             after combat has started ending fires for no one (for example after a Strike that Hellraiser
+             plays automatically kills the last enemy while cards are still being drawn).
+--
+        </member>
+        <member name="M:MegaCrit.Sts2.Core.Hooks.Hook.AfterActEntered(MegaCrit.Sts2.Core.Runs.IRunState)">
+            <summary>
+            See <see cref="M:MegaCrit.Sts2.Core.Models.AbstractModel.AfterActEntered"/>.
+            </summary>
+        </member>
+        <member name="M:MegaCrit.Sts2.Core.Hooks.Hook.BeforeAttack(MegaCrit.Sts2.Core.Combat.ICombatState,MegaCrit.Sts2.Core.Commands.Builders.AttackCommand)">
+            <summary>
+            See <see cref="M:MegaCrit.Sts2.Core.Models.AbstractModel.BeforeAttack(MegaCrit.Sts2.Core.Commands.Builders.AttackCommand)"/>.
+            </summary>
+        </member>
+        <member name="M:MegaCrit.Sts2.Core.Hooks.Hook.AfterAttack(MegaCrit.Sts2.Core.Combat.ICombatState,MegaCrit.Sts2.Core.GameActions.Multiplayer.PlayerChoiceContext,MegaCrit.Sts2.Core.Commands.Builders.AttackCommand)">
+            <summary>
+            See <see cref="M:MegaCrit.Sts2.Core.Models.AbstractModel.AfterAttack(MegaCrit.Sts2.Core.GameActions.Multiplayer.PlayerChoiceContext,MegaCrit.Sts2.Core.Commands.Builders.AttackCommand)"/>.
+            </summary>
+        </member>
+        <member name="M:MegaCrit.Sts2.Core.Hooks.Hook.AfterBlockBroken(MegaCrit.Sts2.Core.Combat.ICombatState,MegaCrit.Sts2.Core.Entities.Creatures.Creature)">
+             <summary>
+             See <see cref="M:MegaCrit.Sts2.Core.Models.AbstractModel.AfterBlockBroken(MegaCrit.Sts2.Core.Entities.Creatures.Creature)"/>.
+            
+             Dispatched directly, not through the IterateCombatHookListeners guard: it fires from the same
+             damage event that ends combat (the killing hit), so it must still resolve for that hit.
+             </summary>
+        </member>
+        <member name="M:MegaCrit.Sts2.Core.Hooks.Hook.AfterBlockCleared(MegaCrit.Sts2.Core.Combat.ICombatState,MegaCrit.Sts2.Core.Entities.Creatures.Creature)">
+            <summary>
+            See <see cref="M:MegaCrit.Sts2.Core.Models.AbstractModel.AfterBlockCleared(MegaCrit.Sts2.Core.Entities.Creatures.Creature)"/>.
+            </summary>
+        </member>
+        <member name="M:MegaCrit.Sts2.Core.Hooks.Hook.BeforeBlockGained(MegaCrit.Sts2.Core.Combat.ICombatState,MegaCrit.Sts2.Core.Entities.Creatures.Creature,System.Decimal,MegaCrit.Sts2.Core.ValueProps.ValueProp,MegaCrit.Sts2.Core.Models.CardModel)">
+            <summary>
+            See <see cref="M:MegaCrit.Sts2.Core.Models.AbstractModel.BeforeBlockGained(MegaCrit.Sts2.Core.Entities.Creatures.Creature,System.Decimal,MegaCrit.Sts2.Core.ValueProps.ValueProp,MegaCrit.Sts2.Core.Models.CardModel)"/>.
+            </summary>
+        </member>
+        <member name="M:MegaCrit.Sts2.Core.Hooks.Hook.AfterBlockGained(MegaCrit.Sts2.Core.Combat.ICombatState,MegaCrit.Sts2.Core.Entities.Creatures.Creature,System.Decimal,MegaCrit.Sts2.Core.ValueProps.ValueProp,MegaCrit.Sts2.Core.Models.CardModel)">
+            <summary>
+            See <see cref="M:MegaCrit.Sts2.Core.Models.AbstractModel.AfterBlockGained(MegaCrit.Sts2.Core.Entities.Creatures.Creature,System.Decimal,MegaCrit.Sts2.Core.ValueProps.ValueProp,MegaCrit.Sts2.Core.Models.CardModel)"/>.
+            </summary>
+        </member>
+        <member name="M:MegaCrit.Sts2.Core.Hooks.Hook.BeforeCardAutoPlayed(MegaCrit.Sts2.Core.Combat.ICombatState,MegaCrit.Sts2.Core.Models.CardModel,MegaCrit.Sts2.Core.Entities.Creatures.Creature,MegaCrit.Sts2.Core.Entities.Cards.AutoPlayType)">
+            <summary>
+            See <see cref="M:MegaCrit.Sts2.Core.Models.AbstractModel.BeforeCardAutoPlayed(MegaCrit.Sts2.Core.Models.CardModel,MegaCrit.Sts2.Core.Entities.Creatures.Creature,MegaCrit.Sts2.Core.Entities.Cards.AutoPlayType)"/>.
+            </summary>
+        </member>
+        <member name="M:MegaCrit.Sts2.Core.Hooks.Hook.AfterCardChangedPiles(MegaCrit.Sts2.Core.Runs.IRunState,MegaCrit.Sts2.Core.Combat.ICombatState,MegaCrit.Sts2.Core.Models.CardModel,MegaCrit.Sts2.Core.Entities.Cards.PileType,MegaCrit.Sts2.Core.Models.AbstractModel)">
+            <summary>
+            See <see cref="M:MegaCrit.Sts2.Core.Models.AbstractModel.AfterCardChangedPiles(MegaCrit.Sts2.Core.Models.CardModel,MegaCrit.Sts2.Core.Entities.Cards.PileType,MegaCrit.Sts2.Core.Models.AbstractModel)"/>.
+            </summary>
+        </member>
+        <member name="M:MegaCrit.Sts2.Core.Hooks.Hook.AfterCardDiscarded(MegaCrit.Sts2.Core.Combat.ICombatState,MegaCrit.Sts2.Core.GameActions.Multiplayer.PlayerChoiceContext,MegaCrit.Sts2.Core.Models.CardModel)">
+            <summary>
+            See <see cref="M:MegaCrit.Sts2.Core.Models.AbstractModel.AfterCardDiscarded(MegaCrit.Sts2.Core.GameActions.Multiplayer.PlayerChoiceContext,MegaCrit.Sts2.Core.Models.CardModel)"/>.
+            This takes a player choice context as an argument because it needs to block combat flow if a player choice is
+            encountered.
+            </summary>
+        </member>
+        <member name="M:MegaCrit.Sts2.Core.Hooks.Hook.AfterCardDrawn(MegaCrit.Sts2.Core.Combat.ICombatState,MegaCrit.Sts2.Core.GameActions.Multiplayer.PlayerChoiceContext,MegaCrit.Sts2.Core.Models.CardModel,System.Boolean)">
+            <summary>
+            See <see cref="M:MegaCrit.Sts2.Core.Models.AbstractModel.AfterCardDrawn(MegaCrit.Sts2.Core.GameActions.Multiplayer.PlayerChoiceContext,MegaCrit.Sts2.Core.Models.CardModel,System.Boolean)"/>.
+            This takes a player choice context as an argument because it needs to block combat flow if a player choice is
+            encountered.
+            </summary>
+        </member>
+        <member name="M:MegaCrit.Sts2.Core.Hooks.Hook.AfterCardEnteredCombat(MegaCrit.Sts2.Core.Combat.ICombatState,MegaCrit.Sts2.Core.Models.CardModel)">
+            <summary>
+            See <see cref="M:MegaCrit.Sts2.Core.Models.AbstractModel.AfterCardEnteredCombat(MegaCrit.Sts2.Core.Models.CardModel)"/>.
+            </summary>
+        </member>
+        <member name="M:MegaCrit.Sts2.Core.Hooks.Hook.AfterCardExhausted(MegaCrit.Sts2.Core.Combat.ICombatState,MegaCrit.Sts2.Core.GameActions.Multiplayer.PlayerChoiceContext,MegaCrit.Sts2.Core.Models.CardModel,System.Boolean)">
+            <summary>
+            See <see cref="M:MegaCrit.Sts2.Core.Models.AbstractModel.AfterCardExhausted(MegaCrit.Sts2.Core.GameActions.Multiplayer.PlayerChoiceContext,MegaCrit.Sts2.Core.Models.CardModel,System.Boolean)"/>.
+            This takes a player choice context as an argument because it needs to block combat flow if a player choice is
+            encountered.
+            </summary>
+        </member>
+        <member name="M:MegaCrit.Sts2.Core.Hooks.Hook.AfterCardGeneratedForCombat(MegaCrit.Sts2.Core.Combat.ICombatState,MegaCrit.Sts2.Core.Models.CardModel,MegaCrit.Sts2.Core.Entities.Players.Player)">
+            <summary>
+            See <see cref="M:MegaCrit.Sts2.Core.Models.AbstractModel.AfterCardGeneratedForCombat(MegaCrit.Sts2.Core.Models.CardModel,MegaCrit.Sts2.Core.Entities.Players.Player)"/>.
+            </summary>
+        </member>
+        <member name="M:MegaCrit.Sts2.Core.Hooks.Hook.BeforeCardPlayed(MegaCrit.Sts2.Core.Combat.ICombatState,MegaCrit.Sts2.Core.Entities.Cards.CardPlay)">
+            <summary>
+            See <see cref="M:MegaCrit.Sts2.Core.Models.AbstractModel.BeforeCardPlayed(MegaCrit.Sts2.Core.Entities.Cards.CardPlay)"/>.
+            </summary>
+        </member>
+        <member name="M:MegaCrit.Sts2.Core.Hooks.Hook.AfterCardPlayed(MegaCrit.Sts2.Core.Combat.ICombatState,MegaCrit.Sts2.Core.GameActions.Multiplayer.PlayerChoiceContext,MegaCrit.Sts2.Core.Entities.Cards.CardPlay)">
+             <summary>
+             See <see cref="M:MegaCrit.Sts2.Core.Models.AbstractModel.AfterCardPlayed(MegaCrit.Sts2.Core.GameActions.Multiplayer.PlayerChoiceContext,MegaCrit.Sts2.Core.Entities.Cards.CardPlay)"/>.
+            
+             Dispatched directly, not through the IterateCombatHookListeners guard: it completes
+             resolution of the card that caused the kill.
+             </summary>
+        </member>
+        <member name="M:MegaCrit.Sts2.Core.Hooks.Hook.BeforeCardRemoved(MegaCrit.Sts2.Core.Runs.IRunState,MegaCrit.Sts2.Core.Models.CardModel)">
+            <summary>
+            See <see cref="M:MegaCrit.Sts2.Core.Models.AbstractModel.BeforeCardRemoved(MegaCrit.Sts2.Core.Models.CardModel)"/>.
+            </summary>
+        </member>
+        <member name="M:MegaCrit.Sts2.Core.Hooks.Hook.BeforeCombatStart(MegaCrit.Sts2.Core.Runs.IRunState,MegaCrit.Sts2.Core.Combat.ICombatState)">
+            <summary>
+            See <see cref="M:MegaCrit.Sts2.Core.Models.AbstractModel.BeforeCombatStart"/>.
+            </summary>
+        </member>
+        <member name="M:MegaCrit.Sts2.Core.Hooks.Hook.AfterCombatEnd(MegaCrit.Sts2.Core.Runs.IRunState,MegaCrit.Sts2.Core.Combat.ICombatState,MegaCrit.Sts2.Core.Rooms.CombatRoom)">
+            <summary>
+            See <see cref="M:MegaCrit.Sts2.Core.Models.AbstractModel.AfterCombatEnd(MegaCrit.Sts2.Core.Rooms.CombatRoom)"/>.
+            </summary>
+        </member>
+        <member name="M:MegaCrit.Sts2.Core.Hooks.Hook.AfterCombatVictory(MegaCrit.Sts2.Core.Runs.IRunState,MegaCrit.Sts2.Core.Combat.ICombatState,MegaCrit.Sts2.Core.Rooms.CombatRoom)">
+            <summary>
+            See <see cref="M:MegaCrit.Sts2.Core.Models.AbstractModel.AfterCombatVictory(MegaCrit.Sts2.Core.Rooms.CombatRoom)"/>.
+            </summary>
+        </member>
+        <member name="M:MegaCrit.Sts2.Core.Hooks.Hook.AfterCreatureAddedToCombat(MegaCrit.Sts2.Core.Combat.ICombatState,MegaCrit.Sts2.Core.Entities.Creatures.Creature)">
+             <summary>
+             See <see cref="M:MegaCrit.Sts2.Core.Models.AbstractModel.AfterCreatureAddedToCombat(MegaCrit.Sts2.Core.Entities.Creatures.Creature)"/>.
+            
+             Dispatched directly, not through the IterateCombatHookListeners guard: it only fires for
+             creatures added during combat (creatures present when combat starts take a different path,
+             before IsInProgress is set), and a creature added while combat is ending can affect whether
+--
+        </member>
+        <member name="M:MegaCrit.Sts2.Core.Hooks.Hook.AfterCurrentHpChanged(MegaCrit.Sts2.Core.Runs.IRunState,MegaCrit.Sts2.Core.Combat.ICombatState,MegaCrit.Sts2.Core.Entities.Creatures.Creature,System.Decimal)">
+            <summary>
+            See <see cref="M:MegaCrit.Sts2.Core.Models.AbstractModel.AfterCurrentHpChanged(MegaCrit.Sts2.Core.Entities.Creatures.Creature,System.Decimal)"/>.
+            </summary>
+        </member>
+        <member name="M:MegaCrit.Sts2.Core.Hooks.Hook.AfterDamageGiven(MegaCrit.Sts2.Core.GameActions.Multiplayer.PlayerChoiceContext,MegaCrit.Sts2.Core.Combat.ICombatState,MegaCrit.Sts2.Core.Entities.Creatures.Creature,MegaCrit.Sts2.Core.Entities.Creatures.DamageResult,MegaCrit.Sts2.Core.ValueProps.ValueProp,MegaCrit.Sts2.Core.Entities.Creatures.Creature,MegaCrit.Sts2.Core.Models.CardModel)">
+             <summary>
+             See <see cref="M:MegaCrit.Sts2.Core.Models.AbstractModel.AfterDamageGiven(MegaCrit.Sts2.Core.GameActions.Multiplayer.PlayerChoiceContext,MegaCrit.Sts2.Core.Entities.Creatures.Creature,MegaCrit.Sts2.Core.Entities.Creatures.DamageResult,MegaCrit.Sts2.Core.ValueProps.ValueProp,MegaCrit.Sts2.Core.Entities.Creatures.Creature,MegaCrit.Sts2.Core.Models.CardModel)"/>.
+            
+             Dispatched directly, not through the IterateCombatHookListeners guard: it fires from the same
+             damage event that ends combat (the killing hit), so it must still resolve for that hit.
+             </summary>
+        </member>
+        <member name="M:MegaCrit.Sts2.Core.Hooks.Hook.BeforeDamageReceived(MegaCrit.Sts2.Core.GameActions.Multiplayer.PlayerChoiceContext,MegaCrit.Sts2.Core.Runs.IRunState,MegaCrit.Sts2.Core.Combat.ICombatState,MegaCrit.Sts2.Core.Entities.Creatures.Creature,System.Decimal,MegaCrit.Sts2.Core.ValueProps.ValueProp,MegaCrit.Sts2.Core.Entities.Creatures.Creature,MegaCrit.Sts2.Core.Models.CardModel)">
+            <summary>
+            See <see cref="M:MegaCrit.Sts2.Core.Models.AbstractModel.BeforeDamageReceived(MegaCrit.Sts2.Core.GameActions.Multiplayer.PlayerChoiceContext,MegaCrit.Sts2.Core.Entities.Creatures.Creature,System.Decimal,MegaCrit.Sts2.Core.ValueProps.ValueProp,MegaCrit.Sts2.Core.Entities.Creatures.Creature,MegaCrit.Sts2.Core.Models.CardModel)"/>.
+            </summary>
+        </member>
+        <member name="M:MegaCrit.Sts2.Core.Hooks.Hook.AfterDamageReceived(MegaCrit.Sts2.Core.GameActions.Multiplayer.PlayerChoiceContext,MegaCrit.Sts2.Core.Runs.IRunState,MegaCrit.Sts2.Core.Combat.ICombatState,MegaCrit.Sts2.Core.Entities.Creatures.Creature,MegaCrit.Sts2.Core.Entities.Creatures.DamageResult,MegaCrit.Sts2.Core.ValueProps.ValueProp,MegaCrit.Sts2.Core.Entities.Creatures.Creature,MegaCrit.Sts2.Core.Models.CardModel)">
+            <summary>
+            See <see cref="M:MegaCrit.Sts2.Core.Models.AbstractModel.AfterDamageReceived(MegaCrit.Sts2.Core.GameActions.Multiplayer.PlayerChoiceContext,MegaCrit.Sts2.Core.Entities.Creatures.Creature,MegaCrit.Sts2.Core.Entities.Creatures.DamageResult,MegaCrit.Sts2.Core.ValueProps.ValueProp,MegaCrit.Sts2.Core.Entities.Creatures.Creature,MegaCrit.Sts2.Core.Models.CardModel)"/>.
+            </summary>
+        </member>
+        <member name="M:MegaCrit.Sts2.Core.Hooks.Hook.BeforeDeath(MegaCrit.Sts2.Core.Runs.IRunState,MegaCrit.Sts2.Core.Combat.ICombatState,MegaCrit.Sts2.Core.Entities.Creatures.Creature)">
+            <summary>
+            See <see cref="M:MegaCrit.Sts2.Core.Models.AbstractModel.BeforeDeath(MegaCrit.Sts2.Core.Entities.Creatures.Creature)"/>.
+            </summary>
+        </member>
+        <member name="M:MegaCrit.Sts2.Core.Hooks.Hook.AfterDeath(MegaCrit.Sts2.Core.Runs.IRunState,MegaCrit.Sts2.Core.Combat.ICombatState,MegaCrit.Sts2.Core.Entities.Creatures.Creature,System.Boolean,System.Single)">
+            <summary>
+            See <see cref="M:MegaCrit.Sts2.Core.Models.AbstractModel.AfterDeath(MegaCrit.Sts2.Core.GameActions.Multiplayer.PlayerChoiceContext,MegaCrit.Sts2.Core.Entities.Creatures.Creature,System.Boolean,System.Single)"/>.
+            </summary>
+        </member>
+        <member name="M:MegaCrit.Sts2.Core.Hooks.Hook.AfterGoldGained(MegaCrit.Sts2.Core.Runs.IRunState,MegaCrit.Sts2.Core.Entities.Players.Player)">
+            <summary>
+            See <see cref="M:MegaCrit.Sts2.Core.Models.AbstractModel.AfterGoldGained(MegaCrit.Sts2.Core.Entities.Players.Player)"/>.
+            </summary>
+        </member>
+        <member name="M:MegaCrit.Sts2.Core.Hooks.Hook.AfterDiedToDoom(MegaCrit.Sts2.Core.Combat.ICombatState,System.Collections.Generic.IReadOnlyList{MegaCrit.Sts2.Core.Entities.Creatures.Creature})">
+             <summary>
+             See <see cref="M:MegaCrit.Sts2.Core.Models.AbstractModel.AfterDiedToDoom(MegaCrit.Sts2.Core.GameActions.Multiplayer.PlayerChoiceContext,System.Collections.Generic.IReadOnlyList{MegaCrit.Sts2.Core.Entities.Creatures.Creature})"/>.
+            
+             Dispatched directly, not through the IterateCombatHookListeners guard: it runs during death
+             resolution, which proceeds while combat is ending.
+             </summary>
+        </member>
+        <member name="M:MegaCrit.Sts2.Core.Hooks.Hook.AfterEnergyReset(MegaCrit.Sts2.Core.Combat.ICombatState,MegaCrit.Sts2.Core.Entities.Players.Player)">
+            <summary>
+            See <see cref="M:MegaCrit.Sts2.Core.Models.AbstractModel.AfterEnergyReset(MegaCrit.Sts2.Core.Entities.Players.Player)"/>.
+            </summary>
+        </member>
+        <member name="M:MegaCrit.Sts2.Core.Hooks.Hook.AfterEnergySpent(MegaCrit.Sts2.Core.Combat.ICombatState,MegaCrit.Sts2.Core.Models.CardModel,System.Int32)">
+            <summary>
+            See <see cref="M:MegaCrit.Sts2.Core.Models.AbstractModel.AfterEnergySpent(MegaCrit.Sts2.Core.Models.CardModel,System.Int32)"/>.
+            </summary>
+        </member>
+        <member name="M:MegaCrit.Sts2.Core.Hooks.Hook.BeforeFlush(MegaCrit.Sts2.Core.Combat.ICombatState,MegaCrit.Sts2.Core.Entities.Players.Player)">
+            <summary>
+            See <see cref="M:MegaCrit.Sts2.Core.Models.AbstractModel.BeforeFlush(MegaCrit.Sts2.Core.GameActions.Multiplayer.PlayerChoiceContext,MegaCrit.Sts2.Core.Entities.Players.Player)"/>.
+            </summary>
+        </member>
+        <member name="M:MegaCrit.Sts2.Core.Hooks.Hook.AfterFlush(MegaCrit.Sts2.Core.Combat.ICombatState,MegaCrit.Sts2.Core.Entities.Players.Player,MegaCrit.Sts2.Core.GameActions.Multiplayer.PlayerChoiceContext,System.Collections.Generic.IReadOnlyCollection{MegaCrit.Sts2.Core.Models.CardModel},System.Collections.Generic.IReadOnlyCollection{MegaCrit.Sts2.Core.Models.CardModel})">
+            <summary>
+            See <see cref="M:MegaCrit.Sts2.Core.Models.AbstractModel.AfterFlush(MegaCrit.Sts2.Core.GameActions.Multiplayer.PlayerChoiceContext,MegaCrit.Sts2.Core.Entities.Players.Player,System.Collections.Generic.IReadOnlyCollection{MegaCrit.Sts2.Core.Models.CardModel},System.Collections.Generic.IReadOnlyCollection{MegaCrit.Sts2.Core.Models.CardModel})"/>.
+            </summary>
+        </member>
+        <member name="M:MegaCrit.Sts2.Core.Hooks.Hook.AfterForge(MegaCrit.Sts2.Core.Combat.ICombatState,System.Decimal,MegaCrit.Sts2.Core.Entities.Players.Player,MegaCrit.Sts2.Core.Models.AbstractModel)">
+            <summary>
+            See <see cref="M:MegaCrit.Sts2.Core.Models.AbstractModel.AfterForge(System.Decimal,MegaCrit.Sts2.Core.Entities.Players.Player,MegaCrit.Sts2.Core.Models.AbstractModel)"/>.
+            </summary>
+        </member>
+        <member name="M:MegaCrit.Sts2.Core.Hooks.Hook.BeforeHandDraw(MegaCrit.Sts2.Core.Combat.ICombatState,MegaCrit.Sts2.Core.Entities.Players.Player,MegaCrit.Sts2.Core.GameActions.Multiplayer.PlayerChoiceContext)">
+            <summary>
+            See <see cref="M:MegaCrit.Sts2.Core.Models.AbstractModel.BeforeHandDraw(MegaCrit.Sts2.Core.Entities.Players.Player,MegaCrit.Sts2.Core.GameActions.Multiplayer.PlayerChoiceContext,MegaCrit.Sts2.Core.Combat.ICombatState)"/>.
+            This takes a player choice context as an argument because it needs to block combat flow if a player choice is
+            encountered.
+            </summary>
+        </member>
+        <member name="M:MegaCrit.Sts2.Core.Hooks.Hook.AfterHandEmptied(MegaCrit.Sts2.Core.Combat.ICombatState,MegaCrit.Sts2.Core.GameActions.Multiplayer.PlayerChoiceContext,MegaCrit.Sts2.Core.Entities.Players.Player)">
+            <summary>
+            See <see cref="M:MegaCrit.Sts2.Core.Models.AbstractModel.AfterHandEmptied(MegaCrit.Sts2.Core.GameActions.Multiplayer.PlayerChoiceContext,MegaCrit.Sts2.Core.Entities.Players.Player)"/>.
+            This takes a player choice context as an argument because it needs to block combat flow if a player choice is
+            encountered.
+            </summary>
+        </member>
+        <member name="M:MegaCrit.Sts2.Core.Hooks.Hook.AfterItemPurchased(MegaCrit.Sts2.Core.Runs.IRunState,MegaCrit.Sts2.Core.Entities.Players.Player,MegaCrit.Sts2.Core.Entities.Merchant.MerchantEntry,System.Int32)">
+            <summary>
+            See <see cref="M:MegaCrit.Sts2.Core.Models.AbstractModel.AfterItemPurchased(MegaCrit.Sts2.Core.Entities.Players.Player,MegaCrit.Sts2.Core.Entities.Merchant.MerchantEntry,System.Int32)"/>.
+            </summary>
+        </member>
+        <member name="M:MegaCrit.Sts2.Core.Hooks.Hook.AfterMapGenerated(MegaCrit.Sts2.Core.Runs.IRunState,MegaCrit.Sts2.Core.Map.ActMap,System.Int32)">
+            <summary>
+            See <see cref="M:MegaCrit.Sts2.Core.Models.AbstractModel.AfterMapGenerated(MegaCrit.Sts2.Core.Map.ActMap,System.Int32)"/>.
+            </summary>
+        </member>
+        <member name="M:MegaCrit.Sts2.Core.Hooks.Hook.AfterModifyingBlockAmount(MegaCrit.Sts2.Core.Combat.ICombatState,System.Decimal,MegaCrit.Sts2.Core.Models.CardModel,MegaCrit.Sts2.Core.Entities.Cards.CardPlay,System.Collections.Generic.IEnumerable{MegaCrit.Sts2.Core.Models.AbstractModel})">
+            <summary>
+            See <see cref="M:MegaCrit.Sts2.Core.Models.AbstractModel.AfterModifyingBlockAmount(System.Decimal,MegaCrit.Sts2.Core.Models.CardModel,MegaCrit.Sts2.Core.Entities.Cards.CardPlay)"/>.
+            </summary>
+        </member>
+        <member name="M:MegaCrit.Sts2.Core.Hooks.Hook.AfterModifyingCardPlayCount(MegaCrit.Sts2.Core.Combat.ICombatState,MegaCrit.Sts2.Core.Models.CardModel,System.Collections.Generic.IEnumerable{MegaCrit.Sts2.Core.Models.AbstractModel})">
+            <summary>
+            See <see cref="M:MegaCrit.Sts2.Core.Models.AbstractModel.AfterModifyingCardPlayCount(MegaCrit.Sts2.Core.Models.CardModel)"/>.
+            </summary>
+        </member>
+        <member name="M:MegaCrit.Sts2.Core.Hooks.Hook.AfterModifyingCardRewardOptions(MegaCrit.Sts2.Core.Runs.IRunState,System.Collections.Generic.IEnumerable{MegaCrit.Sts2.Core.Models.AbstractModel})">
+            <summary>
+            See <see cref="M:MegaCrit.Sts2.Core.Models.AbstractModel.AfterModifyingCardRewardOptions"/>.
+            </summary>
+        </member>
+        <member name="M:MegaCrit.Sts2.Core.Hooks.Hook.AfterModifyingDamageAmount(MegaCrit.Sts2.Core.Runs.IRunState,MegaCrit.Sts2.Core.Combat.ICombatState,MegaCrit.Sts2.Core.Models.CardModel,System.Collections.Generic.IEnumerable{MegaCrit.Sts2.Core.Models.AbstractModel})">
+            <summary>
+            See <see cref="M:MegaCrit.Sts2.Core.Models.AbstractModel.AfterModifyingDamageAmount(MegaCrit.Sts2.Core.Models.CardModel)"/>.
+            </summary>
+        </member>
+        <member name="M:MegaCrit.Sts2.Core.Hooks.Hook.AfterModifyingEnergyGain(MegaCrit.Sts2.Core.Combat.ICombatState,System.Collections.Generic.IEnumerable{MegaCrit.Sts2.Core.Models.AbstractModel})">
+            <summary>
+            See <see cref="M:MegaCrit.Sts2.Core.Models.AbstractModel.AfterModifyingEnergyGain"/>.
+            </summary>
+        </member>
+        <member name="M:MegaCrit.Sts2.Core.Hooks.Hook.AfterModifyingGoldGained(MegaCrit.Sts2.Core.Runs.IRunState,MegaCrit.Sts2.Core.Combat.ICombatState,System.Collections.Generic.IEnumerable{MegaCrit.Sts2.Core.Models.AbstractModel},MegaCrit.Sts2.Core.Entities.Players.Player,System.Decimal)">
+            <summary>
+            See <see cref="M:MegaCrit.Sts2.Core.Models.AbstractModel.AfterModifyingGoldGained(MegaCrit.Sts2.Core.Entities.Players.Player,System.Decimal)"/>.
+            </summary>
+        </member>
+        <member name="M:MegaCrit.Sts2.Core.Hooks.Hook.AfterModifyingHandDraw(MegaCrit.Sts2.Core.Combat.ICombatState,System.Collections.Generic.IEnumerable{MegaCrit.Sts2.Core.Models.AbstractModel})">
+            <summary>
+            See <see cref="M:MegaCrit.Sts2.Core.Models.AbstractModel.AfterModifyingHandDraw"/>.
+            </summary>
+        </member>
+        <member name="M:MegaCrit.Sts2.Core.Hooks.Hook.AfterModifyingHpLostBeforeOsty(MegaCrit.Sts2.Core.Runs.IRunState,MegaCrit.Sts2.Core.Combat.ICombatState,System.Collections.Generic.IEnumerable{MegaCrit.Sts2.Core.Models.AbstractModel})">
+            <summary>
+            See <see cref="M:MegaCrit.Sts2.Core.Models.AbstractModel.AfterModifyingHpLostBeforeOsty"/>.
+            </summary>
+        </member>
+        <member name="M:MegaCrit.Sts2.Core.Hooks.Hook.AfterModifyingHpLostAfterOsty(MegaCrit.Sts2.Core.Runs.IRunState,MegaCrit.Sts2.Core.Combat.ICombatState,System.Collections.Generic.IEnumerable{MegaCrit.Sts2.Core.Models.AbstractModel})">
+            <summary>
+            See <see cref="M:MegaCrit.Sts2.Core.Models.AbstractModel.AfterModifyingHpLostAfterOsty"/>.
+            </summary>
+        </member>
+        <member name="M:MegaCrit.Sts2.Core.Hooks.Hook.AfterModifyingOrbPassiveTriggerCount(MegaCrit.Sts2.Core.Combat.ICombatState,MegaCrit.Sts2.Core.Models.OrbModel,System.Collections.Generic.IEnumerable{MegaCrit.Sts2.Core.Models.AbstractModel})">
+            <summary>
+            See <see cref="M:MegaCrit.Sts2.Core.Models.AbstractModel.AfterModifyingOrbPassiveTriggerCount(MegaCrit.Sts2.Core.Models.OrbModel)"/>.
+            </summary>
+        </member>
+        <member name="M:MegaCrit.Sts2.Core.Hooks.Hook.AfterModifyingPowerAmountGiven(MegaCrit.Sts2.Core.Combat.ICombatState,System.Collections.Generic.IEnumerable{MegaCrit.Sts2.Core.Models.AbstractModel},MegaCrit.Sts2.Core.Models.PowerModel)">
+            <summary>
+            See <see cref="M:MegaCrit.Sts2.Core.Models.AbstractModel.AfterModifyingPowerAmountGiven(MegaCrit.Sts2.Core.Models.PowerModel)"/>.
+            </summary>
+        </member>
+        <member name="M:MegaCrit.Sts2.Core.Hooks.Hook.AfterModifyingPowerAmountReceived(MegaCrit.Sts2.Core.Combat.ICombatState,System.Collections.Generic.IEnumerable{MegaCrit.Sts2.Core.Models.AbstractModel},MegaCrit.Sts2.Core.Models.PowerModel)">
+            <summary>
+            See <see cref="M:MegaCrit.Sts2.Core.Models.AbstractModel.AfterModifyingPowerAmountReceived(MegaCrit.Sts2.Core.Models.PowerModel)"/>.
+            </summary>
+        </member>
+        <member name="M:MegaCrit.Sts2.Core.Hooks.Hook.AfterModifyingRewards(MegaCrit.Sts2.Core.Runs.IRunState,System.Collections.Generic.IEnumerable{MegaCrit.Sts2.Core.Models.AbstractModel})">
+            <summary>
+            See <see cref="M:MegaCrit.Sts2.Core.Models.AbstractModel.AfterModifyingRewards"/>.
+            </summary>
+        </member>
+        <member name="M:MegaCrit.Sts2.Core.Hooks.Hook.AfterOrbChanneled(MegaCrit.Sts2.Core.Combat.ICombatState,MegaCrit.Sts2.Core.GameActions.Multiplayer.PlayerChoiceContext,MegaCrit.Sts2.Core.Entities.Players.Player,MegaCrit.Sts2.Core.Models.OrbModel)">
+            <summary>
+            See <see cref="M:MegaCrit.Sts2.Core.Models.AbstractModel.AfterOrbChanneled(MegaCrit.Sts2.Core.GameActions.Multiplayer.PlayerChoiceContext,MegaCrit.Sts2.Core.Entities.Players.Player,MegaCrit.Sts2.Core.Models.OrbModel)"/>.
+            </summary>
+        </member>
+        <member name="M:MegaCrit.Sts2.Core.Hooks.Hook.AfterOrbEvoked(MegaCrit.Sts2.Core.GameActions.Multiplayer.PlayerChoiceContext,MegaCrit.Sts2.Core.Combat.ICombatState,MegaCrit.Sts2.Core.Models.OrbModel,System.Collections.Generic.IEnumerable{MegaCrit.Sts2.Core.Entities.Creatures.Creature})">
+            <summary>
+            See <see cref="M:MegaCrit.Sts2.Core.Models.AbstractModel.AfterOrbEvoked(MegaCrit.Sts2.Core.GameActions.Multiplayer.PlayerChoiceContext,MegaCrit.Sts2.Core.Models.OrbModel,System.Collections.Generic.IEnumerable{MegaCrit.Sts2.Core.Entities.Creatures.Creature})"/>.
+            </summary>
+        </member>
+        <member name="M:MegaCrit.Sts2.Core.Hooks.Hook.AfterOstyRevived(MegaCrit.Sts2.Core.Combat.ICombatState,MegaCrit.Sts2.Core.Entities.Creatures.Creature)">
+            <summary>
+            See <see cref="M:MegaCrit.Sts2.Core.Models.AbstractModel.AfterOstyRevived(MegaCrit.Sts2.Core.Entities.Creatures.Creature)"/>.
+            </summary>
+        </member>
+        <member name="M:MegaCrit.Sts2.Core.Hooks.Hook.AfterPlayerTurnStart(MegaCrit.Sts2.Core.Combat.ICombatState,MegaCrit.Sts2.Core.GameActions.Multiplayer.PlayerChoiceContext,MegaCrit.Sts2.Core.Entities.Players.Player)">
+            <summary>
+            See <see cref="M:MegaCrit.Sts2.Core.Models.AbstractModel.AfterPlayerTurnStart(MegaCrit.Sts2.Core.GameActions.Multiplayer.PlayerChoiceContext,MegaCrit.Sts2.Core.Entities.Players.Player)"/>.
+            </summary>
+        </member>
+        <member name="M:MegaCrit.Sts2.Core.Hooks.Hook.AfterAutoPostPlayPhaseEntered(MegaCrit.Sts2.Core.GameActions.Multiplayer.HookPlayerChoiceContext,MegaCrit.Sts2.Core.Combat.ICombatState,MegaCrit.Sts2.Core.Entities.Players.Player)">
+            <summary>
+            See <see cref="M:MegaCrit.Sts2.Core.Models.AbstractModel.AfterAutoPostPlayPhaseEntered(MegaCrit.Sts2.Core.GameActions.Multiplayer.PlayerChoiceContext,MegaCrit.Sts2.Core.Entities.Players.Player)"/>.
+            </summary>
+        </member>
+        <member name="M:MegaCrit.Sts2.Core.Hooks.Hook.AfterAutoPrePlayPhaseEntered(MegaCrit.Sts2.Core.GameActions.Multiplayer.HookPlayerChoiceContext,MegaCrit.Sts2.Core.Combat.ICombatState,MegaCrit.Sts2.Core.Entities.Players.Player)">
+            <summary>
+            See <see cref="M:MegaCrit.Sts2.Core.Models.AbstractModel.AfterAutoPrePlayPhaseEntered(MegaCrit.Sts2.Core.GameActions.Multiplayer.PlayerChoiceContext,MegaCrit.Sts2.Core.Entities.Players.Player)"/>.
+            </summary>
+        </member>
+        <member name="M:MegaCrit.Sts2.Core.Hooks.Hook.AfterPotionDiscarded(MegaCrit.Sts2.Core.Runs.IRunState,MegaCrit.Sts2.Core.Combat.ICombatState,MegaCrit.Sts2.Core.Models.PotionModel)">
+            <summary>
+            See <see cref="M:MegaCrit.Sts2.Core.Models.AbstractModel.AfterPotionDiscarded(MegaCrit.Sts2.Core.Models.PotionModel)"/>.
+            </summary>
+        </member>
+        <member name="M:MegaCrit.Sts2.Core.Hooks.Hook.AfterPotionProcured(MegaCrit.Sts2.Core.Runs.IRunState,MegaCrit.Sts2.Core.Combat.ICombatState,MegaCrit.Sts2.Core.Models.PotionModel)">
+            <summary>
+            See <see cref="M:MegaCrit.Sts2.Core.Models.AbstractModel.AfterPotionProcured(MegaCrit.Sts2.Core.Models.PotionModel)"/>.
+            </summary>
+        </member>
+        <member name="M:MegaCrit.Sts2.Core.Hooks.Hook.BeforePotionUsed(MegaCrit.Sts2.Core.Runs.IRunState,MegaCrit.Sts2.Core.Combat.ICombatState,MegaCrit.Sts2.Core.Models.PotionModel,MegaCrit.Sts2.Core.Entities.Creatures.Creature)">
+            <summary>
+            See <see cref="M:MegaCrit.Sts2.Core.Models.AbstractModel.BeforePotionUsed(MegaCrit.Sts2.Core.Models.PotionModel,MegaCrit.Sts2.Core.Entities.Creatures.Creature)"/>.
+            </summary>
+        </member>
+        <member name="M:MegaCrit.Sts2.Core.Hooks.Hook.AfterPotionUsed(MegaCrit.Sts2.Core.Runs.IRunState,MegaCrit.Sts2.Core.Combat.ICombatState,MegaCrit.Sts2.Core.Models.PotionModel,MegaCrit.Sts2.Core.Entities.Creatures.Creature)">
+            <summary>
+            See <see cref="M:MegaCrit.Sts2.Core.Models.AbstractModel.AfterPotionUsed(MegaCrit.Sts2.Core.Models.PotionModel,MegaCrit.Sts2.Core.Entities.Creatures.Creature)"/>.
+            </summary>
+        </member>
+        <member name="M:MegaCrit.Sts2.Core.Hooks.Hook.BeforePowerAmountChanged(MegaCrit.Sts2.Core.Combat.ICombatState,MegaCrit.Sts2.Core.Models.PowerModel,System.Decimal,MegaCrit.Sts2.Core.Entities.Creatures.Creature,MegaCrit.Sts2.Core.Entities.Creatures.Creature,MegaCrit.Sts2.Core.Models.CardModel)">
+            <summary>
+            See <see cref="M:MegaCrit.Sts2.Core.Models.AbstractModel.BeforePowerAmountChanged(MegaCrit.Sts2.Core.Models.PowerModel,System.Decimal,MegaCrit.Sts2.Core.Entities.Creatures.Creature,MegaCrit.Sts2.Core.Entities.Creatures.Creature,MegaCrit.Sts2.Core.Models.CardModel)"/>.
+            </summary>
+        </member>
+        <member name="M:MegaCrit.Sts2.Core.Hooks.Hook.AfterPowerAmountChanged(MegaCrit.Sts2.Core.Combat.ICombatState,MegaCrit.Sts2.Core.GameActions.Multiplayer.PlayerChoiceContext,MegaCrit.Sts2.Core.Models.PowerModel,System.Decimal,MegaCrit.Sts2.Core.Entities.Creatures.Creature,MegaCrit.Sts2.Core.Models.CardModel)">
+            <summary>
+            See <see cref="M:MegaCrit.Sts2.Core.Models.AbstractModel.AfterPowerAmountChanged(MegaCrit.Sts2.Core.GameActions.Multiplayer.PlayerChoiceContext,MegaCrit.Sts2.Core.Models.PowerModel,System.Decimal,MegaCrit.Sts2.Core.Entities.Creatures.Creature,MegaCrit.Sts2.Core.Models.CardModel)"/>.
+            </summary>
+        </member>
+        <member name="M:MegaCrit.Sts2.Core.Hooks.Hook.AfterPreventingBlockClear(MegaCrit.Sts2.Core.Combat.ICombatState,MegaCrit.Sts2.Core.Models.AbstractModel,MegaCrit.Sts2.Core.Entities.Creatures.Creature)">
+            <summary>
+            See <see cref="M:MegaCrit.Sts2.Core.Models.AbstractModel.AfterPreventingBlockClear(MegaCrit.Sts2.Core.Models.AbstractModel,MegaCrit.Sts2.Core.Entities.Creatures.Creature)"/>.
+            </summary>
+        </member>
+        <member name="M:MegaCrit.Sts2.Core.Hooks.Hook.AfterPreventingDeath(MegaCrit.Sts2.Core.Runs.IRunState,MegaCrit.Sts2.Core.Combat.ICombatState,MegaCrit.Sts2.Core.Models.AbstractModel,MegaCrit.Sts2.Core.Entities.Creatures.Creature)">
+            <summary>
+            See <see cref="M:MegaCrit.Sts2.Core.Models.AbstractModel.AfterPreventingDeath(MegaCrit.Sts2.Core.Entities.Creatures.Creature)"/>.
+            </summary>
+        </member>
+        <member name="M:MegaCrit.Sts2.Core.Hooks.Hook.AfterPreventingDraw(MegaCrit.Sts2.Core.Combat.ICombatState,MegaCrit.Sts2.Core.Models.AbstractModel)">
+            <summary>
+            See <see cref="M:MegaCrit.Sts2.Core.Models.AbstractModel.AfterPreventingDraw"/>.
+            </summary>
+        </member>
+        <member name="M:MegaCrit.Sts2.Core.Hooks.Hook.AfterRestSiteHeal(MegaCrit.Sts2.Core.Runs.IRunState,MegaCrit.Sts2.Core.Entities.Players.Player,System.Boolean)">
+            <summary>
+            See <see cref="M:MegaCrit.Sts2.Core.Models.AbstractModel.AfterRestSiteHeal(MegaCrit.Sts2.Core.Entities.Players.Player,System.Boolean)"/>.
+            </summary>
+        </member>
+        <member name="M:MegaCrit.Sts2.Core.Hooks.Hook.AfterRestSiteSmith(MegaCrit.Sts2.Core.Runs.IRunState,MegaCrit.Sts2.Core.Entities.Players.Player)">
+            <summary>
+            See <see cref="M:MegaCrit.Sts2.Core.Models.AbstractModel.AfterRestSiteSmith(MegaCrit.Sts2.Core.Entities.Players.Player)"/>.
+            </summary>
+        </member>
+        <member name="M:MegaCrit.Sts2.Core.Hooks.Hook.AfterRewardTaken(MegaCrit.Sts2.Core.Runs.IRunState,MegaCrit.Sts2.Core.Entities.Players.Player,MegaCrit.Sts2.Core.Rewards.Reward)">
+            <summary>
+            See <see cref="M:MegaCrit.Sts2.Core.Models.AbstractModel.AfterRewardTaken(MegaCrit.Sts2.Core.Entities.Players.Player,MegaCrit.Sts2.Core.Rewards.Reward)"/>.
+            </summary>
+        </member>
+        <member name="M:MegaCrit.Sts2.Core.Hooks.Hook.BeforeRoomEntered(MegaCrit.Sts2.Core.Runs.IRunState,MegaCrit.Sts2.Core.Rooms.AbstractRoom)">
+            <summary>
+            See <see cref="M:MegaCrit.Sts2.Core.Models.AbstractModel.BeforeRoomEntered(MegaCrit.Sts2.Core.Rooms.AbstractRoom)"/>.
+            </summary>
+        </member>
+        <member name="M:MegaCrit.Sts2.Core.Hooks.Hook.AfterRoomEntered(MegaCrit.Sts2.Core.Runs.IRunState,MegaCrit.Sts2.Core.Rooms.AbstractRoom)">
+            <summary>
+            See <see cref="M:MegaCrit.Sts2.Core.Models.AbstractModel.AfterRoomEntered(MegaCrit.Sts2.Core.Rooms.AbstractRoom)"/>.
+            </summary>
+        </member>
+        <member name="M:MegaCrit.Sts2.Core.Hooks.Hook.AfterShuffle(MegaCrit.Sts2.Core.Combat.ICombatState,MegaCrit.Sts2.Core.GameActions.Multiplayer.PlayerChoiceContext,MegaCrit.Sts2.Core.Entities.Players.Player)">
+            <summary>
+            See <see cref="M:MegaCrit.Sts2.Core.Models.AbstractModel.AfterShuffle(MegaCrit.Sts2.Core.GameActions.Multiplayer.PlayerChoiceContext,MegaCrit.Sts2.Core.Entities.Players.Player)"/>.
+            This takes a player choice context as an argument because it needs to block combat flow if a player choice is
+            encountered.
+            </summary>
+        </member>
+        <member name="M:MegaCrit.Sts2.Core.Hooks.Hook.BeforeSideTurnStart(MegaCrit.Sts2.Core.Combat.ICombatState,MegaCrit.Sts2.Core.Combat.CombatSide,System.Collections.Generic.IReadOnlyList{MegaCrit.Sts2.Core.Entities.Creatures.Creature})">
+            <summary>
+            See <see cref="M:MegaCrit.Sts2.Core.Models.AbstractModel.BeforeSideTurnStart(MegaCrit.Sts2.Core.GameActions.Multiplayer.PlayerChoiceContext,MegaCrit.Sts2.Core.Combat.CombatSide,System.Collections.Generic.IReadOnlyList{MegaCrit.Sts2.Core.Entities.Creatures.Creature},MegaCrit.Sts2.Core.Combat.ICombatState)"/>.
+            </summary>
+        </member>
+        <member name="M:MegaCrit.Sts2.Core.Hooks.Hook.AfterSideTurnStart(MegaCrit.Sts2.Core.Combat.ICombatState,MegaCrit.Sts2.Core.Combat.CombatSide,System.Collections.Generic.IReadOnlyList{MegaCrit.Sts2.Core.Entities.Creatures.Creature})">
+            <summary>
+            See <see cref="M:MegaCrit.Sts2.Core.Models.AbstractModel.AfterSideTurnStart(MegaCrit.Sts2.Core.Combat.CombatSide,System.Collections.Generic.IReadOnlyList{MegaCrit.Sts2.Core.Entities.Creatures.Creature},MegaCrit.Sts2.Core.Combat.ICombatState)"/>.
+            </summary>
+        </member>
+        <member name="M:MegaCrit.Sts2.Core.Hooks.Hook.AfterStarsGained(MegaCrit.Sts2.Core.Combat.ICombatState,System.Int32,MegaCrit.Sts2.Core.Entities.Players.Player)">
+            <summary>
+            See <see cref="M:MegaCrit.Sts2.Core.Models.AbstractModel.AfterStarsGained(System.Int32,MegaCrit.Sts2.Core.Entities.Players.Player)"/>.
+            </summary>
+        </member>
+        <member name="M:MegaCrit.Sts2.Core.Hooks.Hook.AfterStarsSpent(MegaCrit.Sts2.Core.Combat.ICombatState,System.Int32,MegaCrit.Sts2.Core.Entities.Players.Player)">
+            <summary>
+            See <see cref="M:MegaCrit.Sts2.Core.Models.AbstractModel.AfterStarsSpent(System.Int32,MegaCrit.Sts2.Core.Entities.Players.Player)"/>.
+            </summary>
+        </member>
+        <member name="M:MegaCrit.Sts2.Core.Hooks.Hook.AfterSummon(MegaCrit.Sts2.Core.Combat.ICombatState,MegaCrit.Sts2.Core.GameActions.Multiplayer.PlayerChoiceContext,MegaCrit.Sts2.Core.Entities.Players.Player,System.Decimal)">
+            <summary>
+            See <see cref="M:MegaCrit.Sts2.Core.Models.AbstractModel.AfterSummon(MegaCrit.Sts2.Core.GameActions.Multiplayer.PlayerChoiceContext,MegaCrit.Sts2.Core.Entities.Players.Player,System.Decimal)"/>.
+            This takes a player choice context as an argument because it needs to block combat flow if a player choice is
+            encountered.
+            </summary>
+        </member>
+        <member name="M:MegaCrit.Sts2.Core.Hooks.Hook.AfterTakingExtraTurn(MegaCrit.Sts2.Core.Combat.ICombatState,MegaCrit.Sts2.Core.Entities.Players.Player)">
+            <summary>
+            See <see cref="M:MegaCrit.Sts2.Core.Models.AbstractModel.AfterTakingExtraTurn(MegaCrit.Sts2.Core.Entities.Players.Player)"/>.
+            </summary>
+        </member>
+        <member name="M:MegaCrit.Sts2.Core.Hooks.Hook.BeforeTurnEnd(MegaCrit.Sts2.Core.Combat.ICombatState,MegaCrit.Sts2.Core.Combat.CombatSide,System.Collections.Generic.IEnumerable{MegaCrit.Sts2.Core.Entities.Creatures.Creature})">
+            <summary>
+            See <see cref="M:MegaCrit.Sts2.Core.Models.AbstractModel.BeforeSideTurnEnd(MegaCrit.Sts2.Core.GameActions.Multiplayer.PlayerChoiceContext,MegaCrit.Sts2.Core.Combat.CombatSide,System.Collections.Generic.IEnumerable{MegaCrit.Sts2.Core.Entities.Creatures.Creature})"/>.
+            </summary>
+        </member>
+        <member name="M:MegaCrit.Sts2.Core.Hooks.Hook.AfterTurnEnd(MegaCrit.Sts2.Core.Combat.ICombatState,MegaCrit.Sts2.Core.Combat.CombatSide,System.Collections.Generic.IEnumerable{MegaCrit.Sts2.Core.Entities.Creatures.Creature})">
+            <summary>
+            See <see cref="M:MegaCrit.Sts2.Core.Models.AbstractModel.AfterSideTurnEnd(MegaCrit.Sts2.Core.GameActions.Multiplayer.PlayerChoiceContext,MegaCrit.Sts2.Core.Combat.CombatSide,System.Collections.Generic.IEnumerable{MegaCrit.Sts2.Core.Entities.Creatures.Creature})"/>.
+            </summary>
+        </member>
+        <member name="M:MegaCrit.Sts2.Core.Hooks.Hook.ModifyAttackHitCount(MegaCrit.Sts2.Core.Combat.ICombatState,MegaCrit.Sts2.Core.Commands.Builders.AttackCommand,System.Int32)">
+            <summary>
+            See <see cref="M:MegaCrit.Sts2.Core.Models.AbstractModel.ModifyAttackHitCount(MegaCrit.Sts2.Core.Commands.Builders.AttackCommand,System.Int32)"/>.
+            </summary>
+        </member>
+        <member name="M:MegaCrit.Sts2.Core.Hooks.Hook.ModifyBlock(MegaCrit.Sts2.Core.Combat.ICombatState,MegaCrit.Sts2.Core.Entities.Creatures.Creature,System.Decimal,MegaCrit.Sts2.Core.ValueProps.ValueProp,MegaCrit.Sts2.Core.Models.CardModel,MegaCrit.Sts2.Core.Entities.Cards.CardPlay,System.Collections.Generic.IEnumerable{MegaCrit.Sts2.Core.Models.AbstractModel}@)">
+            <summary>
+            See <see cref="M:MegaCrit.Sts2.Core.Models.AbstractModel.ModifyBlockAdditive(MegaCrit.Sts2.Core.Entities.Creatures.Creature,System.Decimal,MegaCrit.Sts2.Core.ValueProps.ValueProp,MegaCrit.Sts2.Core.Models.CardModel,MegaCrit.Sts2.Core.Entities.Cards.CardPlay)"/> and <see cref="M:MegaCrit.Sts2.Core.Models.AbstractModel.ModifyBlockMultiplicative(MegaCrit.Sts2.Core.Entities.Creatures.Creature,System.Decimal,MegaCrit.Sts2.Core.ValueProps.ValueProp,MegaCrit.Sts2.Core.Models.CardModel,MegaCrit.Sts2.Core.Entities.Cards.CardPlay)"/>.
+            </summary>
+        </member>
+        <member name="M:MegaCrit.Sts2.Core.Hooks.Hook.ModifyCardBeingAddedToDeck(MegaCrit.Sts2.Core.Runs.IRunState,MegaCrit.Sts2.Core.Models.CardModel,System.Collections.Generic.List{MegaCrit.Sts2.Core.Models.AbstractModel}@)">
+            <summary>
+            See <see cref="M:MegaCrit.Sts2.Core.Models.AbstractModel.TryModifyCardBeingAddedToDeck(MegaCrit.Sts2.Core.Models.CardModel,MegaCrit.Sts2.Core.Models.CardModel@)"/>.
+            </summary>
+        </member>
+        <member name="M:MegaCrit.Sts2.Core.Hooks.Hook.ModifyCardPlayCount(MegaCrit.Sts2.Core.Combat.ICombatState,MegaCrit.Sts2.Core.Models.CardModel,System.Int32,MegaCrit.Sts2.Core.Entities.Creatures.Creature,System.Collections.Generic.List{MegaCrit.Sts2.Core.Models.AbstractModel}@)">
+            <summary>
+            See <see cref="M:MegaCrit.Sts2.Core.Models.AbstractModel.ModifyCardPlayCount(MegaCrit.Sts2.Core.Models.CardModel,MegaCrit.Sts2.Core.Entities.Creatures.Creature,System.Int32)"/>.
+            </summary>
+        </member>
+        <member name="M:MegaCrit.Sts2.Core.Hooks.Hook.ModifyCardPlayResultPileTypeAndPosition(MegaCrit.Sts2.Core.Combat.ICombatState,MegaCrit.Sts2.Core.Models.CardModel,System.Boolean,MegaCrit.Sts2.Core.Entities.Cards.ResourceInfo,MegaCrit.Sts2.Core.Entities.Cards.PileType,MegaCrit.Sts2.Core.Entities.Cards.CardPilePosition,System.Collections.Generic.IEnumerable{MegaCrit.Sts2.Core.Models.AbstractModel}@)">
+            <summary>
+            See <see cref="M:MegaCrit.Sts2.Core.Models.AbstractModel.ModifyCardPlayResultPileTypeAndPosition(MegaCrit.Sts2.Core.Models.CardModel,System.Boolean,MegaCrit.Sts2.Core.Entities.Cards.ResourceInfo,MegaCrit.Sts2.Core.Entities.Cards.PileType,MegaCrit.Sts2.Core.Entities.Cards.CardPilePosition)"/>.
+            </summary>
+        </member>
+        <member name="M:MegaCrit.Sts2.Core.Hooks.Hook.ModifyCardRewardAlternatives(MegaCrit.Sts2.Core.Runs.IRunState,MegaCrit.Sts2.Core.Entities.Players.Player,MegaCrit.Sts2.Core.Rewards.CardReward,System.Collections.Generic.List{MegaCrit.Sts2.Core.Entities.CardRewardAlternatives.CardRewardAlternative})">
+            <summary>
+            See <see cref="M:MegaCrit.Sts2.Core.Models.AbstractModel.TryModifyCardRewardAlternatives(MegaCrit.Sts2.Core.Entities.Players.Player,MegaCrit.Sts2.Core.Rewards.CardReward,System.Collections.Generic.List{MegaCrit.Sts2.Core.Entities.CardRewardAlternatives.CardRewardAlternative})"/>.
+            </summary>
+        </member>
+        <member name="M:MegaCrit.Sts2.Core.Hooks.Hook.ModifyCardRewardCreationOptions(MegaCrit.Sts2.Core.Runs.IRunState,MegaCrit.Sts2.Core.Entities.Players.Player,MegaCrit.Sts2.Core.Runs.CardCreationOptions)">
+            <summary>
+            See <see cref="M:MegaCrit.Sts2.Core.Models.AbstractModel.ModifyCardRewardCreationOptions(MegaCrit.Sts2.Core.Entities.Players.Player,MegaCrit.Sts2.Core.Runs.CardCreationOptions)"/>.
+            </summary>
+        </member>
+        <member name="M:MegaCrit.Sts2.Core.Hooks.Hook.TryModifyCardRewardOptions(MegaCrit.Sts2.Core.Runs.IRunState,MegaCrit.Sts2.Core.Entities.Players.Player,System.Collections.Generic.List{MegaCrit.Sts2.Core.Entities.Cards.CardCreationResult},MegaCrit.Sts2.Core.Runs.CardCreationOptions,System.Collections.Generic.List{MegaCrit.Sts2.Core.Models.AbstractModel}@)">
+            <summary>
+            See <see cref="M:MegaCrit.Sts2.Core.Models.AbstractModel.TryModifyCardRewardOptions(MegaCrit.Sts2.Core.Entities.Players.Player,System.Collections.Generic.List{MegaCrit.Sts2.Core.Entities.Cards.CardCreationResult},MegaCrit.Sts2.Core.Runs.CardCreationOptions)"/>.
+            </summary>
+        </member>
+        <member name="M:MegaCrit.Sts2.Core.Hooks.Hook.ModifyCardRewardUpgradeOdds(MegaCrit.Sts2.Core.Runs.IRunState,MegaCrit.Sts2.Core.Entities.Players.Player,MegaCrit.Sts2.Core.Models.CardModel,System.Decimal)">
+            <summary>
+            See <see cref="M:MegaCrit.Sts2.Core.Models.AbstractModel.ModifyCardRewardUpgradeOdds(MegaCrit.Sts2.Core.Entities.Players.Player,MegaCrit.Sts2.Core.Models.CardModel,System.Decimal)"/>.
+            </summary>
+        </member>
+        <member name="M:MegaCrit.Sts2.Core.Hooks.Hook.ModifyDamage(MegaCrit.Sts2.Core.Runs.IRunState,MegaCrit.Sts2.Core.Combat.ICombatState,MegaCrit.Sts2.Core.Entities.Creatures.Creature,MegaCrit.Sts2.Core.Entities.Creatures.Creature,System.Decimal,MegaCrit.Sts2.Core.ValueProps.ValueProp,MegaCrit.Sts2.Core.Models.CardModel,MegaCrit.Sts2.Core.Hooks.ModifyDamageHookType,MegaCrit.Sts2.Core.Entities.Cards.CardPreviewMode,System.Collections.Generic.IEnumerable{MegaCrit.Sts2.Core.Models.AbstractModel}@)">
+            <summary>
+            See <see cref="M:MegaCrit.Sts2.Core.Models.AbstractModel.ModifyDamageAdditive(MegaCrit.Sts2.Core.Entities.Creatures.Creature,System.Decimal,MegaCrit.Sts2.Core.ValueProps.ValueProp,MegaCrit.Sts2.Core.Entities.Creatures.Creature,MegaCrit.Sts2.Core.Models.CardModel)"/>.
+            </summary>
+        </member>
+        <member name="M:MegaCrit.Sts2.Core.Hooks.Hook.ModifyEnergyCostInCombat(MegaCrit.Sts2.Core.Combat.ICombatState,MegaCrit.Sts2.Core.Models.CardModel,System.Decimal)">
+            <summary>
+            See <see cref="M:MegaCrit.Sts2.Core.Models.AbstractModel.TryModifyEnergyCostInCombat(MegaCrit.Sts2.Core.Models.CardModel,System.Decimal,System.Decimal@)"/>.
+            </summary>
+        </member>
+        <member name="M:MegaCrit.Sts2.Core.Hooks.Hook.ModifyKeywordsInCombat(MegaCrit.Sts2.Core.Combat.ICombatState,MegaCrit.Sts2.Core.Models.CardModel,System.Collections.Generic.ISet{MegaCrit.Sts2.Core.Entities.Cards.CardKeyword})">
+            <summary>
+            See <see cref="M:MegaCrit.Sts2.Core.Models.AbstractModel.TryModifyKeywordsInCombat(MegaCrit.Sts2.Core.Models.CardModel,System.Collections.Generic.ISet{MegaCrit.Sts2.Core.Entities.Cards.CardKeyword})"/>.
+            </summary>
+        </member>
+        <member name="M:MegaCrit.Sts2.Core.Hooks.Hook.ModifyEnergyGain(MegaCrit.Sts2.Core.Combat.ICombatState,MegaCrit.Sts2.Core.Entities.Players.Player,System.Decimal,System.Collections.Generic.IEnumerable{MegaCrit.Sts2.Core.Models.AbstractModel}@)">
+            <summary>
+            See <see cref="M:MegaCrit.Sts2.Core.Models.AbstractModel.ModifyEnergyGain(MegaCrit.Sts2.Core.Entities.Players.Player,System.Decimal)"/>.
+            </summary>
+        </member>
+        <member name="M:MegaCrit.Sts2.Core.Hooks.Hook.ModifyGoldGained(MegaCrit.Sts2.Core.Runs.IRunState,MegaCrit.Sts2.Core.Combat.ICombatState,System.Decimal,MegaCrit.Sts2.Core.Entities.Players.Player,System.Collections.Generic.IEnumerable{MegaCrit.Sts2.Core.Models.AbstractModel}@)">
+            <summary>
+            See <see cref="M:MegaCrit.Sts2.Core.Models.AbstractModel.ModifyGoldGained(MegaCrit.Sts2.Core.Entities.Players.Player,System.Decimal)"/>.
+            </summary>
+        </member>
+        <member name="M:MegaCrit.Sts2.Core.Hooks.Hook.ModifyExtraRestSiteHealText(MegaCrit.Sts2.Core.Runs.IRunState,MegaCrit.Sts2.Core.Entities.Players.Player,System.Collections.Generic.IReadOnlyList{MegaCrit.Sts2.Core.Localization.LocString})">
+            <summary>
+            See <see cref="M:MegaCrit.Sts2.Core.Models.AbstractModel.ModifyExtraRestSiteHealText(MegaCrit.Sts2.Core.Entities.Players.Player,System.Collections.Generic.IReadOnlyList{MegaCrit.Sts2.Core.Localization.LocString})"/>.
+            </summary>
+        </member>
+        <member name="M:MegaCrit.Sts2.Core.Hooks.Hook.ModifyGeneratedMap(MegaCrit.Sts2.Core.Runs.IRunState,MegaCrit.Sts2.Core.Map.ActMap,System.Int32)">
+            <summary>
+            See <see cref="M:MegaCrit.Sts2.Core.Models.AbstractModel.ModifyGeneratedMap(MegaCrit.Sts2.Core.Runs.IRunState,MegaCrit.Sts2.Core.Map.ActMap,System.Int32)"/>.
+            </summary>
+        </member>
+        <member name="M:MegaCrit.Sts2.Core.Hooks.Hook.ModifyGeneratedMapLate(MegaCrit.Sts2.Core.Runs.IRunState,MegaCrit.Sts2.Core.Map.ActMap,System.Int32)">
+            <summary>
+            See <see cref="M:MegaCrit.Sts2.Core.Models.AbstractModel.ModifyGeneratedMapLate(MegaCrit.Sts2.Core.Runs.IRunState,MegaCrit.Sts2.Core.Map.ActMap,System.Int32)"/>.
+            </summary>
+        </member>
+        <member name="M:MegaCrit.Sts2.Core.Hooks.Hook.ModifyHandDraw(MegaCrit.Sts2.Core.Combat.ICombatState,MegaCrit.Sts2.Core.Entities.Players.Player,System.Decimal,System.Collections.Generic.IEnumerable{MegaCrit.Sts2.Core.Models.AbstractModel}@)">
+            <summary>
+            See <see cref="M:MegaCrit.Sts2.Core.Models.AbstractModel.ModifyHandDraw(MegaCrit.Sts2.Core.Entities.Players.Player,System.Decimal)"/>.
+            </summary>
+        </member>
+        <member name="M:MegaCrit.Sts2.Core.Hooks.Hook.ModifyHpLost(MegaCrit.Sts2.Core.Runs.IRunState,MegaCrit.Sts2.Core.Combat.ICombatState,MegaCrit.Sts2.Core.Entities.Creatures.Creature,System.Decimal,MegaCrit.Sts2.Core.ValueProps.ValueProp,MegaCrit.Sts2.Core.Entities.Creatures.Creature,MegaCrit.Sts2.Core.Models.CardModel,MegaCrit.Sts2.Core.Hooks.HpLossHookPhase,System.Collections.Generic.IEnumerable{MegaCrit.Sts2.Core.Models.AbstractModel}@)">
+            <summary>
+            Run the requested HP-loss-modification hook phases on <paramref name="target"/>.
+            In CreatureCmd.Damage the two phases are invoked separately because damage redirection (Osty) sits between them
+            and may change the target. Callers that have no redirection step (e.g. damage previews) should pass
+            <see cref="F:MegaCrit.Sts2.Core.Hooks.HpLossHookPhase.All"/>.
+            See <see cref="M:MegaCrit.Sts2.Core.Models.AbstractModel.ModifyHpLostBeforeOsty(MegaCrit.Sts2.Core.Entities.Creatures.Creature,System.Decimal,MegaCrit.Sts2.Core.ValueProps.ValueProp,MegaCrit.Sts2.Core.Entities.Creatures.Creature,MegaCrit.Sts2.Core.Models.CardModel)"/> and <see cref="M:MegaCrit.Sts2.Core.Models.AbstractModel.ModifyHpLostAfterOsty(MegaCrit.Sts2.Core.Entities.Creatures.Creature,System.Decimal,MegaCrit.Sts2.Core.ValueProps.ValueProp,MegaCrit.Sts2.Core.Entities.Creatures.Creature,MegaCrit.Sts2.Core.Models.CardModel)"/>.
+--
+        </member>
+        <member name="M:MegaCrit.Sts2.Core.Hooks.Hook.ModifyMaxEnergy(MegaCrit.Sts2.Core.Combat.ICombatState,MegaCrit.Sts2.Core.Entities.Players.Player,System.Decimal)">
+            <summary>
+            See <see cref="M:MegaCrit.Sts2.Core.Models.AbstractModel.ModifyMaxEnergy(MegaCrit.Sts2.Core.Entities.Players.Player,System.Decimal)"/>.
+            </summary>
+        </member>
+        <member name="M:MegaCrit.Sts2.Core.Hooks.Hook.ModifyMerchantCardCreationResults(MegaCrit.Sts2.Core.Runs.IRunState,MegaCrit.Sts2.Core.Entities.Players.Player,System.Collections.Generic.List{MegaCrit.Sts2.Core.Entities.Cards.CardCreationResult})">
+            <summary>
+            See <see cref="M:MegaCrit.Sts2.Core.Models.AbstractModel.ModifyMerchantCardCreationResults(MegaCrit.Sts2.Core.Entities.Players.Player,System.Collections.Generic.List{MegaCrit.Sts2.Core.Entities.Cards.CardCreationResult})"/>.
+            </summary>
+        </member>
+        <member name="M:MegaCrit.Sts2.Core.Hooks.Hook.ModifyMerchantCardPool(MegaCrit.Sts2.Core.Runs.IRunState,MegaCrit.Sts2.Core.Entities.Players.Player,System.Collections.Generic.IEnumerable{MegaCrit.Sts2.Core.Models.CardModel})">
+            <summary>
+            See <see cref="M:MegaCrit.Sts2.Core.Models.AbstractModel.ModifyMerchantCardPool(MegaCrit.Sts2.Core.Entities.Players.Player,System.Collections.Generic.IEnumerable{MegaCrit.Sts2.Core.Models.CardModel})"/>.
+            </summary>
+        </member>
+        <member name="M:MegaCrit.Sts2.Core.Hooks.Hook.ModifyMerchantCardRarity(MegaCrit.Sts2.Core.Runs.IRunState,MegaCrit.Sts2.Core.Entities.Players.Player,MegaCrit.Sts2.Core.Entities.Cards.CardRarity)">
+            <summary>
+            See <see cref="M:MegaCrit.Sts2.Core.Models.AbstractModel.ModifyMerchantCardPool(MegaCrit.Sts2.Core.Entities.Players.Player,System.Collections.Generic.IEnumerable{MegaCrit.Sts2.Core.Models.CardModel})"/>.
+            </summary>
+        </member>
+        <member name="M:MegaCrit.Sts2.Core.Hooks.Hook.ModifyMerchantPrice(MegaCrit.Sts2.Core.Runs.IRunState,MegaCrit.Sts2.Core.Entities.Players.Player,MegaCrit.Sts2.Core.Entities.Merchant.MerchantEntry,System.Decimal)">
+            <summary>
+            See <see cref="M:MegaCrit.Sts2.Core.Models.AbstractModel.ModifyMerchantPrice(MegaCrit.Sts2.Core.Entities.Players.Player,MegaCrit.Sts2.Core.Entities.Merchant.MerchantEntry,System.Decimal)"/>.
+            </summary>
+        </member>
+        <member name="M:MegaCrit.Sts2.Core.Hooks.Hook.ModifyNextEvent(MegaCrit.Sts2.Core.Runs.IRunState,MegaCrit.Sts2.Core.Models.EventModel)">
+            <summary>
+            See <see cref="M:MegaCrit.Sts2.Core.Models.AbstractModel.ModifyNextEvent(MegaCrit.Sts2.Core.Models.EventModel)"/>.
+            </summary>
+        </member>
+        <member name="M:MegaCrit.Sts2.Core.Hooks.Hook.ModifyOddsIncreaseForUnrolledRoomType(MegaCrit.Sts2.Core.Runs.IRunState,MegaCrit.Sts2.Core.Rooms.RoomType,System.Single)">
+            <summary>
+            See <see cref="M:MegaCrit.Sts2.Core.Models.AbstractModel.ModifyOddsIncreaseForUnrolledRoomType(MegaCrit.Sts2.Core.Rooms.RoomType,System.Single)"/>.
+            </summary>
+        </member>
+        <member name="M:MegaCrit.Sts2.Core.Hooks.Hook.ModifyOrbPassiveTriggerCount(MegaCrit.Sts2.Core.Combat.ICombatState,MegaCrit.Sts2.Core.Models.OrbModel,System.Int32,System.Collections.Generic.List{MegaCrit.Sts2.Core.Models.AbstractModel}@)">
+            <summary>
+            See <see cref="M:MegaCrit.Sts2.Core.Models.AbstractModel.ModifyOrbPassiveTriggerCounts(MegaCrit.Sts2.Core.Models.OrbModel,System.Int32)"/>.
+            </summary>
+        </member>
+        <member name="M:MegaCrit.Sts2.Core.Hooks.Hook.ModifyOrbValue(MegaCrit.Sts2.Core.Combat.ICombatState,MegaCrit.Sts2.Core.Models.OrbModel,System.Decimal)">
+            <summary>
+            See <see cref="M:MegaCrit.Sts2.Core.Models.AbstractModel.ModifyOrbValue(MegaCrit.Sts2.Core.Models.OrbModel,System.Decimal)"/>.
+            </summary>
+        </member>
+        <member name="M:MegaCrit.Sts2.Core.Hooks.Hook.ModifyPowerAmountGiven(MegaCrit.Sts2.Core.Combat.ICombatState,MegaCrit.Sts2.Core.Models.PowerModel,MegaCrit.Sts2.Core.Entities.Creatures.Creature,System.Decimal,MegaCrit.Sts2.Core.Entities.Creatures.Creature,MegaCrit.Sts2.Core.Models.CardModel,System.Collections.Generic.IEnumerable{MegaCrit.Sts2.Core.Models.AbstractModel}@)">
+            <summary>
+            See <see cref="M:MegaCrit.Sts2.Core.Models.AbstractModel.ModifyPowerAmountGivenAdditive(MegaCrit.Sts2.Core.Models.PowerModel,MegaCrit.Sts2.Core.Entities.Creatures.Creature,System.Decimal,MegaCrit.Sts2.Core.Entities.Creatures.Creature,MegaCrit.Sts2.Core.Models.CardModel)"/> and
+            <see cref="M:MegaCrit.Sts2.Core.Models.AbstractModel.ModifyPowerAmountGivenMultiplicative(MegaCrit.Sts2.Core.Models.PowerModel,MegaCrit.Sts2.Core.Entities.Creatures.Creature,System.Decimal,MegaCrit.Sts2.Core.Entities.Creatures.Creature,MegaCrit.Sts2.Core.Models.CardModel)"/>.
+            </summary>
+        </member>
+        <member name="M:MegaCrit.Sts2.Core.Hooks.Hook.ModifyPowerAmountReceived(MegaCrit.Sts2.Core.Combat.ICombatState,MegaCrit.Sts2.Core.Models.PowerModel,MegaCrit.Sts2.Core.Entities.Creatures.Creature,System.Decimal,MegaCrit.Sts2.Core.Entities.Creatures.Creature,System.Collections.Generic.IEnumerable{MegaCrit.Sts2.Core.Models.AbstractModel}@)">
+            <summary>
+            See <see cref="M:MegaCrit.Sts2.Core.Models.AbstractModel.TryModifyPowerAmountReceived(MegaCrit.Sts2.Core.Models.PowerModel,MegaCrit.Sts2.Core.Entities.Creatures.Creature,System.Decimal,MegaCrit.Sts2.Core.Entities.Creatures.Creature,System.Decimal@)"/>.
+            </summary>
+        </member>
+        <member name="M:MegaCrit.Sts2.Core.Hooks.Hook.ModifyRestSiteHealAmount(MegaCrit.Sts2.Core.Runs.IRunState,MegaCrit.Sts2.Core.Entities.Creatures.Creature,System.Decimal)">
+            <summary>
+            See <see cref="M:MegaCrit.Sts2.Core.Models.AbstractModel.ModifyRestSiteHealAmount(MegaCrit.Sts2.Core.Entities.Creatures.Creature,System.Decimal)"/>.
+            </summary>
+        </member>
+        <member name="M:MegaCrit.Sts2.Core.Hooks.Hook.ModifyRestSiteOptions(MegaCrit.Sts2.Core.Runs.IRunState,MegaCrit.Sts2.Core.Entities.Players.Player,System.Collections.Generic.ICollection{MegaCrit.Sts2.Core.Entities.RestSite.RestSiteOption})">
+            <summary>
+            See <see cref="M:MegaCrit.Sts2.Core.Models.AbstractModel.TryModifyRestSiteOptions(MegaCrit.Sts2.Core.Entities.Players.Player,System.Collections.Generic.ICollection{MegaCrit.Sts2.Core.Entities.RestSite.RestSiteOption})"/>.
+            </summary>
+        </member>
+        <member name="M:MegaCrit.Sts2.Core.Hooks.Hook.ModifyRestSiteHealRewards(MegaCrit.Sts2.Core.Runs.IRunState,MegaCrit.Sts2.Core.Entities.Players.Player,System.Collections.Generic.List{MegaCrit.Sts2.Core.Rewards.Reward},System.Boolean)">
+            <summary>
+            See <see cref="M:MegaCrit.Sts2.Core.Models.AbstractModel.TryModifyRestSiteHealRewards(MegaCrit.Sts2.Core.Entities.Players.Player,System.Collections.Generic.List{MegaCrit.Sts2.Core.Rewards.Reward},System.Boolean)"/>.
+            </summary>
+        </member>
+        <member name="M:MegaCrit.Sts2.Core.Hooks.Hook.ModifyRewards(MegaCrit.Sts2.Core.Runs.IRunState,MegaCrit.Sts2.Core.Entities.Players.Player,System.Collections.Generic.List{MegaCrit.Sts2.Core.Rewards.Reward},MegaCrit.Sts2.Core.Rooms.AbstractRoom)">
+            <summary>
+            See <see cref="M:MegaCrit.Sts2.Core.Models.AbstractModel.TryModifyRewards(MegaCrit.Sts2.Core.Entities.Players.Player,System.Collections.Generic.List{MegaCrit.Sts2.Core.Rewards.Reward},MegaCrit.Sts2.Core.Rooms.AbstractRoom)"/>.
+            </summary>
+        </member>
+        <member name="M:MegaCrit.Sts2.Core.Hooks.Hook.ModifyShuffleOrder(MegaCrit.Sts2.Core.Combat.ICombatState,MegaCrit.Sts2.Core.Entities.Players.Player,System.Collections.Generic.List{MegaCrit.Sts2.Core.Models.CardModel},System.Boolean)">
+            <summary>
+            See <see cref="M:MegaCrit.Sts2.Core.Models.AbstractModel.ModifyShuffleOrder(MegaCrit.Sts2.Core.Entities.Players.Player,System.Collections.Generic.List{MegaCrit.Sts2.Core.Models.CardModel},System.Boolean)"/>.
+            </summary>
+        </member>
+        <member name="M:MegaCrit.Sts2.Core.Hooks.Hook.ModifyStarCost(MegaCrit.Sts2.Core.Combat.ICombatState,MegaCrit.Sts2.Core.Models.CardModel,System.Decimal)">
+            <summary>
+            See <see cref="M:MegaCrit.Sts2.Core.Models.AbstractModel.TryModifyStarCost(MegaCrit.Sts2.Core.Models.CardModel,System.Decimal,System.Decimal@)"/>.
+            </summary>
+        </member>
+        <member name="M:MegaCrit.Sts2.Core.Hooks.Hook.ModifySummonAmount(MegaCrit.Sts2.Core.Combat.ICombatState,MegaCrit.Sts2.Core.Entities.Players.Player,System.Decimal,MegaCrit.Sts2.Core.Models.AbstractModel)">
+            <summary>
+            See <see cref="M:MegaCrit.Sts2.Core.Models.AbstractModel.ModifySummonAmount(MegaCrit.Sts2.Core.Entities.Players.Player,System.Decimal,MegaCrit.Sts2.Core.Models.AbstractModel)"/>.
+            </summary>
+        </member>
+        <member name="M:MegaCrit.Sts2.Core.Hooks.Hook.ModifyUnblockedDamageTarget(MegaCrit.Sts2.Core.Combat.ICombatState,MegaCrit.Sts2.Core.Entities.Creatures.Creature,System.Decimal,MegaCrit.Sts2.Core.ValueProps.ValueProp,MegaCrit.Sts2.Core.Entities.Creatures.Creature)">
+             <summary>
+             See <see cref="M:MegaCrit.Sts2.Core.Models.AbstractModel.ModifyUnblockedDamageTarget(MegaCrit.Sts2.Core.Entities.Creatures.Creature,System.Decimal,MegaCrit.Sts2.Core.ValueProps.ValueProp,MegaCrit.Sts2.Core.Entities.Creatures.Creature)"/>.
+            
+             Dispatched directly, not through the IterateCombatHookListeners guard: it runs during damage
+             resolution, which proceeds while combat is ending.
+             </summary>
+        </member>
+        <member name="M:MegaCrit.Sts2.Core.Hooks.Hook.ModifyUnknownMapPointRoomTypes(MegaCrit.Sts2.Core.Runs.IRunState,System.Collections.Generic.IReadOnlySet{MegaCrit.Sts2.Core.Rooms.RoomType})">
+            <summary>
+            See <see cref="M:MegaCrit.Sts2.Core.Models.AbstractModel.ModifyUnknownMapPointRoomTypes(System.Collections.Generic.IReadOnlySet{MegaCrit.Sts2.Core.Rooms.RoomType})"/>.
+            </summary>
+        </member>
+        <member name="M:MegaCrit.Sts2.Core.Hooks.Hook.ShouldAddToDeck(MegaCrit.Sts2.Core.Runs.IRunState,MegaCrit.Sts2.Core.Models.CardModel,MegaCrit.Sts2.Core.Models.AbstractModel@)">
+            <summary>
+            See <see cref="M:MegaCrit.Sts2.Core.Models.AbstractModel.ShouldAddToDeck(MegaCrit.Sts2.Core.Models.CardModel)"/>.
+            </summary>
+        </member>
+        <member name="M:MegaCrit.Sts2.Core.Hooks.Hook.ShouldAfflict(MegaCrit.Sts2.Core.Combat.ICombatState,MegaCrit.Sts2.Core.Models.CardModel,MegaCrit.Sts2.Core.Models.AfflictionModel)">
+            <summary>
+            See <see cref="M:MegaCrit.Sts2.Core.Models.AbstractModel.ShouldAfflict(MegaCrit.Sts2.Core.Models.CardModel,MegaCrit.Sts2.Core.Models.AfflictionModel)"/>.
+            </summary>
+        </member>
+        <member name="M:MegaCrit.Sts2.Core.Hooks.Hook.ShouldAllowAncient(MegaCrit.Sts2.Core.Runs.IRunState,MegaCrit.Sts2.Core.Entities.Players.Player,MegaCrit.Sts2.Core.Models.AncientEventModel)">
+            <summary>
+            See <see cref="M:MegaCrit.Sts2.Core.Models.AbstractModel.ShouldAllowAncient(MegaCrit.Sts2.Core.Entities.Players.Player,MegaCrit.Sts2.Core.Models.AncientEventModel)"/>.
+            </summary>
+        </member>
+        <member name="M:MegaCrit.Sts2.Core.Hooks.Hook.ShouldAllowHitting(MegaCrit.Sts2.Core.Combat.ICombatState,MegaCrit.Sts2.Core.Entities.Creatures.Creature)">
+            <summary>
+            See <see cref="M:MegaCrit.Sts2.Core.Models.AbstractModel.ShouldAllowHitting(MegaCrit.Sts2.Core.Entities.Creatures.Creature)"/>.
+            </summary>
+        </member>
+        <member name="M:MegaCrit.Sts2.Core.Hooks.Hook.ShouldAllowMerchantCardRemoval(MegaCrit.Sts2.Core.Runs.IRunState,MegaCrit.Sts2.Core.Entities.Players.Player)">
+            <summary>
+            See <see cref="M:MegaCrit.Sts2.Core.Models.AbstractModel.ShouldAllowMerchantCardRemoval(MegaCrit.Sts2.Core.Entities.Players.Player)"/>.
+            </summary>
+        </member>
+        <member name="M:MegaCrit.Sts2.Core.Hooks.Hook.ShouldAllowSelectingMoreCardRewards(MegaCrit.Sts2.Core.Runs.IRunState,MegaCrit.Sts2.Core.Entities.Players.Player,MegaCrit.Sts2.Core.Rewards.CardReward)">
+            <summary>
+            See <see cref="M:MegaCrit.Sts2.Core.Models.AbstractModel.ShouldAllowSelectingMoreCardRewards(MegaCrit.Sts2.Core.Entities.Players.Player,MegaCrit.Sts2.Core.Rewards.CardReward)"/>.
+            </summary>
+        </member>
+        <member name="M:MegaCrit.Sts2.Core.Hooks.Hook.ShouldAllowTargeting(MegaCrit.Sts2.Core.Combat.ICombatState,MegaCrit.Sts2.Core.Entities.Creatures.Creature,MegaCrit.Sts2.Core.Models.AbstractModel@)">
+            <summary>
+            See <see cref="M:MegaCrit.Sts2.Core.Models.AbstractModel.ShouldAllowTargeting(MegaCrit.Sts2.Core.Entities.Creatures.Creature)"/>.
+            </summary>
+        </member>
+        <member name="M:MegaCrit.Sts2.Core.Hooks.Hook.ShouldClearBlock(MegaCrit.Sts2.Core.Combat.ICombatState,MegaCrit.Sts2.Core.Entities.Creatures.Creature,MegaCrit.Sts2.Core.Models.AbstractModel@)">
+            <summary>
+            See <see cref="M:MegaCrit.Sts2.Core.Models.AbstractModel.ShouldClearBlock(MegaCrit.Sts2.Core.Entities.Creatures.Creature)"/>.
+            </summary>
+        </member>
+        <member name="M:MegaCrit.Sts2.Core.Hooks.Hook.ShouldCreatureBeRemovedFromCombatAfterDeath(MegaCrit.Sts2.Core.Combat.ICombatState,MegaCrit.Sts2.Core.Entities.Creatures.Creature)">
+             <summary>
+             See <see cref="M:MegaCrit.Sts2.Core.Models.AbstractModel.ShouldCreatureBeRemovedFromCombatAfterDeath(MegaCrit.Sts2.Core.Entities.Creatures.Creature)"/>.
+            
+             Dispatched directly, not through the IterateCombatHookListeners guard: it is a predicate that
+             drives the decision of whether a creature is removed after death, so suppressing it while
+             combat is ending would drop the votes it collects.
+--
+        </member>
+        <member name="M:MegaCrit.Sts2.Core.Hooks.Hook.ShouldDie(MegaCrit.Sts2.Core.Runs.IRunState,MegaCrit.Sts2.Core.Combat.ICombatState,MegaCrit.Sts2.Core.Entities.Creatures.Creature,MegaCrit.Sts2.Core.Models.AbstractModel@)">
+            <summary>
+            See <see cref="M:MegaCrit.Sts2.Core.Models.AbstractModel.ShouldDie(MegaCrit.Sts2.Core.Entities.Creatures.Creature)"/>.
+            </summary>
+        </member>
+        <member name="M:MegaCrit.Sts2.Core.Hooks.Hook.ShouldDisableRemainingRestSiteOptions(MegaCrit.Sts2.Core.Runs.IRunState,MegaCrit.Sts2.Core.Entities.Players.Player)">
+            <summary>
+            See <see cref="M:MegaCrit.Sts2.Core.Models.AbstractModel.ShouldDisableRemainingRestSiteOptions(MegaCrit.Sts2.Core.Entities.Players.Player)"/>.
+            </summary>
+        </member>
+        <member name="M:MegaCrit.Sts2.Core.Hooks.Hook.ShouldDraw(MegaCrit.Sts2.Core.Combat.ICombatState,MegaCrit.Sts2.Core.Entities.Players.Player,System.Boolean,MegaCrit.Sts2.Core.Models.AbstractModel@)">
+            <summary>
+            See <see cref="M:MegaCrit.Sts2.Core.Models.AbstractModel.ShouldDraw(MegaCrit.Sts2.Core.Entities.Players.Player,System.Boolean)"/>.
+            </summary>
+        </member>
+        <member name="M:MegaCrit.Sts2.Core.Hooks.Hook.ShouldEtherealTrigger(MegaCrit.Sts2.Core.Combat.ICombatState,MegaCrit.Sts2.Core.Models.CardModel)">
+            <summary>
+            See <see cref="M:MegaCrit.Sts2.Core.Models.AbstractModel.ShouldEtherealTrigger(MegaCrit.Sts2.Core.Models.CardModel)"/>.
+            </summary>
+        </member>
+        <member name="M:MegaCrit.Sts2.Core.Hooks.Hook.ShouldFlush(MegaCrit.Sts2.Core.Combat.ICombatState,MegaCrit.Sts2.Core.Entities.Players.Player)">
+            <summary>
+            See <see cref="M:MegaCrit.Sts2.Core.Models.AbstractModel.ShouldFlush(MegaCrit.Sts2.Core.Entities.Players.Player)"/>.
+            </summary>
+        </member>
+        <member name="M:MegaCrit.Sts2.Core.Hooks.Hook.ShouldGenerateTreasure(MegaCrit.Sts2.Core.Runs.IRunState,MegaCrit.Sts2.Core.Entities.Players.Player)">
+            <summary>
+            See <see cref="M:MegaCrit.Sts2.Core.Models.AbstractModel.ShouldGenerateTreasure(MegaCrit.Sts2.Core.Entities.Players.Player)"/>.
+            </summary>
+        </member>
+        <member name="M:MegaCrit.Sts2.Core.Hooks.Hook.ShouldGainStars(MegaCrit.Sts2.Core.Combat.ICombatState,System.Decimal,MegaCrit.Sts2.Core.Entities.Players.Player)">
+            <summary>
+            See <see cref="M:MegaCrit.Sts2.Core.Models.AbstractModel.ShouldGainStars(System.Decimal,MegaCrit.Sts2.Core.Entities.Players.Player)"/>.
+            </summary>
+        </member>
+        <member name="M:MegaCrit.Sts2.Core.Hooks.Hook.ShouldPayExcessEnergyCostWithStars(MegaCrit.Sts2.Core.Combat.ICombatState,MegaCrit.Sts2.Core.Entities.Players.Player)">
+            <summary>
+            See <see cref="M:MegaCrit.Sts2.Core.Models.AbstractModel.ShouldPayExcessEnergyCostWithStars(MegaCrit.Sts2.Core.Entities.Players.Player)"/>.
+            </summary>
+        </member>
+        <member name="M:MegaCrit.Sts2.Core.Hooks.Hook.ShouldPlay(MegaCrit.Sts2.Core.Combat.ICombatState,MegaCrit.Sts2.Core.Models.CardModel,MegaCrit.Sts2.Core.Models.AbstractModel@,MegaCrit.Sts2.Core.Entities.Cards.AutoPlayType)">
+            <summary>
+            See <see cref="M:MegaCrit.Sts2.Core.Models.AbstractModel.ShouldPlay(MegaCrit.Sts2.Core.Models.CardModel,MegaCrit.Sts2.Core.Entities.Cards.AutoPlayType)"/>.
+            </summary>
+        </member>
+        <member name="M:MegaCrit.Sts2.Core.Hooks.Hook.ShouldPlayerResetEnergy(MegaCrit.Sts2.Core.Combat.ICombatState,MegaCrit.Sts2.Core.Entities.Players.Player)">
+            <summary>
+            See <see cref="M:MegaCrit.Sts2.Core.Models.AbstractModel.ShouldPlayerResetEnergy(MegaCrit.Sts2.Core.Entities.Players.Player)"/>.
+            </summary>
+        </member>
+        <member name="M:MegaCrit.Sts2.Core.Hooks.Hook.ShouldProceedToNextMapPoint(MegaCrit.Sts2.Core.Runs.IRunState)">
+            <summary>
+            See <see cref="M:MegaCrit.Sts2.Core.Models.AbstractModel.ShouldProceedToNextMapPoint"/>.
+            </summary>
+        </member>
+        <member name="M:MegaCrit.Sts2.Core.Hooks.Hook.ShouldProcurePotion(MegaCrit.Sts2.Core.Runs.IRunState,MegaCrit.Sts2.Core.Combat.ICombatState,MegaCrit.Sts2.Core.Models.PotionModel,MegaCrit.Sts2.Core.Entities.Players.Player)">
+            <summary>
+            See <see cref="M:MegaCrit.Sts2.Core.Models.AbstractModel.ShouldProcurePotion(MegaCrit.Sts2.Core.Models.PotionModel,MegaCrit.Sts2.Core.Entities.Players.Player)"/>.
+            </summary>
+        </member>
+        <member name="M:MegaCrit.Sts2.Core.Hooks.Hook.ShouldRefillMerchantEntry(MegaCrit.Sts2.Core.Runs.IRunState,MegaCrit.Sts2.Core.Entities.Merchant.MerchantEntry,MegaCrit.Sts2.Core.Entities.Players.Player)">
+            <summary>
+            See <see cref="M:MegaCrit.Sts2.Core.Models.AbstractModel.ShouldRefillMerchantEntry(MegaCrit.Sts2.Core.Entities.Merchant.MerchantEntry,MegaCrit.Sts2.Core.Entities.Players.Player)"/>.
+            </summary>
+        </member>
+        <member name="M:MegaCrit.Sts2.Core.Hooks.Hook.ShouldStopCombatFromEnding(MegaCrit.Sts2.Core.Combat.ICombatState)">
+             <summary>
+             See <see cref="M:MegaCrit.Sts2.Core.Models.AbstractModel.ShouldStopCombatFromEnding"/>.
+            
+             Dispatched directly, not through the IterateCombatHookListeners guard: it is a predicate that
+             drives the decision of whether combat ends, so suppressing it while combat is ending would
+             drop the votes it collects.
+--
+        </member>
+        <member name="M:MegaCrit.Sts2.Core.Hooks.Hook.ShouldTakeExtraTurn(MegaCrit.Sts2.Core.Combat.ICombatState,MegaCrit.Sts2.Core.Entities.Players.Player)">
+            <summary>
+            See <see cref="M:MegaCrit.Sts2.Core.Models.AbstractModel.ShouldTakeExtraTurn(MegaCrit.Sts2.Core.Entities.Players.Player)"/>.
+            </summary>
+        </member>
+        <member name="M:MegaCrit.Sts2.Core.Hooks.Hook.ShouldForcePotionReward(MegaCrit.Sts2.Core.Runs.IRunState,MegaCrit.Sts2.Core.Entities.Players.Player,MegaCrit.Sts2.Core.Rooms.RoomType)">
+            <summary>
+            See <see cref="M:MegaCrit.Sts2.Core.Models.AbstractModel.ShouldForcePotionReward(MegaCrit.Sts2.Core.Entities.Players.Player,MegaCrit.Sts2.Core.Rooms.RoomType)"/>.
+            </summary>
+        </member>
+        <member name="M:MegaCrit.Sts2.Core.Hooks.Hook.ShouldAllowFreeTravel(MegaCrit.Sts2.Core.Runs.IRunState)">
+            <summary>
+            See <see cref="M:MegaCrit.Sts2.Core.Models.AbstractModel.ShouldAllowFreeTravel"/>.
+            </summary>
+        </member>
+        <member name="T:MegaCrit.Sts2.Core.Hooks.HpLossHookPhase">
+            <summary>
+            Represents which phase(s) of HP-loss-modification hooks should be run for a given HP loss.
+            In CreatureCmd.Damage, the two phases bracket damage redirection (Osty), so they are invoked separately with
+            potentially different targets. Callers that don't deal with redirection (like damage previews) can use
+            <see cref="F:MegaCrit.Sts2.Core.Hooks.HpLossHookPhase.All"/> to apply both phases at once.
+            </summary>
+        </member>
+        <member name="F:MegaCrit.Sts2.Core.Hooks.HpLossHookPhase.BeforeOsty">
+            <summary>
+            Hooks that modify HP loss before damage is redirected from Necrobinder to Osty.
+            Including this will cause <see cref="M:MegaCrit.Sts2.Core.Models.AbstractModel.ModifyHpLostBeforeOsty(MegaCrit.Sts2.Core.Entities.Creatures.Creature,System.Decimal,MegaCrit.Sts2.Core.ValueProps.ValueProp,MegaCrit.Sts2.Core.Entities.Creatures.Creature,MegaCrit.Sts2.Core.Models.CardModel)"/> and
+            <see cref="M:MegaCrit.Sts2.Core.Models.AbstractModel.ModifyHpLostBeforeOstyLate(MegaCrit.Sts2.Core.Entities.Creatures.Creature,System.Decimal,MegaCrit.Sts2.Core.ValueProps.ValueProp,MegaCrit.Sts2.Core.Entities.Creatures.Creature,MegaCrit.Sts2.Core.Models.CardModel)"/> to be called.
+            </summary>
+        </member>
+        <member name="F:MegaCrit.Sts2.Core.Hooks.HpLossHookPhase.AfterOsty">
+            <summary>
+            Hooks that modify HP loss after damage is redirected from Necrobinder to Osty.
+            Including this will cause <see cref="M:MegaCrit.Sts2.Core.Models.AbstractModel.ModifyHpLostAfterOsty(MegaCrit.Sts2.Core.Entities.Creatures.Creature,System.Decimal,MegaCrit.Sts2.Core.ValueProps.ValueProp,MegaCrit.Sts2.Core.Entities.Creatures.Creature,MegaCrit.Sts2.Core.Models.CardModel)"/> and
+            <see cref="M:MegaCrit.Sts2.Core.Models.AbstractModel.ModifyHpLostAfterOstyLate(MegaCrit.Sts2.Core.Entities.Creatures.Creature,System.Decimal,MegaCrit.Sts2.Core.ValueProps.ValueProp,MegaCrit.Sts2.Core.Entities.Creatures.Creature,MegaCrit.Sts2.Core.Models.CardModel)"/> to be called.
+            </summary>
+        </member>
+        <member name="F:MegaCrit.Sts2.Core.Hooks.HpLossHookPhase.All">
+            <summary>
+            Include all HP-loss-modification hooks. Use when there is no redirection step between phases
+            (e.g. damage previews).
+            </summary>
+        </member>
+        <member name="T:MegaCrit.Sts2.Core.Hooks.ModifyDamageHookType">
+            <summary>
+            Represents the type(s) of ModifyDamage hooks that should be run for a given instance of damage.
+            </summary>
+        </member>
+        <member name="F:MegaCrit.Sts2.Core.Hooks.ModifyDamageHookType.Additive">
+            <summary>
+            Additive damage hooks from effects like <see cref="T:MegaCrit.Sts2.Core.Models.Powers.StrengthPower"/>.
+            Including this will cause <see cref="M:MegaCrit.Sts2.Core.Models.AbstractModel.ModifyDamageAdditive(MegaCrit.Sts2.Core.Entities.Creatures.Creature,System.Decimal,MegaCrit.Sts2.Core.ValueProps.ValueProp,MegaCrit.Sts2.Core.Entities.Creatures.Creature,MegaCrit.Sts2.Core.Models.CardModel)"/> and
+            <see cref="M:MegaCrit.Sts2.Core.Models.EnchantmentModel.EnchantDamageAdditive(System.Decimal,MegaCrit.Sts2.Core.ValueProps.ValueProp)"/> to be called.
+            At the time of this writing (5/15/2026), we never use this type alone.
+            If that changes, please update this comment.
+--
+        </member>
+        <member name="F:MegaCrit.Sts2.Core.Hooks.ModifyDamageHookType.Multiplicative">
+            <summary>
+            Multiplicative damage hooks from effects like <see cref="T:MegaCrit.Sts2.Core.Models.Powers.VulnerablePower"/>.
+            Including this will cause <see cref="M:MegaCrit.Sts2.Core.Models.AbstractModel.ModifyDamageMultiplicative(MegaCrit.Sts2.Core.Entities.Creatures.Creature,System.Decimal,MegaCrit.Sts2.Core.ValueProps.ValueProp,MegaCrit.Sts2.Core.Entities.Creatures.Creature,MegaCrit.Sts2.Core.Models.CardModel)"/> and
+            <see cref="M:MegaCrit.Sts2.Core.Models.EnchantmentModel.EnchantDamageMultiplicative(System.Decimal,MegaCrit.Sts2.Core.ValueProps.ValueProp)"/> to be called.
+            At the time of this writing (5/15/2026), we never use this type alone.
+            If that changes, please update this comment.
+--
+        </member>
+        <member name="F:MegaCrit.Sts2.Core.Hooks.ModifyDamageHookType.Cap">
+            <summary>
+            Damage-capping hooks from effects like <see cref="T:MegaCrit.Sts2.Core.Models.Powers.IntangiblePower"/>.
+            Including this will cause <see cref="M:MegaCrit.Sts2.Core.Models.AbstractModel.ModifyDamageCap(MegaCrit.Sts2.Core.Entities.Creatures.Creature,MegaCrit.Sts2.Core.ValueProps.ValueProp,MegaCrit.Sts2.Core.Entities.Creatures.Creature,MegaCrit.Sts2.Core.Models.CardModel)"/> to be called.
+            At the time of this writing (5/15/2026), we never use this type alone.
+            If that changes, please update this comment.
+            </summary>
+        </member>
+        <member name="F:MegaCrit.Sts2.Core.Hooks.ModifyDamageHookType.All">
+            <summary>
+            Include all ModifyDamage hooks.
+            Most back-end ModifyDamage hook calls will use this.
+            </summary>
+        </member>
+        <member name="P:MegaCrit.Sts2.Core.HoverTips.HoverTip.ShouldOverrideTextOverflow">
+--
+        </member>
+        <member name="T:MegaCrit.Sts2.Core.Modding.IModManagerFileIo">
+            <summary>
+            A file IO abstraction layer for use with ModManager.
+            It's a little different than ISaveStore, which is scoped only to a specific directory. This class allows global access
+            to the filesystem.
+            </summary>
+        </member>
+        <member name="T:MegaCrit.Sts2.Core.Modding.Mod">
+            <summary>
+            Information about a loaded mod.
+            </summary>
+        </member>
+        <member name="F:MegaCrit.Sts2.Core.Modding.Mod.modSource">
+            <summary>
+            Where the mod originated from.
+            </summary>
+        </member>
+        <member name="F:MegaCrit.Sts2.Core.Modding.Mod.path">
+            <summary>
+            Path where the mod files are located.
+            </summary>
+        </member>
+        <member name="F:MegaCrit.Sts2.Core.Modding.Mod.state">
+            <summary>
+            Whether the mod was loaded, and if it was not loaded, why.
+            Since there's no way to unload mods while the game is running, this value cannot change after the initial mod
+            initialization occurs.
+            Even if the mod is set to disabled in SettingsSave, this value is the true source of whether or not the mod was
+            loaded into the game.
+--
+        </member>
+        <member name="F:MegaCrit.Sts2.Core.Modding.Mod.manifest">
+            <summary>
+            The mod manifest.
+            </summary>
+        </member>
+        <member name="F:MegaCrit.Sts2.Core.Modding.Mod.version">
+            <summary>
+            The version parsed from the mod manifest.
+            Null if the version is not present or is not a valid semantic version.
+            </summary>
+        </member>
+        <member name="F:MegaCrit.Sts2.Core.Modding.Mod.assembly">
+            <summary>
+            The C# assembly loaded with the mod, if any.
+            </summary>
+        </member>
+        <member name="F:MegaCrit.Sts2.Core.Modding.Mod.errors">
+            <summary>
+            If null, then no errors occurred while loading the mod.
+            If this is set, then there was an error loading the mod that should be displayed.
+            </summary>
+        </member>
+        <member name="T:MegaCrit.Sts2.Core.Modding.ModHelper">
+            <summary>
+            Some helper methods for modding.
+            </summary>
+        </member>
+        <member name="M:MegaCrit.Sts2.Core.Modding.ModHelper.AddModelToPool``2">
+            <summary>
+            Called by mods to add their models to a pool.
+            Throws if the pool has already concatenated models to that pool (i.e. the mod was too late in calling this method).
+            </summary>
+            <typeparam name="TPoolType">The pool type to add to.</typeparam>
+            <typeparam name="TModelType">The model to add to the pool.</typeparam>
+        </member>
+        <member name="M:MegaCrit.Sts2.Core.Modding.ModHelper.ConcatModelsFromMods``1(MegaCrit.Sts2.Core.Models.IPoolModel,System.Collections.Generic.IEnumerable{``0})">
+            <summary>
+            Called by a pool when it is ready to add modded content to its pool of content.
+            </summary>
+            <param name="poolModel">The pool that is consuming the content.</param>
+            <param name="pool">The current pool of content.</param>
+            <typeparam name="TModelType">The model type of the content that should have been added by mods.</typeparam>
+--
+        </member>
+        <member name="M:MegaCrit.Sts2.Core.Modding.ModHelper.SubscribeForRunStateHooks(System.String,MegaCrit.Sts2.Core.Modding.RunHookSubscriptionDelegate)">
+            <summary>
+            Called by mods when they wish to provide custom model types to a RunState when IterateHookListeners is called.
+            </summary>
+            <param name="id">An ID to identify the subscription. Usually the name of the mod.</param>
+            <param name="del">The delegate provided by the mod, which returns the models to iterate over.</param>
+        </member>
+        <member name="M:MegaCrit.Sts2.Core.Modding.ModHelper.SubscribeForCombatStateHooks(System.String,MegaCrit.Sts2.Core.Modding.CombatHookSubscriptionDelegate)">
+            <summary>
+            Called by mods when they wish to provide custom model types to a CombatState when IterateHookListeners is called.
+            </summary>
+            <param name="id">An ID to identify the subscription. Usually the name of the mod.</param>
+            <param name="del">The delegate provided by the mod, which returns the models to iterate over.</param>
+        </member>
+        <member name="M:MegaCrit.Sts2.Core.Modding.ModHelper.IterateAllRunStateSubscribers(MegaCrit.Sts2.Core.Runs.RunState)">
+            <summary>
+            Called by RunState when it is iterating hook listeners, so that custom mod AbstractModel types have hooks called
+            on them.
+            </summary>
+            <param name="runState">The RunState which is iterating hook listeners.</param>
+            <returns>All the model types from all subscribing mods who wish to receive hooks.</returns>
+        </member>
+        <member name="M:MegaCrit.Sts2.Core.Modding.ModHelper.IterateAllCombatStateSubscribers(MegaCrit.Sts2.Core.Combat.CombatState)">
+            <summary>
+            Called by CombatState when it is iterating hook listeners, so that custom mod AbstractModel types have hooks
+            called on them.
+            </summary>
+            <param name="combatState">The CombatState which is iterating hook listeners.</param>
+            <returns>All the model types from all subscribing mods who wish to receive hooks.</returns>
+        </member>
+        <member name="T:MegaCrit.Sts2.Core.Modding.ModInitializerAttribute">
+            <summary>
+            Declares a class as the main entry point for the mod.
+            If this is present, then upon loading the mod, we'll call the method named initializerMethod within the class.
+            Otherwise, we'll create a harmony instance for the mod and call Harmony.PatchAll.
+            </summary>
+        </member>
+        <member name="F:MegaCrit.Sts2.Core.Modding.ModLoadState.Loaded">
+            <summary>
+            Mod was successfully loaded.
+            </summary>
+        </member>
+        <member name="F:MegaCrit.Sts2.Core.Modding.ModLoadState.Failed">
+            <summary>
+            We tried to load the mod but it failed to load.
+            </summary>
+        </member>
+        <member name="F:MegaCrit.Sts2.Core.Modding.ModLoadState.Disabled">
+            <summary>
+            We didn't try to load the mod because the user has not enabled mod loading, or this specific mod is marked as
+            disabled in SettingsSave.
+            </summary>
+        </member>
+        <member name="F:MegaCrit.Sts2.Core.Modding.ModLoadState.DisabledDuplicate">
+            <summary>
+            We didn't try to load the mod because the user has this mod loaded both via Steam and local mods directory.
+            </summary>
+        </member>
+        <member name="F:MegaCrit.Sts2.Core.Modding.ModLoadState.AddedAtRuntime">
+            <summary>
+            We didn't try to load the mod because it was added too late.
+            </summary>
+        </member>
+        <member name="E:MegaCrit.Sts2.Core.Modding.ModManager.OnModDetected">
+            <summary>
+            Called when a new mod is detected. Use this to display a warning at runtime if the user adds new mods.
+            </summary>
+        </member>
+        <member name="E:MegaCrit.Sts2.Core.Modding.ModManager.OnMetricsUpload">
+            <summary>
+            Used by mods to hook into the metrics upload process.
+            This is unused by STS2 code. It is only used by mods, and is called when we would ordinarily upload metrics.
+            </summary>
+        </member>
+        <member name="M:MegaCrit.Sts2.Core.Modding.ModManager.Initialize(MegaCrit.Sts2.Core.Modding.IModManagerFileIo,MegaCrit.Sts2.Core.Modding.ModSettings,MegaCrit.Sts2.Core.Debug.SemanticVersion)">
+            <summary>
+            Loads all mods from the appropriate directories. This includes the "mods" directory next to the executable, as
+            well as Steam workshop files.
+            This should be called as early as possible in the game's initialization process so that downstream classes
+            (ModelDb, LocManager) pick up the changes that the mods apply.
+            </summary>
+        </member>
+        <member name="M:MegaCrit.Sts2.Core.Modding.ModManager.SortModList(System.Collections.Generic.List{MegaCrit.Sts2.Core.Modding.SettingsSaveMod})">
+             <summary>
+             Sorts mods so that dependencies are loaded before the mods that depend on them (topological sort).
+             Uses Kahn's algorithm: https://en.wikipedia.org/wiki/Topological_sorting#Kahn's_algorithm
+            
+             How it works:
+               1. Build a graph: count each mod's dependencies (in-degree) and track reverse edges (dependentsMap).
+--
+        </member>
+        <member name="M:MegaCrit.Sts2.Core.Modding.ModManager.RemoveDisabledMods">
+            <summary>
+            If the user has subscribed to a mod via Steam workshop and also has it in their local directory, we never want
+            to load the Steam mod. This is to help mod developers in development.
+            </summary>
+        </member>
+        <member name="M:MegaCrit.Sts2.Core.Modding.ModManager.ReadModsInDirRecursive(System.String,MegaCrit.Sts2.Core.Modding.ModSource,System.Collections.Generic.List{MegaCrit.Sts2.Core.Modding.Mod})">
+            <summary>
+            Recurses through the directory and reads all the mod PCKs and DLLs in it, putting it in the _mods list.
+            We allow mods in directories to give modders a little slack in how they organize their files.
+            Pass the newMods list if you wish to get the mods that have been newly read.
+            </summary>
+        </member>
+        <member name="M:MegaCrit.Sts2.Core.Modding.ModManager.EvaluateBranchSupport(MegaCrit.Sts2.Core.Platform.PlatformBranch,System.Collections.Generic.IReadOnlyList{System.ValueTuple{System.String,System.String}})">
+            <summary>
+            Decides whether <paramref name="currentBranch"/> is supported by a Steam Workshop item, given the supported
+            game-version ranges Steam reports for it. Each range is a (min, max) pair of branch names ordered oldest to
+            newest (see <see cref="T:MegaCrit.Sts2.Core.Platform.PlatformBranch"/>); an empty string is a documented open-ended bound (empty min = no lower
+            bound, empty max = no upper bound, both empty = every branch). Returns the newest supported branch seen so the
+            caller can surface it in an error message. Pure and side-effect free so it can be unit tested without Steam.
+--
+        </member>
+        <member name="M:MegaCrit.Sts2.Core.Modding.ModManager.CallModInitializer(System.Type)">
+            <summary>
+            Calls the mod initializer on a type that has the ModInitializerAttribute on it.
+            </summary>
+        </member>
+        <member name="M:MegaCrit.Sts2.Core.Modding.ModManager.GetModdedLocTables(System.String,System.String)">
+            <summary>
+            Returns the filenames of all the loc tables available in loaded mods for the given language and filename.
+            For example, if "eng" and "cards.json" are provided, this returns all mods that supply a cards.json in english.
+            </summary>
+        </member>
+        <member name="M:MegaCrit.Sts2.Core.Modding.ModManager.GetGameplayRelevantModNameList">
+            <summary>
+            Returns a list of the names of all loaded mods that affect gameplay.
+            For multiplayer - used to compare mods between different players.
+            </summary>
+        </member>
+        <member name="M:MegaCrit.Sts2.Core.Modding.ModManager.GetNonGameplayRelevantModNameList">
+            <summary>
+            Returns a list of the names of all loaded mods that do not affect gameplay.
+            </summary>
+        </member>
+        <member name="M:MegaCrit.Sts2.Core.Modding.ModManager.HandleAssemblyResolveFailure(System.Object,System.ResolveEventArgs)">
+            <summary>
+            Resolves assemblies loaded by mods that may have a different version.
+            When writing a mod DLL, the implementer may target a STS2 DLL that does not match the current version. When the
+            dotnet runtime attempts to load the DLL, it tries to strictly match the version. Usually, we don't really need
+            it to - a lot of our APIs don't change that often. Attaching this method to the AssemblyResolve event allows us
+            to force dotnet to resolve the assembly to the correct one.
+--
+        </member>
+        <member name="M:MegaCrit.Sts2.Core.Modding.ModManager.CallMetricsHooks(MegaCrit.Sts2.Core.Saves.SerializableRun,System.Boolean,System.UInt64)">
+            <summary>
+            Called by the metrics uploader when metrics would be uploaded, but are not because there are mods present.
+            </summary>
+        </member>
+        <member name="F:MegaCrit.Sts2.Core.Modding.ModManagerState.None">
+            <summary>
+            ModManager is not yet initialized.
+            </summary>
+        </member>
+        <member name="F:MegaCrit.Sts2.Core.Modding.ModManagerState.Initialized">
+            <summary>
+            ModManager is fully initialized. It may or may not have loaded mods.
+            </summary>
+        </member>
+        <member name="F:MegaCrit.Sts2.Core.Modding.ModManagerState.Skipped">
+            <summary>
+            ModManager skipped initialization for some reason:
+             - We're in test mode
+             - This is an AOT build
+             - nomods command line argument was passed
+            </summary>
+        </member>
+        <member name="T:MegaCrit.Sts2.Core.Modding.ModManifest">
+            <summary>
+            Represents the JSON file which defines mod manifests.
+            </summary>
+        </member>
+        <member name="T:MegaCrit.Sts2.Core.Modding.ModSource">
+            <summary>
+            Where a mod was loaded from.
+            </summary>
+        </member>
+        <member name="F:MegaCrit.Sts2.Core.Modding.ModSource.ModsDirectory">
+            <summary>
+            The mod is located in the mods directory next to the executable.
+            </summary>
+        </member>
+        <member name="F:MegaCrit.Sts2.Core.Modding.ModSource.SteamWorkshop">
+            <summary>
+            The mod was loaded from Steam Workshop.
+            </summary>
+        </member>
+        <member name="T:MegaCrit.Sts2.Core.Modding.SettingsSaveMod">
+            <summary>
+            Represents a mod in the settings save. Used for:
+             - Representing manual load order
+             - Disabling/enabling mods
+            </summary>
+        </member>
