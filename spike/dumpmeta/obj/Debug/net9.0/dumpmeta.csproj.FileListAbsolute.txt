@@ -1,0 +1,15 @@
+C:\Users\Brandon\spectra-overlay\spike\dumpmeta\obj\Debug\net9.0\dumpmeta.GeneratedMSBuildEditorConfig.editorconfig
+C:\Users\Brandon\spectra-overlay\spike\dumpmeta\obj\Debug\net9.0\dumpmeta.AssemblyInfoInputs.cache
+C:\Users\Brandon\spectra-overlay\spike\dumpmeta\obj\Debug\net9.0\dumpmeta.AssemblyInfo.cs
+C:\Users\Brandon\spectra-overlay\spike\dumpmeta\obj\Debug\net9.0\dumpmeta.csproj.CoreCompileInputs.cache
+C:\Users\Brandon\spectra-overlay\spike\dumpmeta\obj\Debug\net9.0\dumpmeta.sourcelink.json
+C:\Users\Brandon\spectra-overlay\spike\dumpmeta\bin\Debug\net9.0\dumpmeta.exe
+C:\Users\Brandon\spectra-overlay\spike\dumpmeta\bin\Debug\net9.0\dumpmeta.deps.json
+C:\Users\Brandon\spectra-overlay\spike\dumpmeta\bin\Debug\net9.0\dumpmeta.runtimeconfig.json
+C:\Users\Brandon\spectra-overlay\spike\dumpmeta\bin\Debug\net9.0\dumpmeta.dll
+C:\Users\Brandon\spectra-overlay\spike\dumpmeta\bin\Debug\net9.0\dumpmeta.pdb
+C:\Users\Brandon\spectra-overlay\spike\dumpmeta\obj\Debug\net9.0\dumpmeta.dll
+C:\Users\Brandon\spectra-overlay\spike\dumpmeta\obj\Debug\net9.0\refint\dumpmeta.dll
+C:\Users\Brandon\spectra-overlay\spike\dumpmeta\obj\Debug\net9.0\dumpmeta.pdb
+C:\Users\Brandon\spectra-overlay\spike\dumpmeta\obj\Debug\net9.0\dumpmeta.genruntimeconfig.cache
+C:\Users\Brandon\spectra-overlay\spike\dumpmeta\obj\Debug\net9.0\ref\dumpmeta.dll

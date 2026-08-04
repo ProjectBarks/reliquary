@@ -477,3 +477,30 @@ Note `ObjectToMethodTableUnmask = 0x7` — mask the low 3 bits off `obj[0]`, not
 **We would be building something genuinely novel**: a DAC-free, cDAC-driven external CoreCLR
 reader. tosu proves the category works; the cDAC is what makes it maintainable instead of
 requiring a private per-build offset generator.
+
+## Final prior-art note + reference implementation to port
+
+A second independent survey confirms the category is nearly empty, and surfaces the best
+**struct-definition reference**:
+
+- **[Decimation/Novus](https://github.com/Decimation/Novus)** (C#) — full hardcoded CoreCLR
+  type-system structs for **.NET 8+**: `MethodTable.cs` (incl. the EEClass/canonical-MT tagged
+  union with `UNION_MASK = 1`), **`EEClass.cs` with `FieldDesc* FieldDescList`,
+  `NumInstanceFields`, `NumStaticFields`**, and **`FieldDesc.cs`** with the packed DWORDs
+  (`unsigned m_dwOffset : 27; unsigned m_type : 5`, `Offset => ReadBits(UInt2, 0, 27)`).
+  ⚠️ It is **in-process** (raw pointers + coreclr imports), so it can't be used directly —
+  but it is the cleanest reference for the exact layouts we need to port onto
+  `ReadProcessMemory`.
+- **[opentelemetry-ebpf-profiler](https://github.com/open-telemetry/opentelemetry-ebpf-profiler)**
+  `interpreter/dotnet/data.go` — production **version-keyed offset tables for .NET 6–10**,
+  reading `g_dacTable` as a plain exported array (never loading mscordaccore), with a cDAC
+  override on 10+. The precedent for how to structure version gating.
+
+⚠️ **Conflicting claim, resolved by our own test:** that survey states the cDAC descriptor is
+"a near-empty stub before .NET 10". **Our live read disproves that for this build** —
+`descriptor_size = 3201` with a full `MethodTable` contract. Trust the live probe
+(`spike/memread/cdac.mjs`), not the secondary claim.
+
+Net: **nothing exists to fork** for external object-field reads on .NET 8/9. The build is
+Novus's struct definitions + OTel's version-gating pattern + our cDAC probe, on top of the
+koffi reader.
