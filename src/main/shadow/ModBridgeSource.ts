@@ -22,7 +22,7 @@ export const PARITY_KEYS: Sts2Key[] = [
   'sts2.layoutState'
 ]
 
-const DEFAULT_URL = 'http://localhost:17832/state'
+const DEFAULT_URL = 'http://127.0.0.1:15600/state'
 const POLL_MS = 250
 const BACKOFF_MAX_MS = 10_000
 

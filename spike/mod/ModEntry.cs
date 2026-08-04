@@ -113,67 +113,37 @@ public static class ModEntry
                 _ = ws.SendAsync(seg, WebSocketMessageType.Text, true, CancellationToken.None);
     }
 
-    /// <summary>MUST be called on the Godot main thread.</summary>
+    /// <summary>
+    /// Emits the SAME keyed snapshot shape the Electron app already consumes
+    /// (src/shared/types.ts), so this mod is a drop-in replacement for the
+    /// proprietary untapped-scry reader — no translation layer needed.
+    ///
+    /// MUST be called on the Godot main thread.
+    /// </summary>
     private static string BuildState()
     {
         var o = new Dictionary<string, object?>();
 
-        if (!RunManager.Instance.IsInProgress)
+        var inRun = RunManager.Instance?.IsInProgress ?? false;
+        RunState? run = inRun ? RunManager.Instance!.DebugOnlyGetState() : null;
+        Player? me = run?.Players is { Count: > 0 } ps ? ps[0] : null;
+
+        var inCombat = run?.CurrentRoom is CombatRoom && (CombatManager.Instance?.IsInProgress ?? false);
+        CombatState? cs = inCombat ? CombatManager.Instance!.DebugOnlyGetState() : null;
+        if (!inCombat) Snapshot.ResetCombatState();
+
+        o["sts2.nGameState"] = Snapshot.NGameState(run);
+        o["sts2.pileState"] = Snapshot.PileState(inCombat ? me?.PlayerCombatState : null);
+        o["sts2.enemiesState"] = Snapshot.EnemiesState(cs);
+        // sts2.layoutState needs on-screen positions from the scene tree; tracked
+        // separately (see SPIKE.md) — omitted rather than emitted wrong.
+
+        o["_meta"] = new Dictionary<string, object?>
         {
-            o["state_type"] = "menu";
-            return JsonSerializer.Serialize(o);
-        }
-
-        RunState run = RunManager.Instance.DebugOnlyGetState();
-        o["act"] = run.CurrentActIndex;
-        o["act_floor"] = run.ActFloor;
-        o["total_floor"] = run.TotalFloor;
-        o["ascension"] = run.AscensionLevel;
-        o["is_game_over"] = run.IsGameOver;
-        o["map_coord"] = run.CurrentMapCoord?.ToString();
-
-        var me = run.Players[0];
-        o["gold"] = me.Gold;
-        o["hp"] = me.Creature?.CurrentHp;
-        o["max_hp"] = me.Creature?.MaxHp;
-        o["relics"] = me.Relics.Select(r => r.Id.ToString()).ToList();
-        o["deck"] = me.Deck.Cards.Select(c => c.Id.ToString()).ToList();
-
-        AbstractRoom? room = run.CurrentRoom;
-        o["room_type"] = room?.GetType().Name;
-
-        if (room is CombatRoom && CombatManager.Instance.IsInProgress)
-        {
-            CombatState cs = CombatManager.Instance.DebugOnlyGetState();
-            PlayerCombatState pcs = me.PlayerCombatState;
-
-            o["state_type"] = "combat";
-            o["round"] = cs.RoundNumber;
-            o["turn"] = pcs.TurnNumber;
-            o["phase"] = pcs.Phase.ToString();
-            o["energy"] = pcs.Energy;
-            o["max_energy"] = pcs.MaxEnergy;
-            o["block"] = me.Creature?.Block;
-            o["hand"] = pcs.Hand.Cards.Select(c => c.Id.ToString()).ToList();
-            o["draw_pile_count"] = pcs.DrawPile.Cards.Count;
-            o["discard_pile_count"] = pcs.DiscardPile.Cards.Count;
-            o["exhaust_pile_count"] = pcs.ExhaustPile.Cards.Count;
-            o["enemies"] = cs.Enemies.Select(e => new
-            {
-                name = e.Name,
-                model_id = e.ModelId.ToString(),
-                hp = e.CurrentHp,
-                max_hp = e.MaxHp,
-                block = e.Block,
-                is_alive = e.IsAlive,
-                powers = e.Powers.Select(p => p.Id.ToString()).ToList(),
-            }).ToList();
-        }
-        else
-        {
-            o["state_type"] = room?.GetType().Name ?? "unknown";
-        }
-
+            ["source"] = "SpectraBridge",
+            ["inRun"] = inRun,
+            ["inCombat"] = inCombat
+        };
         return JsonSerializer.Serialize(o);
     }
 }
