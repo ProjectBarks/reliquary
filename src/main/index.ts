@@ -9,6 +9,7 @@ import { loadScryModule } from './scry/native'
 import { installLogCapture, setLogSink, logHistory } from './logBus'
 import { applyGpuCrashMitigation, installGpuCrashGuard } from './gpuCrashGuard'
 import { SettingsStore } from './settings/SettingsStore'
+import { initShadow, recordPrimary, flushShadowSummary } from './shadow'
 import {
   IPC,
   type DiagnosticsState,
@@ -116,6 +117,8 @@ function toggleOverlayHidden(): void {
 
 function emitSnapshot(snap: KeyedSnapshot): void {
   lastState.set(snap.key, snap.value)
+  // Spike: capture ground truth for the native-reader replacement effort.
+  recordPrimary(snap)
   if (process.env['SPECTRA_DEBUG']) {
     const v = snap.value as any
     let brief = ''
@@ -240,6 +243,9 @@ if (hasLock)
   installLogCapture()
   setLogSink((line) => broadcast(IPC.Log, [line]))
 
+  // Spike: shadow recorder for the native-reader replacement (SPECTRA_SHADOW=1).
+  initShadow()
+
   // Recover from GPU/renderer crashes (the transparent-window device-loss kill).
   installGpuCrashGuard()
 
@@ -303,6 +309,7 @@ if (hasLock)
 })
 
 app.on('will-quit', () => {
+  flushShadowSummary()
   globalShortcut.unregisterAll()
   scryProvider?.stop()
   stub?.stop()

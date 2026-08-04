@@ -1,0 +1,15 @@
+{
+  "assembly": "C:/Program Files (x86)/Steam/steamapps/common/Slay the Spire 2/data_sts2_windows_x86_64/sts2.dll",
+  "fields": {
+    "total": 79,
+    "resolved": 78,
+    "missing": [
+      "_turnState"
+    ]
+  },
+  "classes": {
+    "total": 13,
+    "resolved": 13,
+    "missing": []
+  }
+}
