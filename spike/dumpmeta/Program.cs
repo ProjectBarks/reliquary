@@ -9,6 +9,7 @@ using System.Reflection.PortableExecutable;
 // managed assembly, so the mod is written against the real API rather than guesses.
 
 if (args.Length > 1 && args[0] == "--tokens") { Tokens.Dump(args[1], args.Length > 2 ? args[2] : "tokens.json"); return; }
+if (args.Length > 1 && args[0] == "--fields") { Fields.Dump(args[1], args.Length > 2 ? args[2] : "fields.json"); return; }
 
 string dll = args.Length > 0
     ? args[0]
