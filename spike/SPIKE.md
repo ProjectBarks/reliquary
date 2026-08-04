@@ -62,6 +62,44 @@ Verified capturing live: `sts2.pileState`, `sts2.enemiesState`, `sts2.nGameState
 SPECTRA_DEBUG=1 SPECTRA_SHADOW=1 npm run dev
 ```
 
+## The official mod contract (extracted from the game itself)
+
+`spike/dumpmeta` is a .NET tool that reads `sts2.dll`'s metadata directly — so the mod is
+written against the real API, not guesses. Full dump: `spike/game-api.txt` (844 lines).
+
+```
+MegaCrit.Sts2.Core.Modding
+├─ ModInitializerAttribute   → field: initializerMethod        (entry point)
+├─ ModManifest               → id, name, author, description, version,
+│                              hasPck, hasDll, dependencies,
+│                              affectsGameplay, minGameVersion
+├─ ModManager / ModLoadState / ModSource / ModSettings
+└─ ModHelper  (public static)
+     ├─ SubscribeForRunStateHooks      ← official run-state events
+     ├─ SubscribeForCombatStateHooks   ← official combat-state events
+     ├─ IterateAllRunStateSubscribers
+     └─ AddModelToPool / ConcatModelsFromMods
+   + RunHookSubscriptionDelegate, CombatHookSubscriptionDelegate
+```
+
+**The game hands us event hooks for exactly the state we need** — no polling, no patching
+required for the core data.
+
+Object graph roots (both static singletons — everything else hangs off these):
+
+```
+NGame.Instance : Godot.Control
+  └─ RootSceneContainer, CurrentRunNode, InspectCardScreen, InspectRelicScreen, …
+NRun.Instance
+  └─ CombatRoom, MerchantRoom, EventRoom, RestSiteRoom, TreasureRoom, MapRoom, GlobalUi
+```
+
+Regenerate anytime:
+
+```bash
+cd spike/dumpmeta && dotnet run > ../game-api.txt
+```
+
 ## Next steps
 
 1. Install [STS2MCP](https://github.com/Gennadiyev/STS2MCP), curl `localhost:15526`, diff its

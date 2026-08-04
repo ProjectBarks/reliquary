@@ -1,0 +1,844 @@
+# sts2.dll  types=9410
+
+== class MegaCrit.Sts2.Core.Nodes.NGame
+   : Godot.Control
+   field Public    static devResolution
+   field Private   static <Instance>k__BackingField
+   field Private   <RootSceneContainer>k__BackingField
+   field Private   <HoverTipsContainer>k__BackingField
+   field Private   <Transition>k__BackingField
+   field Private   <TimeoutOverlay>k__BackingField
+   field Private   <AudioManager>k__BackingField
+   field Private   <RemoteCursorContainer>k__BackingField
+   field Private   <InputManager>k__BackingField
+   field Private   <HotkeyManager>k__BackingField
+   field Private   <FeedbackScreen>k__BackingField
+   field Private   <ReactionWheel>k__BackingField
+   field Private   <ReactionContainer>k__BackingField
+   field Private   <CursorManager>k__BackingField
+   field Private   <DebugAudio>k__BackingField
+   field Private   <DebugSeedOverride>k__BackingField
+   field Private   <StartOnMainMenu>k__BackingField
+   field Private   static <IsTrailerMode>k__BackingField
+   field Private   static <IsDebugHidingHoverTips>k__BackingField
+   field Private   static <IsDebugHidingProceedButton>k__BackingField
+   field Private   DebugToggleProceedButton
+   field Private   <InspectRelicScreen>k__BackingField
+   field Private   <InspectCardScreen>k__BackingField
+   field Private   <WorldEnvironment>k__BackingField
+   field Private   <HitStop>k__BackingField
+   field Private   _inspectionContainer
+   field Private   _screenShake
+   field Private   static _mainThreadId
+   field Private   static _window
+   field Private   _logoCancelToken
+   field Private   _joinCallbackHandler
+   field Private   backing_WindowChange
+   field Private   backing_PhobiaModeToggled
+   prop            Instance
+   prop            RootSceneContainer
+   prop            HoverTipsContainer
+   prop            MainMenu
+   prop            CurrentRunNode
+   prop            LogoAnimation
+   prop            Transition
+   prop            TimeoutOverlay
+   prop            AudioManager
+   prop            RemoteCursorContainer
+   prop            InputManager
+   prop            HotkeyManager
+   prop            FeedbackScreen
+   prop            ReactionWheel
+   prop            ReactionContainer
+   prop            CursorManager
+   prop            DebugAudio
+   prop            DebugSeedOverride
+   prop            StartOnMainMenu
+   prop            IsTrailerMode
+   prop            IsDebugHidingHoverTips
+   prop            IsDebugHidingProceedButton
+   prop            InspectRelicScreen
+   prop            InspectCardScreen
+   prop            ScreenshakeTarget
+   prop            WorldEnvironment
+   prop            HitStop
+   method Public    add_DebugToggleProceedButton
+   method Public    remove_DebugToggleProceedButton
+   method Public    _EnterTree
+   method Public    _Ready
+   method Private   GameStartupWrapper
+   method Private   TryErrorInit
+   method Private   GameStartupError
+   method Private   GameStartup
+   method Private   DoCloudSync
+   method Private   OnWindowChange
+   method Public    static IsMainThread
+   method Public    _ExitTree
+   method Public    static IsReleaseGame
+   method Private   InitializeGraphicsPreferences
+   method Public    ApplyDisplaySettings
+   method Public    GetInspectRelicScreen
+   method Public    GetInspectCardScreen
+   method Public    static ApplySyncSetting
+   method Public    static Reset
+   method Public    _Notification
+   method Public    Quit
+   method Private   LaunchMainMenu
+   method Private   LoadDeferredStartupAssetsAsync
+   method Public    GoToTimelineAfterRun
+   method Public    ReturnToMainMenuAfterRun
+   method Public    ReturnToMainMenuWithInternalError
+   method Public    GoToTimeline
+   method Public    ReturnToMainMenu
+   method Public    Relocalize
+   method Public    ReloadMainMenu
+   method Private   LoadMainMenu
+   method Public    StartNewSingleplayerRun
+   method Public    StartNewMultiplayerRun
+   method Public    LoadRun
+   method Private   StartRun
+   method Public    _Input
+   method Private   ToggleFullscreen
+   method Private   DebugModifyTimescale
+   method Public    ActivateWorldEnvironment
+   method Public    DeactivateWorldEnvironment
+   method Public    SetScreenShakeTarget
+   method Public    ClearScreenShakeTarget
+   method Public    ScreenShake
+   method Public    ScreenRumble
+   method Public    ScreenShakeTrauma
+   method Public    DoHitStop
+   method Public    static ToggleTrailerMode
+   method Public    SetScreenshakeMultiplier
+   method Private   InitPools
+   method Private   OnNewModDetected
+   method Public    CheckShowSaveFileError
+   method Private   CheckShowLocalizationOverrideErrors
+   method Private   InitializePlatform
+   method Private   OnSteamNoLongerRunning
+   method Public    static LogResourceStats
+   method Assembly  static FormatBytes
+   method Public    static IsGameFocusedWindow
+   method Public    GetOrCreateFeedbackScreen
+   method Assembly  static GetGodotMethodList
+   method Family    InvokeGodotClassMethod
+   method Assembly  static InvokeGodotClassStaticMethod
+   method Family    HasGodotClassMethod
+   method Family    SetGodotClassPropertyValue
+   method Family    GetGodotClassPropertyValue
+   method Assembly  static GetGodotPropertyList
+   method Family    SaveGodotObjectData
+   method Family    RestoreGodotObjectData
+   method Assembly  static GetGodotSignalList
+   method Public    add_WindowChange
+   method Public    remove_WindowChange
+   method Family    EmitSignalWindowChange
+   method Public    add_PhobiaModeToggled
+   method Public    remove_PhobiaModeToggled
+   method Family    EmitSignalPhobiaModeToggled
+   method Family    RaiseGodotClassSignalCallbacks
+   method Family    HasGodotClassSignal
+   method Public    .ctor
+   method Private   static .cctor
+
+== class MegaCrit.Sts2.Core.Nodes.NRun
+   : Godot.Control
+   field Private   static _scenePath
+   field Private   _cardScene
+   field Private   _state
+   field Private   _roomContainer
+   field Private   _testButton
+   field Private   _seedLabel
+   field Private   <GlobalUi>k__BackingField
+   field Private   <RunMusicController>k__BackingField
+   field Private   <ScreenStateTracker>k__BackingField
+   prop            AssetPaths
+   prop            Instance
+   prop            CombatRoom
+   prop            TreasureRoom
+   prop            EventRoom
+   prop            RestSiteRoom
+   prop            MapRoom
+   prop            MerchantRoom
+   prop            GlobalUi
+   prop            RunMusicController
+   prop            ScreenStateTracker
+   method Public    static Create
+   method Public    _Ready
+   method Public    _Process
+   method Public    _Notification
+   method Public    SetCurrentRoom
+   method Public    ShowGameOverScreen
+   method Assembly  static GetGodotMethodList
+   method Family    InvokeGodotClassMethod
+   method Family    HasGodotClassMethod
+   method Family    SetGodotClassPropertyValue
+   method Family    GetGodotClassPropertyValue
+   method Assembly  static GetGodotPropertyList
+   method Family    SaveGodotObjectData
+   method Family    RestoreGodotObjectData
+   method Public    .ctor
+
+== class MegaCrit.Sts2.Core.Nodes.Screens.CardSelection.NCardRewardSelectionScreen
+   : Godot.Control
+   field Private   static _noSelectionTimeMsec
+   field Private   _ui
+   field Private   _banner
+   field Private   _cardRow
+   field Private   _options
+   field Private   _extraOptions
+   field Private   _rewardAlternativesContainer
+   field Private   _inspectPrompt
+   field Private   _completionSource
+   field Private   _cardTween
+   field Private   _buttonTween
+   field Private   static _cardXOffset
+   field Private   static _bannerAnimPosOffset
+   field Private   _cts
+   field Private   _lastFocusedControl
+   prop            ScenePath
+   prop            AssetPaths
+   prop            ScreenType
+   prop            UseSharedBackstop
+   prop            DefaultFocusedControl
+   method Public    static ShowScreen
+   method Public    _EnterTree
+   method Public    _Ready
+   method Public    RefreshOptions
+   method Public    _ExitTree
+   method Public    GetCardHolder
+   method Private   OnAlternateRewardSelected
+   method Private   SelectCard
+   method Private   InspectCard
+   method Public    OptionSelected
+   method Public    AfterOverlayOpened
+   method Private   DisableCardsForShortTimeAfterOpening
+   method Private   PowerCardFtueCheck
+   method Public    AfterOverlayClosed
+   method Public    AfterOverlayShown
+   method Public    AfterOverlayHidden
+   method Private   UpdateControllerIcons
+   method Assembly  static GetGodotMethodList
+   method Family    InvokeGodotClassMethod
+   method Family    HasGodotClassMethod
+   method Family    SetGodotClassPropertyValue
+   method Family    GetGodotClassPropertyValue
+   method Assembly  static GetGodotPropertyList
+   method Family    SaveGodotObjectData
+   method Family    RestoreGodotObjectData
+   method Public    .ctor
+   method Private   static .cctor
+
+== class MegaCrit.Sts2.Core.Nodes.Rooms.NCombatRoom
+   : Godot.Control
+   field Private   static _centerSafeZone
+   field Private   static _defaultPadding
+   field Private   static _minimumAutoPadding
+   field Private   static _minAlternatingYPos
+   field Private   static _maxAlternatingYPos
+   field Private   static _alternateYPosBeginPadding
+   field Private   static _yPos
+   field Private   static _waitingLoc
+   field Private   ProceedButtonPressed
+   field Private   _creatureNodes
+   field Private   _removingCreatureNodes
+   field Private   <LastTargetedCreature>k__BackingField
+   field Private   <Ui>k__BackingField
+   field Private   _allyContainer
+   field Private   _enemyContainer
+   field Private   static _scenePath
+   field Private   <SceneContainer>k__BackingField
+   field Private   <BgContainer>k__BackingField
+   field Private   <Background>k__BackingField
+   field Private   _radialBlur
+   field Private   _proceedButton
+   field Private   _waitingForOtherPlayersOverlay
+   field Private   <BackCombatVfxContainer>k__BackingField
+   field Private   <CombatVfxContainer>k__BackingField
+   field Private   <CreatedMsec>k__BackingField
+   field Private   <Mode>k__BackingField
+   field Private   _visuals
+   field Private   <EncounterSlots>k__BackingField
+   field Private   _window
+   prop            Instance
+   prop            LastTargetedCreature
+   prop            Ui
+   prop            CreatureNodes
+   prop            RemovingCreatureNodes
+   prop            SceneContainer
+   prop            BgContainer
+   prop            Background
+   prop            ProceedButton
+   prop            BackCombatVfxContainer
+   prop            CombatVfxContainer
+   prop            CreatedMsec
+   prop            Mode
+   prop            EncounterSlots
+   prop            AssetPaths
+   prop            DefaultFocusedControl
+   prop            FocusedControlFromTopBar
+   method Public    add_ProceedButtonPressed
+   method Public    remove_ProceedButtonPressed
+   method Public    static Create
+   method Public    _Ready
+   method Public    static GenerateBackgroundRngForCurrentPoint
+   method Public    _EnterTree
+   method Public    _ExitTree
+   method Private   SubscribeToCombatEvents
+   method Private   OnCombatSetUp
+   method Public    SetUpBackground
+   method Private   AdjustCreatureScaleForAspectRatio
+   method Private   CreateAllyNodes
+   method Private   CreateEnemyNodes
+   method Private   PositionCreaturesWithSlots
+   method Private   PositionEnemies
+   method Public    static PositionPlayersAndPets
+   method Private   static PositionLocalPlayerOsty
+   method Public    GetCreatureNode
+   method Public    RemoveCreatureNode
+   method Private   RemoveCreatureWhenGone
+   method Public    AddCreature
+   method Public    SetCreatureIsInteractable
+   method Private   UpdateCreatureNavigation
+   method Private   OnActiveScreenUpdated
+   method Private   RestrictControllerNavigation
+   method Public    RestrictControllerNavigation
+   method Public    EnableControllerNavigation
+   method Private   RandomizeEnemyScalesAndHues
+   method Public    RadialBlur
+   method Public    ShakeOstyIfDead
+   method Public    PlaySplashVfx
+   method Public    SetWaitingForOtherPlayersOverlayVisible
+   method Private   OnProceedButtonPressed
+   method Public    TransitionToActiveCombat
+   method Assembly  static GetGodotMethodList
+   method Family    InvokeGodotClassMethod
+   method Family    HasGodotClassMethod
+   method Family    SetGodotClassPropertyValue
+   method Family    GetGodotClassPropertyValue
+   method Assembly  static GetGodotPropertyList
+   method Family    SaveGodotObjectData
+   method Family    RestoreGodotObjectData
+   method Public    .ctor
+   method Private   static .cctor
+
+== class MegaCrit.Sts2.Core.Nodes.Rooms.NMerchantRoom
+   : Godot.Control
+   field Private   static _animVariance
+   field Private   static _scenePath
+   field Private   _players
+   field Private   _dialogue
+   field Private   _proceedButton
+   field Private   _characterContainer
+   field Private   <Room>k__BackingField
+   field Private   <Inventory>k__BackingField
+   field Private   <MerchantButton>k__BackingField
+   field Private   _playerVisuals
+   prop            AssetPaths
+   prop            Instance
+   prop            ProceedButton
+   prop            Room
+   prop            Inventory
+   prop            MerchantButton
+   prop            PlayerVisuals
+   prop            DefaultFocusedControl
+   method Public    static Create
+   method Public    _Ready
+   method Public    _EnterTree
+   method Public    _ExitTree
+   method Public    FoulPotionThrown
+   method Private   ToggleMerchantTrack
+   method Private   AfterRoomIsLoaded
+   method Private   HideScreen
+   method Private   MerchantFtueCheck
+   method Private   OnMerchantOpened
+   method Public    OpenInventory
+   method Private   OnActiveScreenUpdated
+   method Assembly  static GetGodotMethodList
+   method Family    InvokeGodotClassMethod
+   method Family    HasGodotClassMethod
+   method Family    SetGodotClassPropertyValue
+   method Family    GetGodotClassPropertyValue
+   method Assembly  static GetGodotPropertyList
+   method Family    SaveGodotObjectData
+   method Family    RestoreGodotObjectData
+   method Public    .ctor
+   method Private   static .cctor
+   method Private   <OpenInventory>b__37_0
+
+== class MegaCrit.Sts2.Core.Nodes.Combat.NCombatPilesContainer
+   : Godot.Control
+   field Public    static scenePath
+   field Private   _drawPile
+   field Private   _discardPile
+   field Private   _exhaustPile
+   prop            DrawPile
+   prop            DiscardPile
+   prop            ExhaustPile
+   method Public    _Ready
+   method Public    Initialize
+   method Public    AnimIn
+   method Public    AnimOut
+   method Public    Enable
+   method Public    Disable
+   method Assembly  static GetGodotMethodList
+   method Family    InvokeGodotClassMethod
+   method Family    HasGodotClassMethod
+   method Family    SetGodotClassPropertyValue
+   method Family    GetGodotClassPropertyValue
+   method Assembly  static GetGodotPropertyList
+   method Family    SaveGodotObjectData
+   method Family    RestoreGodotObjectData
+   method Public    .ctor
+   method Private   static .cctor
+
+== class MegaCrit.Sts2.Core.Nodes.Cards.Holders.NGridCardHolder
+   field Private   <CardLibraryStats>k__BackingField
+   field Private   _baseCard
+   field Private   _upgradedCard
+   field Private   _isPreviewingUpgrade
+   prop            ScenePath
+   prop            AssetPaths
+   prop            CardLibraryStats
+   prop            CardModel
+   prop            IsShowingUpgradedCard
+   method Public    static InitPool
+   method Public    static Create
+   method Private   UpdateCardModel
+   method Public    OnInstantiated
+   method Public    _Ready
+   method Public    EnsureCardLibraryStatsExists
+   method Family    OnCardReassigned
+   method Family    SetCard
+   method Private   UpdateName
+   method Family    OnFocus
+   method Public    SetIsPreviewingUpgrade
+   method Public    _ExitTree
+   method Public    OnReturnedFromPool
+   method Public    OnFreedToPool
+   method Assembly  static GetGodotMethodList
+   method Family    InvokeGodotClassMethod
+   method Assembly  static InvokeGodotClassStaticMethod
+   method Family    HasGodotClassMethod
+   method Family    SetGodotClassPropertyValue
+   method Family    GetGodotClassPropertyValue
+   method Assembly  static GetGodotPropertyList
+   method Family    SaveGodotObjectData
+   method Family    RestoreGodotObjectData
+   method Public    .ctor
+
+== class MegaCrit.Sts2.Core.Models.CardModel
+   field Private   AfflictionChanged
+   field Private   EnchantmentChanged
+   field Private   EnergyCostChanged
+   field Private   KeywordsChanged
+   field Private   ReplayCountChanged
+   field Private   Played
+   field Private   Drawn
+   field Private   StarCostChanged
+   field Private   Upgraded
+   field Private   Forged
+   field Private   _titleLocString
+   field Private   <Type>k__BackingField
+   field Private   <Rarity>k__BackingField
+   field Private   _pool
+   field Private   _owner
+   field Private   <CanonicalEnergyCost>k__BackingField
+   field Private   _energyCost
+   field Private   _baseReplayCount
+   field Private   _starCostSet
+   field Private   _baseStarCost
+   field Private   _wasStarCostJustUpgraded
+   field Private   _temporaryStarCosts
+   field Private   _lastStarsSpent
+   field Private   <TargetType>k__BackingField
+   field Private   _keywords
+   field Private   _tags
+   field Private   _dynamicVars
+   field Private   _exhaustOnNextPlay
+   field Private   _hasSingleTurnRetain
+   field Private   _hasSingleTurnSly
+   field Private   <Enchantment>k__BackingField
+   field Private   <Affliction>k__BackingField
+   field Private   _cloneOf
+   field Private   _isDupe
+   field Private   _currentUpgradeLevel
+   field Private   _upgradePreviewType
+   field Private   <ShouldShowInCardLibrary>k__BackingField
+   field Private   _isEnchantmentPreview
+   field Private   _floorAddedToDeck
+   field Private   _currentTarget
+   field Private   _currentPlayIndex
+   field Private   _deckVersion
+   field Private   <HasBeenRemovedFromState>k__BackingField
+   field Private   _canonicalInstance
+   prop            TitleLocString
+   prop            Title
+   prop            Description
+   prop            SelectionScreenPrompt
+   prop            PortraitPath
+   prop            BetaPortraitPath
+   prop            MissingPortraitPath
+   prop            PortraitPngPath
+   prop            BetaPortraitPngPath
+   prop            HasPortrait
+   prop            HasBetaPortrait
+   prop            Portrait
+   prop            FramePath
+   prop            Frame
+   prop            PortraitBorderPath
+   prop            AncientBorderPath
+   prop            AncientTextBgPath
+   prop            AncientTextBg
+   prop            AncientBorder
+   prop            PortraitBorder
+   prop            EnergyIconPath
+   prop            EnergyIcon
+   prop            EnergyHoverTip
+   prop            BannerTexturePath
+   prop            BannerTexture
+   prop            BannerMaterialPath
+   prop            BannerMaterial
+   prop            FrameMaterial
+   prop            Type
+   prop            Rarity
+   prop            MultiplayerConstraint
+   prop            Pool
+   prop            VisualCardPool
+   prop            Owner
+   prop            Pile
+   prop            CanonicalEnergyCost
+   prop            HasEnergyCostX
+   prop            EnergyCost
+   prop            BaseReplayCount
+   prop            CanonicalStarCost
+   prop            BaseStarCost
+   prop            WasStarCostJustUpgraded
+   prop            TemporaryStarCost
+   prop            CurrentStarCost
+   prop            HasStarCostX
+   prop            LastStarsSpent
+   prop            TargetType
+   prop            CanonicalKeywords
+   prop            LocalKeywords
+   prop            Keywords
+   prop            Tags
+   prop            CanonicalTags
+   prop            DynamicVars
+   prop            CanonicalVars
+   prop            ExhaustOnNextPlay
+   prop            HasSingleTurnRetain
+   prop            ShouldRetainThisTurn
+   prop            HasSingleTurnSly
+   prop            IsSlyThisTurn
+   prop            Enchantment
+   prop            Affliction
+   prop            CanBeGeneratedInCombat
+   prop            CanBeGeneratedByModifiers
+   prop            OrbEvokeType
+   prop            GainsBlock
+   prop            IsBasicStrikeOrDefend
+   prop            CloneOf
+   prop            IsClone
+   prop            DupeOf
+   prop            IsDupe
+   prop            IsRemovable
+   prop            IsTransformable
+   prop            IsInCombat
+   prop            CurrentUpgradeLevel
+   prop            MaxUpgradeLevel
+   prop            IsUpgraded
+   prop            IsUpgradable
+   prop            UpgradePreviewType
+   prop            IsPlayable
+   prop            ShouldShowInCardLibrary
+   prop            ShouldGlowGold
+   prop            ShouldGlowRed
+   prop            ShouldGlowGoldInternal
+   prop            ShouldGlowRedInternal
+   prop            IsEnchantmentPreview
+   prop            HasBuiltInOverlay
+   prop            OverlayPath
+   prop            FloorAddedToDeck
+   prop            CurrentTarget
+   prop            CurrentPlayIndex
+   prop            DeckVersion
+   prop            HasBeenRemovedFromState
+   prop            ExtraHoverTips
+   prop            HoverTips
+   prop            CanonicalInstance
+   prop            RunState
+   prop            CombatState
+   prop            CardScope
+   prop            HasTurnEndInHandEffect
+   prop            ShouldReceiveCombatHooks
+   prop            AllPortraitPaths
+   prop            RunAssetPaths
+   prop            ExtraRunAssetPaths
+   method Family    .ctor
+   method Public    add_AfflictionChanged
+   method Public    remove_AfflictionChanged
+   method Public    add_EnchantmentChanged
+   method Public    remove_EnchantmentChanged
+   method Public    add_EnergyCostChanged
+   method Public    remove_EnergyCostChanged
+   method Public    add_KeywordsChanged
+   method Public    remove_KeywordsChanged
+   method Public    add_ReplayCountChanged
+   method Public    remove_ReplayCountChanged
+   method Public    add_Played
+   method Public    remove_Played
+   method Public    add_Drawn
+   method Public    remove_Drawn
+   method Public    add_StarCostChanged
+   method Public    remove_StarCostChanged
+   method Public    add_Upgraded
+   method Public    remove_Upgraded
+   method Public    add_Forged
+   method Public    remove_Forged
+   method Family    MockSetEnergyCost
+   method Public    InvokeEnergyCostChanged
+   method Public    ResolveEnergyXValue
+   method Public    GetEnchantedReplayCount
+   method Public    ResolveStarXValue
+   method Public    GetKeywordsWithSources
+   method Public    CreateOverlay
+   method Public    ToMutable
+   method Family    DeepCloneFields
+   method Family    AfterCloned
+   method Public    AfterCreated
+   method Family    AfterDeserialized
+   method Family    NeverEverCallThisOutsideOfTests_ClearOwner
+   method Public    SetToFreeThisTurn
+   method Public    SetToFreeThisCombat
+   method Public    SetStarCostUntilPlayed
+   method Public    SetStarCostThisTurn
+   method Public    SetStarCostThisCombat
+   method Public    GetStarCostThisCombat
+   method Private   AddTemporaryStarCost
+   method Family    UpgradeStarCostBy
+   method Public    AddKeyword
+   method Public    RemoveKeyword
+   method Public    GiveSingleTurnRetain
+   method Public    GiveSingleTurnSly
+   method Public    GetDescriptionForPile
+   method Public    GetDescriptionForUpgradePreview
+   method Private   GetDescriptionForPile
+   method Public    UpdateDynamicVarPreview
+   method Public    EnchantInternal
+   method Public    AfflictInternal
+   method Public    ClearEnchantmentInternal
+   method Public    ClearAfflictionInternal
+   method Family    AddExtraArgsToDescription
+   method Public    GetStarCostWithModifiers
+   method Public    CostsEnergyOrStars
+   method Public    RemoveFromCurrentPile
+   method Public    RemoveFromState
+   method Public    EndOfTurnCleanup
+   method Public    AfterTransformedFrom
+   method Public    AfterTransformedTo
+   method Public    AfterForged
+   method Family    OnPlay
+   method Public    OnEnqueuePlayVfx
+   method Family    OnUpgrade
+   method Family    OnTurnEndInHand
+   method Public    OnTurnEndInHandWrapper
+   method Public    CanPlayTargeting
+   method Public    CanPlay
+   method Public    CanPlay
+   method Public    IsValidTarget
+   method Public    TryManualPlay
+   method Private   EnqueueManualPlay
+   method Public    SpendResources
+   method Private   SpendEnergy
+   method Private   SpendStars
+   method Public    OnPlayWrapper
+   method Family    GeneratePlayCount
+   method Private   PlayPowerCardFlyVfx
+   method Family    GetResultPileTypeForCardPlay
+   method Public    MoveToResultPileWithoutPlaying
+   method Public    UpgradeInternal
+   method Public    FinalizeUpgradeInternal
+   method Public    DowngradeInternal
+   method Family    AfterDowngraded
+   method Public    InvokeDrawn
+   method Public    CreateClone
+   method Public    CreateDupe
+   method Public    ToSerializable
+   method Public    static FromSerializable
+   method Public    CompareTo
+   method Private   <get_Pool>b__99_0
+   method Private   <get_Pile>b__107_0
+   method Private   <UpgradeStarCostBy>b__301_0
+
+== interface MegaCrit.Sts2.Core.Modding.IModManagerFileIo
+   method Public    GetFilesAt
+   method Public    GetDirectoriesAt
+   method Public    FileExists
+   method Public    DirectoryExists
+   method Public    OpenStream
+
+== class MegaCrit.Sts2.Core.Modding.Mod
+   : System.Object
+   field Public    modSource
+   field Public    path
+   field Public    state
+   field Public    manifest
+   field Public    version
+   field Public    assembly
+   field Public    errors
+   method Public    .ctor
+
+== class MegaCrit.Sts2.Core.Modding.ModDependency
+   : System.Object
+   field Public    id
+   field Public    minVersion
+   method Public    .ctor
+
+== class MegaCrit.Sts2.Core.Modding.RunHookSubscriptionDelegate
+   : System.MulticastDelegate
+   method Public    .ctor
+   method Public    Invoke
+   method Public    BeginInvoke
+   method Public    EndInvoke
+
+== class MegaCrit.Sts2.Core.Modding.CombatHookSubscriptionDelegate
+   : System.MulticastDelegate
+   method Public    .ctor
+   method Public    Invoke
+   method Public    BeginInvoke
+   method Public    EndInvoke
+
+== class MegaCrit.Sts2.Core.Modding.ModHelper
+   : System.Object
+   field Private   static _moddedContentForPools
+   field Private   static _runHookSubscribers
+   field Private   static _combatHookSubscribers
+   method Public    static AddModelToPool
+   method Public    static AddModelToPool
+   method Public    static ConcatModelsFromMods
+   method Public    static SubscribeForRunStateHooks
+   method Public    static SubscribeForCombatStateHooks
+   method Public    static IterateAllRunStateSubscribers
+   method Public    static IterateAllCombatStateSubscribers
+   method Private   static .cctor
+
+== class MegaCrit.Sts2.Core.Modding.ModInitializerAttribute
+   : System.Attribute
+   field Public    initializerMethod
+   method Public    .ctor
+
+== class MegaCrit.Sts2.Core.Modding.ModLoadState
+   : System.Enum
+   field Public    value__
+   field Public    static None
+   field Public    static Loaded
+   field Public    static Failed
+   field Public    static Disabled
+   field Public    static DisabledDuplicate
+   field Public    static AddedAtRuntime
+
+== class MegaCrit.Sts2.Core.Modding.ModManager
+   : System.Object
+   field Private   static _allowInitForTests
+   field Private   static _mods
+   field Private   static <State>k__BackingField
+   field Private   static _steamItemInstalledCallback
+   field Private   static _settings
+   field Private   static _fileIo
+   field Private   static _gameVersion
+   field Private   static _circularDependencies
+   field Private   static OnModDetected
+   field Private   static OnMetricsUpload
+   field Private   static _hasHarmonyPatches
+   prop            State
+   prop            Mods
+   prop            PlayerAgreedToModLoading
+   method Public    static add_OnModDetected
+   method Public    static remove_OnModDetected
+   method Public    static add_OnMetricsUpload
+   method Public    static remove_OnMetricsUpload
+   method Public    static Initialize
+   method Public    static ResetForTests
+   method Private   static SortModList
+   method Private   static RemoveDisabledMods
+   method Private   static ReadModsInDirRecursive
+   method Private   static ReadModManifest
+   method Public    static EvaluateBranchSupport
+   method Private   static ReadSteamMods
+   method Private   static TryReadModFromSteam
+   method Private   static CheckSteamBranchSupport
+   method Private   static OnSteamWorkshopItemInstalled
+   method Private   static OnSteamWorkshopItemInstalledAsync
+   method Private   static TryLoadMod
+   method Private   static CallModInitializer
+   method Public    static GetModdedLocTables
+   method Public    static GetGameplayRelevantModNameList
+   method Public    static GetNonGameplayRelevantModNameList
+   method Private   static HandleAssemblyResolveFailure
+   method Public    static CallMetricsHooks
+   method Public    static IsRunningModded
+   method Public    static HasHarmonyPatches
+   method Public    static GetLoadedMods
+   method Public    static Dispose
+   method Private   static .cctor
+
+== class MegaCrit.Sts2.Core.Modding.ModManagerFileIo
+   : System.Object
+   method Public    GetFilesAt
+   method Public    GetDirectoriesAt
+   method Public    FileExists
+   method Public    DirectoryExists
+   method Public    OpenStream
+   method Public    .ctor
+
+== class MegaCrit.Sts2.Core.Modding.ModManagerState
+   : System.Enum
+   field Public    value__
+   field Public    static None
+   field Public    static Initialized
+   field Public    static Skipped
+
+== class MegaCrit.Sts2.Core.Modding.ModManifest
+   : System.Object
+   field Public    id
+   field Public    name
+   field Public    author
+   field Public    description
+   field Public    version
+   field Public    hasPck
+   field Public    hasDll
+   field Public    dependencies
+   field Public    affectsGameplay
+   field Public    minGameVersion
+   method Public    static ReadFromStream
+   method Public    .ctor
+
+== class MegaCrit.Sts2.Core.Modding.ModSettings
+   : System.Object
+   field Private   <PlayerAgreedToModLoading>k__BackingField
+   field Private   <ModList>k__BackingField
+   prop            PlayerAgreedToModLoading
+   prop            ModList
+   method Public    IsModDisabled
+   method Public    IsModDisabled
+   method Public    .ctor
+
+== class MegaCrit.Sts2.Core.Modding.ModSource
+   : System.Enum
+   field Public    value__
+   field Public    static None
+   field Public    static ModsDirectory
+   field Public    static SteamWorkshop
+
+== class MegaCrit.Sts2.Core.Modding.SettingsSaveMod
+   : System.Object
+   field Private   <Id>k__BackingField
+   field Private   <Source>k__BackingField
+   field Private   <IsEnabled>k__BackingField
+   prop            Id
+   prop            Source
+   prop            IsEnabled
+   method Public    .ctor
+   method Public    .ctor
+
