@@ -664,3 +664,40 @@ Recovered Scry interface slots (called via `[rbx+N]`): `+0x40` (8×), `+0x78` (1
 stream from target memory. If so, our reader can do the same — and we already have a working
 metadata parser (`spike/dumpmeta`) plus `spike/memread` to read target memory, so the two
 halves exist and just need joining.
+
+## ✅ .NET metadata readable from TARGET MEMORY (`spike/memread/meta.mjs`)
+
+Walks the mapped image live: `PE → OptionalHeader → DataDirectory[14] (CLI header) →
+Metadata root`, and parses the stream table:
+
+```
+sts2.dll @0x23982200000
+CLI header RVA = 0x2000     Metadata RVA = 0x432b64  size=0x4bcdf4
+signature: "BSJB"  OK       runtime version: "v4.0.30319"
+streams: #~ (0x2e424c) · #Strings (0x8ce28) · #US · #GUID · #Blob
+```
+
+This corroborates the theory from the binary analysis (no FieldDesc bitfields + heavy string
+handling + `base+0x04`/`base+0x0a` metadata-header reads): **name resolution goes through
+metadata, not through CoreCLR's internal type structures.**
+
+We now have both halves of that:
+- `spike/dumpmeta` — a working .NET metadata parser (9,410 types, token→name)
+- `spike/memread/meta.mjs` — the same metadata located and parsed **from target memory**
+
+### What metadata alone still does NOT give us
+
+Instance **field offsets**. For auto-layout classes the CLR computes them at type-load, so
+they exist only in `MethodTable`/`FieldDesc` at runtime. So the chain is still:
+
+```
+name --(metadata #~/#Strings)--> TypeDef token --(???)--> MethodTable --> FieldDesc --> offset
+```
+
+The unresolved link remains **token → MethodTable**. Options, in order of promise:
+1. `Module`'s `TypeDefToMethodTableMap` (a `LookupMap` — pointer + count) reachable from the
+   Module object already located at `MethodTable+0x18`.
+2. Locate the token inside `MethodTableAuxiliaryData` (`MethodTable+0x20`), which .NET 9 uses.
+3. Data-driven shortcut: find card-id strings in the heap, walk back to the `CardModel`
+   objects that reference them, and infer pile membership — enough for a first
+   `sts2.pileState` snapshot without solving the full type system.
