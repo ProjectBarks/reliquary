@@ -440,3 +440,37 @@ break it. That was the single biggest risk in the whole plan.
 3. Static field read → `NGame.Instance` / `NRun.Instance`, then walk instance fields.
 4. `System.String` decode (length + UTF-16) for card ids; Godot `Control` pos/size for anchors.
 5. Feed snapshots into the existing shadow comparer → drive diffs to zero.
+
+### MethodTable discovery (partial)
+
+`spike/memread/mtables.mjs` locates a type table from the module anchor by validating
+candidates structurally (sane `m_BaseSize`, plausible parent/module pointers):
+
+```
+anchor struct 0x239eee8e060 (+0x30 = sts2 base)
+TYPE TABLE FOUND  array 0x239eee8ea60
+  MethodTable-shaped entries in first 32: 13
+```
+
+⚠️ **Heuristic is noisy** — only 1/32 entries agreed on a common loader Module, so the
+candidate array is probably a mix of real MethodTables and false positives. Before building
+on it, the MethodTable field offsets should be pinned from CoreCLR source for .NET 9
+(`vm/methodtable.h`) rather than inferred, and validated by resolving a *known* type name
+end-to-end (e.g. `NGame`) via the EEClass → name path.
+
+### Honest status
+
+| Layer | State |
+| --- | --- |
+| Win32 attach / read / module enum | ✅ working, validated against PE headers |
+| `g_dacTable` → DacGlobals | ✅ working |
+| DacGlobals → sts2 Module anchor | ✅ working, version-agnostic |
+| Module → MethodTable array | 🟡 candidate found, heuristic unverified |
+| MethodTable → EEClass → FieldDesc → offsets | ❌ not started |
+| Name→offset map for the 78 fields | ❌ not started |
+| Object reads / string decode / Godot nodes | ❌ not started |
+| Snapshots fed to shadow comparer | ❌ not started — **zero diffs collected** |
+
+The bootstrap (the part everyone says is hardest) is done. What remains is the CoreCLR type
+system walk, which is well-documented in MIT-licensed runtime source but is genuinely
+multi-day work — it is NOT a session-scale task.
