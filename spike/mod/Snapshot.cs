@@ -203,34 +203,48 @@ public static class Snapshot
 
     // ── sts2.nGameState ──────────────────────────────────────────────────────
 
-    /// <summary>Room class name → the reader's lowercase room-type vocabulary.</summary>
-    private static string? RoomType(AbstractRoom? room) => room?.GetType().Name switch
+    /// <summary>
+    /// Room class → the reader's lowercase vocabulary. Matches readNGameState()
+    /// exactly, INCLUDING its 'other' catch-all — anything that isn't combat /
+    /// merchant / event is reported as 'other', not a derived name.
+    /// </summary>
+    private static string? RoomType(AbstractRoom? room)
     {
-        null => null,
-        "CombatRoom" => "combat",
-        "MerchantRoom" => "merchant",
-        "EventRoom" => "event",
-        "RestSiteRoom" or "RestRoom" => "rest",
-        "TreasureRoom" => "treasure",
-        var n => n.Replace("Room", "").ToLowerInvariant()
-    };
+        if (room is null) return null;
+        var n = room.GetType().Name;
+        if (n.EndsWith("CombatRoom")) return "combat";
+        if (n.EndsWith("MerchantRoom")) return "merchant";
+        if (n.EndsWith("EventRoom")) return "event";
+        return "other";
+    }
 
+    /// <summary>
+    /// Mirrors readNGameState(). The screen flags come from the same places the
+    /// reader read them — GlobalUi (map / submenu stack / capstone / overlays) and
+    /// NGame's inspect screens — via the null-safe helper so a rename degrades to
+    /// `false` instead of throwing inside the game's frame loop.
+    /// </summary>
     public static Dictionary<string, object?> NGameState(RunState? run)
     {
         var room = run?.CurrentRoom;
         var player = run?.Players is { Count: > 0 } ps ? ps[0] : null;
+
+        // NRun.Instance.GlobalUi — the reader's source for most screen flags.
+        object? globalUi = GetPath(RunNode(), "GlobalUi");
+        object? nGame = NGameNode();
+
         return new()
         {
             ["room"] = RoomType(room) is { } rt ? new Dictionary<string, object?> { ["type"] = rt } : null,
-            ["isPeekButtonVisible"] = false,
-            ["isPeeking"] = false,
-            ["capstoneScreen"] = false,
-            ["isSubMenuOpen"] = false,
-            ["isMapOpen"] = false,
-            ["isTraveling"] = false,
-            ["isPreviewContainerOpen"] = false,
-            ["isInspectCardScreenOpen"] = false,
-            ["isInspectRelicScreenOpen"] = false,
+            ["isPeekButtonVisible"] = Flag(GetPath(globalUi, "PeekButton", "Visible")),
+            ["isPeeking"] = Flag(GetPath(globalUi, "PeekButton", "IsPeeking")),
+            ["capstoneScreen"] = GetPath(globalUi, "CapstoneContainer", "CurrentCapstoneScreen") is not null,
+            ["isSubMenuOpen"] = SubMenuOpen(globalUi),
+            ["isMapOpen"] = Flag(GetPath(globalUi, "MapScreen", "IsOpen")),
+            ["isTraveling"] = Flag(GetPath(globalUi, "MapScreen", "IsTraveling")),
+            ["isPreviewContainerOpen"] = Flag(GetPath(globalUi, "PreviewContainer", "Visible")),
+            ["isInspectCardScreenOpen"] = Flag(GetPath(nGame, "InspectCardScreen", "Visible")),
+            ["isInspectRelicScreenOpen"] = Flag(GetPath(nGame, "InspectRelicScreen", "Visible")),
             ["isGameOver"] = run?.IsGameOver ?? false,
             ["currentActIndex"] = run?.CurrentActIndex ?? 0,
             ["localPlayer"] = CharacterId(player) is { } cid
@@ -238,6 +252,26 @@ public static class Snapshot
                 : null
         };
     }
+
+    private static bool Flag(object? v) => v as bool? ?? false;
+
+    /// <summary>Reader equivalent: globalUi.SubmenuStack.Stack._submenus.count > 0.</summary>
+    private static bool SubMenuOpen(object? globalUi)
+    {
+        var submenus = GetPath(globalUi, "SubmenuStack", "Stack", "_submenus");
+        if (Get(submenus, "Count") is int c) return c > 0;
+        if (submenus is System.Collections.ICollection col) return col.Count > 0;
+        return false;
+    }
+
+    // Static singletons, resolved reflectively so this file needs no Godot import.
+    private static object? RunNode() =>
+        Type.GetType("MegaCrit.Sts2.Core.Nodes.NRun, sts2")
+            ?.GetProperty("Instance")?.GetValue(null);
+
+    private static object? NGameNode() =>
+        Type.GetType("MegaCrit.Sts2.Core.Nodes.NGame, sts2")
+            ?.GetProperty("Instance")?.GetValue(null);
 
     private static string? CharacterId(Player? p) =>
         EntryOf(GetPath(p, "Character", "Id")) ?? EntryOf(GetPath(p, "CharacterModel", "Id"));
