@@ -389,3 +389,51 @@ SPECTRA_DEBUG=1 SPECTRA_SHADOW=1 SPECTRA_BRIDGE=1 npm run dev   # polls 127.0.0.
 4. Flip the default source, keep scry behind a flag, then delete the native addon + `vendor/`.
 
 Blocker for step 2: no .NET SDK on this machine (`winget install Microsoft.DotNet.SDK.9`).
+
+## ✅ CoreCLR bootstrap SOLVED — `spike/memread/`
+
+The hard part is done. Chain, all verified live against the running game:
+
+```
+coreclr.dll export table  →  g_dacTable  (the ONLY CoreCLR symbol the
+                                          proprietary binary references)
+        ↓
+DacGlobals[]  — ~30 live heap roots (SystemDomain / ThreadStore / module lists)
+        ↓
+pointer walk  →  sts2.dll's PEAssembly/Module  (found in 108 steps, depth 1)
+        ↓
+MethodTables  →  FieldDescs  →  field offsets  →  object reads
+```
+
+Verified output:
+
+```
+coreclr.dll base = 0x7fff64400000
+g_dacTable       = 0x7fff647dde50
+DacGlobals[0]    = 0x239f0c08170   HEAP OBJECT
+...
+FOUND sts2.dll base stored at struct 0x239eee8e060 + 0x30  (path dac[10]+0x140)
+```
+
+Why this matters: we locate the module by **searching for its known PE base**, not by
+hard-coding a DacGlobals index — so a CoreCLR layout change between .NET versions doesn't
+break it. That was the single biggest risk in the whole plan.
+
+### Files
+
+| File | Purpose |
+| --- | --- |
+| `reader.mjs` | Win32 primitive — `OpenProcess`/`ReadProcessMemory`/`EnumProcessModulesEx` via **koffi** (no C++ toolchain, no node-gyp) |
+| `pe.mjs` | Remote PE export-table parser (resolves `g_dacTable` by name) |
+| `probe.mjs` | Attach + module enumeration + PE header validation |
+| `dac.mjs` | Locates `g_dacTable`, dumps DacGlobals |
+| `roots.mjs` | Classifies DacGlobals entries → heap roots |
+| `findmod.mjs` | Walks roots → finds sts2's Module by its PE base |
+
+### Remaining to parity
+
+1. Module → MethodTable list; match `MegaCrit.Sts2.Core.Nodes.NGame` by name.
+2. MethodTable → FieldDesc chain → offset per field (all 78 names already verified present).
+3. Static field read → `NGame.Instance` / `NRun.Instance`, then walk instance fields.
+4. `System.String` decode (length + UTF-16) for card ids; Godot `Control` pos/size for anchors.
+5. Feed snapshots into the existing shadow comparer → drive diffs to zero.
