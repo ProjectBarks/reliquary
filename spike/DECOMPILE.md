@@ -504,3 +504,58 @@ A second independent survey confirms the category is nearly empty, and surfaces 
 Net: **nothing exists to fork** for external object-field reads on .NET 8/9. The build is
 Novus's struct definitions + OTel's version-gating pattern + our cDAC probe, on top of the
 koffi reader.
+
+## Does untapped-scry use the cDAC? — **No.** (and a correction)
+
+Direct test of the binary:
+
+```
+DotNetRuntimeContractDescriptor  0
+DNCCDAC                          0
+cdac / contract_descriptor       0
+g_dacTable                       1     ← their ONLY CLR symbol
+```
+
+**They hardcode per-version offsets and gate on the runtime version**, exactly like the OTel
+eBPF profiler. Evidence from the string table around `g_dacTable`:
+
+```
+'g_dacTable'  'getDotNetCoreModule'  'Attempted to bootstrap a non-existent module.'
+'7.0.11'                       ← reference .NET version
+'-debug'                       ← debug-build suffix check (layouts differ!)
+'4.5.1'                        ← Mono version (separate path)
+'invalid stoi argument' / 'stoi argument out of range'
+                               ← they PARSE the version string numerically
+'>k__BackingField'             ← C# auto-property backing fields handled
+'{MVAR}' '{FNPTR}' '{TYPEDBYREF}' '{BYREF}' '{PTR}' '{STRUCT}' '{VAR}' '{UNSUPPORTED TYPE}'
+                               ← a full ECMA-335 type-SIGNATURE parser
+```
+
+Version comes from the `VERSION.dll` imports (`GetFileVersionInfoW`/`VerQueryValueW`) applied
+to the target's runtime DLL, parsed with `stoi`, then used to select offsets — matching the
+`cmp word ptr [rax], 9` branch we disassembled earlier.
+
+### ⚠️ Correction to an earlier claim in this document
+
+I wrote that a DAC-free external CoreCLR reader is *"genuinely novel — nobody has built one."*
+**That was overstated.** The accurate statement:
+
+- **Closed-source ones exist and ship in production** — `untapped-scry` itself is one, and so is
+  [tosu](https://github.com/tosuapp/tosu) (osu!lazer, .NET 8). The approach is proven.
+- What has **no open-source implementation for CoreCLR** is the *self-updating* variant that
+  reads the cDAC descriptor instead of hardcoding. `chrisnas/RuntimeDataContract` reads the
+  descriptor but doesn't walk objects/fields.
+
+**This is good news, not bad.** It means we don't *need* the cDAC to be viable — a shipping
+product proves version-gated hardcoded tables work. The cDAC is an upgrade that makes ours
+more maintainable than theirs, not a prerequisite.
+
+### What their design tells us to build
+
+| They do | We should |
+| --- | --- |
+| `VerQueryValueW` on the runtime DLL → `stoi` → version-keyed offsets | same, **plus** cDAC when present (.NET 9+) |
+| Hardcoded `MethodTable`/`FieldDesc` offsets per version | cDAC for MT/Module/Object/String; hardcode only `EEClass`/`FieldDesc` |
+| Separate Mono / IL2CPP / CoreCLR / Godot backends | CoreCLR + Godot only |
+| ECMA-335 signature parser for field types | needed too — `getFieldNames` returns typed info |
+| `>k__BackingField` handling | needed — the game uses auto-properties heavily |
