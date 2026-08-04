@@ -30,18 +30,21 @@ Report: `spike/binding-report.json`.
 
 ### Approaches evaluated
 
+> ### ⚠️ DIRECTION CORRECTION
+> An earlier pass recommended replacing the native module with an **in-game C# mod**.
+> **That was wrong** — it changes what Reliquary *is*: game-folder install, a consent
+> popup, disabled Steam achievements, and it only works while the game cooperates.
+> Reliquary is an **external, read-only memory reader**; the goal is our own binary of
+> the *same kind*, not a different architecture. **All mod code and installed binaries
+> have been deleted.** The sections below about the mod API remain only as reference on
+> the game's internals. The live plan is **"CoreCLR bootstrap SOLVED"** at the bottom.
+
 | Path | Verdict |
 | --- | --- |
-| **In-process C# mod** (Harmony + official mod API) → WS/HTTP → Electron | ✅ **Recommended** |
-| Fork [STS2MCP](https://github.com/Gennadiyev/STS2MCP) (MIT, already serves state on `:15526`) | ✅ Best first spike / fallback |
-| Log + save-file parsing (`%APPDATA%\SlayTheSpire2`) | ⚠️ Post-run analytics only — not live enough for combat |
-| DIY external memory reading (memoryjs + Godot offsets) | ❌ Very high effort/risk; MegaDot ≠ stock Godot offsets |
-| **ClrMD** | ❌ **Disqualified** — live attach uses `PssCreateSnapshot`, which *suspends* the game |
-
-Why the mod wins: exact typed data (vs. guessed offsets), event-driven push (vs. 150 ms
-polling), clear startup errors (vs. silently wrong values), no `OpenProcess`/
-`ReadProcessMemory` anti-cheat/AV surface, cross-platform from one build, and it deletes
-the C++ addon *and* the proprietary binaries from this repo.
+| **Own external memory reader** (koffi + `g_dacTable` bootstrap) | ✅ **THE PLAN** — same architecture as today, our code |
+| In-process C# mod | ❌ Rejected — changes the product; needs install + consent, kills achievements |
+| Log + save-file parsing | ❌ Post-run only — not live enough for combat |
+| **ClrMD** | ❌ Disqualified — live attach uses `PssCreateSnapshot`, which *suspends* the game |
 
 ## Shadow harness (built, working)
 
