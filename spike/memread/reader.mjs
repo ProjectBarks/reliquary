@@ -106,3 +106,34 @@ export function findGamePid() {
   const pid = parseInt(out.split(/\s+/)[0], 10)
   return Number.isFinite(pid) ? pid : null
 }
+
+// ── VirtualQueryEx: enumerate committed regions (the 4th import their binary uses) ──
+const VirtualQueryEx = k32.func(
+  'size_t VirtualQueryEx(HANDLE h, void *addr, _Out_ uint8 *mbi, size_t len)'
+)
+
+/** MEMORY_BASIC_INFORMATION (x64, 48 bytes). Returns committed private regions. */
+ProcessReader.prototype.regions = function (opts = {}) {
+  const { minSize = 0x10000, maxTotal = 4n * 1024n * 1024n * 1024n } = opts
+  const out = []
+  let addr = 0n
+  const mbi = Buffer.alloc(48)
+  while (addr < 0x7ffffffe0000n && out.length < 20000) {
+    const n = VirtualQueryEx(this.handle, koffi.as(addr, 'void *'), mbi, 48)
+    if (!n) break
+    const baseAddress = mbi.readBigUInt64LE(0)
+    const regionSize = mbi.readBigUInt64LE(24)
+    const state = mbi.readUInt32LE(32)   // MEM_COMMIT = 0x1000
+    const protect = mbi.readUInt32LE(36)
+    const type = mbi.readUInt32LE(40)    // MEM_PRIVATE = 0x20000
+    if (regionSize === 0n) break
+    // Committed, readable, private, not guard/noaccess → GC heap / loader heaps live here.
+    const READABLE = 0x02 | 0x04 | 0x20 | 0x40 // R, RW, RX, RWX
+    if (state === 0x1000 && (protect & READABLE) && !(protect & 0x100) &&
+        type === 0x20000 && regionSize >= BigInt(minSize)) {
+      out.push({ base: baseAddress, size: regionSize })
+    }
+    addr = baseAddress + regionSize
+  }
+  return out
+}

@@ -536,3 +536,48 @@ The same refactor likely moved the TypeDef token (`m_wToken`) into auxiliary dat
 `MethodTable → GetAuxiliaryData() → { LoaderModule, token }`. The token→name validator in
 `validate.mjs` is already correct and will confirm the layout instantly once it reads the
 token from the right place — it is exact, not heuristic.
+
+## ✅ MethodTable layout DERIVED (empirically, from the live process)
+
+Breakthrough anchor: **every `System.String` shares one MethodTable**, and strings are
+findable by their text. 324 game strings (`DEFECT1_EPOCH`, …) all pointed to
+`0x7fff0497bf40` — a 100%-certain MethodTable, no heuristics.
+
+Decoding it, then cross-checking against ~1,500 harvested MethodTables:
+
+| Offset | Field | How it was confirmed |
+| --- | --- | --- |
+| `+0x04` | `m_BaseSize` | System.String's base size is exactly **22** — matches |
+| `+0x0C` / `+0x0E` | `m_wNumVirtuals` / `m_wNumInterfaces` | String = 27 virtuals, **9 interfaces** ✓ |
+| `+0x10` | `m_pParentMethodTable` | always a plausible MT pointer |
+| **`+0x18`** | **`m_pModule`** | **1280/1500 MTs share one address**; `+0x18→+0x0` is identical for 1500/1500 (the Module vtable) |
+| **`+0x20`** | **`m_pAuxiliaryData`** | `+0x20→+0x8` yields the **same Module** — matches .NET 9's `GetAuxiliaryData()->GetLoaderModule()` |
+| `+0x28` | `m_pEEClass` / `m_pCanonMT` | union, per source |
+
+Modules found by grouping MTs on `+0x18`: `0x7fff04b329c8` (1762 types),
+`0x7fff04864000` (676), `0x7fff0503bb90` (204), `0x7fff04c85938` (133).
+
+### TypeDef token: still unlocated
+
+Multiple attempts all returned **chance-level noise or false positives**:
+- `+0x0A` (the .NET 8 location) scores *below* chance
+- A `100% hit rate at +0x04` looked like success but is just `m_BaseSize` — small integers
+  always resolve against a 9,410-entry token map. **uniq=39 across 1,762 types** exposed it.
+
+The token map is too dense to be a discriminator on its own. Confirmed it is **not** in the
+MethodTable's first 0x10 bytes in .NET 9.
+
+## Disassembly path (recommended next, per user direction)
+
+Hand-deriving offsets keeps yielding plausible garbage. Reading the proprietary binary's own
+constants is more reliable. Tooling is now installed (`pip install capstone pefile`) and
+`spike/memread/disasm*.py` demonstrate:
+
+- Locating strings and their code xrefs, e.g.
+  `'Failed to bootstrap .NET Core metadata' @0x1800b2f50`, xref `lea r8,[rip+0xa7e88]` @ `0x18000b0c1`
+- Extracting struct-field offsets while excluding rsp/rbp stack slots
+
+**Next step:** the binary retains full RTTI (`DotNetCoreScry`, `DotNetCoreObject`,
+`DotNetCoreModule`, `GodotNode`, …). Walk RTTI → vtables → the member functions of
+`DotNetCoreModule`/`DotNetCoreObject`, and read the CoreCLR offsets straight out of *their*
+code instead of inferring them. That converts guesswork into transcription.
