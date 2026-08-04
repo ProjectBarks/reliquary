@@ -616,3 +616,61 @@ stable than anything anchored in CLR internals.
 
 **No unsolved unknowns remain in that list** — every step is either working code, a published
 cDAC offset, a DWARF-extractable address, or a source-documented layout.
+
+## RESOLVED — external reader is working end to end
+
+No DAC, no mod, no injection. `OpenProcess` + `ReadProcessMemory` only, exactly
+the four imports the proprietary binary uses.
+
+### The chain that works
+
+```
+loader-heap scan for MethodTable-shaped structs
+  rid = u32[mt+0x08] >> 8            (.NET 9 merges the TypeDef token into MTFlags2)
+  rid -> tokens.json                 -> 5410 sts2 types resolved BY NAME
+MethodTable + 0x28 -> EEClass        (low bit set => canonical MT, deref again)
+EEClass + 0x18     -> FieldDesc[]    (count = nInstance - parentInstance + nStatic)
+FieldDesc + 0x08   -> FieldDef token -> fields.json -> real field NAME + signature
+FieldDesc + 0x0C   -> offset = & 0x07FFFFFF, elementType = >> 27
+value              -> obj + 8 + offset
+```
+
+`Module::TypeDefToMethodTableMap` was a dead end (the cDAC `Module.Base`/`Path`
+offsets did not locate the struct in this build); scanning for MethodTables
+directly and identifying them by rid is both simpler and version-robust.
+
+### Picking the right instance
+
+Shape heuristics pick garbage — a table of type handles looks exactly like an
+object whose fields are all valid pointers. The reliable test is **semantic**:
+for every reference field, the pointee's *actual* type (from its own MT) must
+match the field's *declared* type from metadata. The real `NRun` scores 0.875;
+every impostor scores below 0.1.
+
+### Performance
+
+| stage | cost |
+| --- | --- |
+| region enumeration | 54 ms |
+| narrow 2758 MB -> 67 MB of real GC heap (sampled, cached) | 4.7 s once |
+| locate a root by type name (`Buffer.indexOf`, 1 MB reads) | ~70 ms |
+| re-validate a cached root | 0 ms |
+| **full snapshot** | **3 ms** |
+
+Roots are cached and re-validated every tick, because GC compaction does move
+them — `NRun` was observed at three different addresses across runs.
+
+### What it reads today
+
+act, floor, ascension, game mode, map type, character, gold, max energy,
+HP/max HP/block, relics, potion slots, full deck with per-card upgrade level,
+cost, rarity and type, and the live combat piles (draw/hand/discard/exhaust).
+
+Card identity is the model's own type name (`StrikeIronclad`, `Bash`), so no
+string table lookup is needed.
+
+### Remaining for shadow parity
+
+- screen/layout state off `NGame` (card reward, merchant, grid, capstone)
+- enemy state from `CombatState`
+- feed snapshots to `compareCandidate` and drive diffs to zero

@@ -61,6 +61,38 @@ export class Heap {
     return this._regs
   }
 
+  /**
+   * Committed regions that actually hold managed objects.
+   *
+   * Sampling a 64 KB window per region and counting headers that point at a
+   * MethodTable we know narrows ~2 GB of committed memory down to the real GC
+   * heap, which is what makes a full instance scan affordable.
+   */
+  gcRegions() {
+    if (this._gcRegs) return this._gcRegs
+    if (!this._mtSet) this._mtSet = new Set(this.nameOfMT.keys())
+    const WIN = 0x8000n
+    const out = []
+    for (const reg of this.regions()) {
+      let hits = 0
+      // Probe several windows across the region — objects of interest are not
+      // necessarily near its start, and sampling only the head loses whole heaps.
+      for (let s = 0; s < 6 && hits < 3; s++) {
+        let at = (reg.size * BigInt(s)) / 6n
+        if (at + WIN > reg.size) at = reg.size > WIN ? reg.size - WIN : 0n
+        const n = Number(reg.size - at > WIN ? WIN : reg.size - at)
+        const p = this.r.read(reg.base + at, n)
+        if (!p) continue
+        for (let o = 0; o + 8 <= n && hits < 3; o += 8) {
+          if (this._mtSet.has((p.readBigUInt64LE(o) & ~7n).toString())) hits++
+        }
+      }
+      if (hits >= 3) out.push(reg)
+    }
+    this._gcRegs = out
+    return out
+  }
+
   eeClass(mt) {
     const k = mt.toString()
     if (this._ee.has(k)) return this._ee.get(k)
@@ -276,19 +308,32 @@ export class Heap {
     return tot ? good / tot : 0
   }
 
-  /** All live instances of a named type, best-scoring first. */
-  instances(typeName, { limit = 0 } = {}) {
+  /**
+   * All live instances of a named type, best-scoring first.
+   *
+   * The header match is done with Buffer.indexOf over 1 MB reads rather than a
+   * per-qword JS loop — same result, but the search runs at memcpy speed, which
+   * is the difference between a 50 s scan and a sub-second one.
+   */
+  instances(typeName, { limit = 0, regions = null } = {}) {
     const list = this.mtOfName.get(typeName)
     if (!list) return []
-    const want = new Set(list.map((x) => x.toString()))
+    const CHUNK = 0x100000
     const found = []
-    for (const reg of this.regions()) {
-      for (let off = 0n; off < reg.size; off += 0x10000n) {
-        const n = Number(reg.size - off > 0x10000n ? 0x10000n : reg.size - off)
-        const p = this.r.read(reg.base + off, n)
-        if (!p) continue
-        for (let o = 0; o + 8 <= n; o += 8) {
-          if (want.has((p.readBigUInt64LE(o) & ~7n).toString())) found.push(reg.base + off + BigInt(o))
+    for (const mt of list) {
+      const needle = Buffer.alloc(8)
+      needle.writeBigUInt64LE(mt)
+      for (const reg of regions ?? this.gcRegions()) {
+        for (let off = 0n; off < reg.size; off += BigInt(CHUNK)) {
+          const rem = reg.size - off
+          const n = Number(rem > BigInt(CHUNK) ? BigInt(CHUNK) : rem)
+          const p = this.r.read(reg.base + off, n)
+          if (!p) continue
+          let i = 0
+          while ((i = p.indexOf(needle, i)) !== -1) {
+            if ((i & 7) === 0) found.push(reg.base + off + BigInt(i))
+            i += 8
+          }
         }
       }
     }
@@ -298,6 +343,33 @@ export class Heap {
 
   singleton(typeName) {
     return this.instances(typeName)[0]?.addr ?? null
+  }
+
+  /**
+   * Cached root resolution. Managed objects move under GC compaction, so a
+   * cached address is re-validated every call and only triggers a rescan when
+   * it actually goes stale — which turns the common case into a few reads.
+   */
+  root(typeName, { minScore = 0.6 } = {}) {
+    const c = this._roots ?? (this._roots = new Map())
+    const hit = c.get(typeName)
+    if (hit != null) {
+      const mt = this.mtOf(hit)
+      if (mt && this.nameOfMT.get(mt.toString()) === typeName && this.score(hit) >= minScore) return hit
+      c.delete(typeName)
+    }
+    // Rescan, nearest first: the object usually reappears in the same region.
+    const regs = this.gcRegions()
+    const near = hit == null ? [] : regs.filter((x) => hit >= x.base - 0x400000n && hit < x.base + x.size + 0x400000n)
+    for (const set of [near, regs]) {
+      if (!set.length) continue
+      const best = this.instances(typeName, { limit: 1, regions: set })[0]
+      if (best && best.score >= minScore) {
+        c.set(typeName, best.addr)
+        return best.addr
+      }
+    }
+    return null
   }
 
   dump(obj, { max = 200, label = '' } = {}) {
