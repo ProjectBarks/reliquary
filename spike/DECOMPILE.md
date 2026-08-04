@@ -225,3 +225,120 @@ half is the durable one and should be built first — which matches where our ow
 2. Port `asr`'s Godot module for node/position reads, fixing the 4.5 `CowData`/`StringName`
    deltas and swapping the hardcoded anchor for an `ObjectDB::object_slots` scan.
 3. Finish `findField` (`0x180036930`) → `FieldDesc+0x0C & 0x7FFFFFF` for instance offsets.
+
+---
+
+# 🚨 GAME-CHANGER: the shipped game binary contains FULL DEBUG INFO
+
+## ❌ Correction to an earlier claim in this document
+
+I previously wrote *"RTTI is STRIPPED from MegaDot"* based on `grep '.?AV'` (MSVC) and
+`grep '_ZTV'` (vtable symbols) both returning 0. **That was a bad test.** Itanium
+`type_info::__type_name` strings are **length-prefixed bare names**, not `_ZTV`-prefixed.
+Re-tested locally:
+
+```
+6Object 18   4Node 73   10CanvasItem 5   7Control 22   9SceneTree 4   8Viewport 11
+```
+
+**RTTI is fully retained.** `-s` strips the symbol table but not RTTI, because vtables
+reference `type_info` at runtime. Under Itanium ABI the `type_info*` sits at `vtable_ptr - 0x08`.
+
+## ✅ 766 MB of DWARF v4 debug info is shipped in `SlayTheSpire2.exe`
+
+Verified locally (`NumberOfSymbols=0`, but the `/N` long-name sections are DWARF):
+
+```
+  /4    4.9 MB   .debug_abbrev
+  /45 287.1 MB   .debug_info    (DWARF v4, addr_size=8, 15,756 compile units)
+  /57  36.2 MB   .debug_line
+  /69 153.8 MB   .debug_loc
+  /80  42.3 MB   .debug_ranges
+  /94 241.5 MB   .debug_str     ("clang version 19.1.6 …")
+  TOTAL 766 MB
+```
+
+Build: clang 19.1.6 / llvm-mingw / LLD, cross-compiled from Linux CI, **Itanium ABI**,
+`template_release`, `.mono`, single precision, no `DEBUG_ENABLED`/`TOOLS_ENABLED`.
+Version string in `.rdata`: **`MegaDot v4.5.1.m.12.mono.custom`**.
+
+**And MegaCrit publishes matching PDBs openly** at <https://megadot.megacrit.com/> with a JSON
+directory API (`/api/4.5.1-m.12/symbols/` → `…template_release.x86_64.llvm.mono.pdb.zip`, 107 MB).
+
+**⇒ We never have to guess a Godot offset. They are in the binary.**
+
+## Offsets extracted from the shipped binary's DWARF (x86-64, MegaDot 4.5.1-m.12)
+
+`Object` (sizeof 0x110) — no base class, single vtable ptr at 0, no virtual/multiple inheritance:
+
+| Off | Field |
+| --- | --- |
+| `0x000` | vtable ptr |
+| `0x058` | `ObjectID _instance_id` |
+| `0x068` | `ScriptInstance* script_instance` ← C# bridge |
+| `0x070` | `Variant script` (24B) |
+| **`0x0D8`** | **`const StringName* _class_name_ptr`** ← class identity |
+| `0x0F0` | `InstanceBinding* _instance_bindings` |
+
+`Node` (sizeof 0x2F0), `Node::Data` at `0x110`:
+
+| Off | Field |
+| --- | --- |
+| `0x128` | `Node* parent` |
+| `0x138` | `HashMap<StringName,Node*> children` (40B) |
+| `0x160` | `bool children_cache_dirty` |
+| `0x168` | `LocalVector<Node*> children_cache` → count@`0x168`, **data ptr@`0x170`** |
+| `0x1B4` | `int index` |
+| **`0x1C0`** | **`StringName name`** |
+| `0x1C8` | `SceneTree* tree` |
+| `0x1D8` | `Viewport* viewport` |
+
+`CanvasItem` (sizeof 0x410): `visible` `0x370` · `global_transform` **`0x3E8`** · `global_invalid` `0x400`
+`Control` (sizeof 0x7F0): **`pos_cache` `0x4B8`** · **`size_cache` `0x4C0`** · `anchor[4]` `0x480`
+`SceneTree` (sizeof 0x768): **`Window* root` `0x2C0`**
+`StringName::_Data` (sizeof 0x28): refcount `0x00` · **`String name` `0x08`** · hash `0x10`
+`ObjectSlot`: **16 bytes**, `validator:39/next_free:24/is_ref_counted:1` in word 0, **`Object*` at `+0x08`**
+
+**Independent corroboration:** GDDumper's `GDHardOffsets.lua` lists Godot 4.5 x64 release
+`VPChildren = 0x170`, `VPObjStringName = 0x1C0` — an exact match with the DWARF extraction,
+from two unrelated methods.
+
+**MegaDot does NOT change these layouts.** Every member matches stock Godot 4.5-stable
+declaration order; the only deltas are expected `#ifdef` eliminations.
+
+## Best bootstrap: `ObjectDB::object_slots` (not SceneTree)
+
+```cpp
+for (uint32_t i = 0, count = slot_count; i < slot_max && count; i++)
+    if (object_slots[i].validator) { visit(object_slots[i].object); count--; }
+```
+
+One bulk `ReadProcessMemory` of `slot_max * 16` bytes enumerates **every live Object** — no tree
+walk. The `ObjectSlot` layout is **unchanged across all of Godot 4.x**, unlike `Node` whose
+offsets moved on every one of 4.3 → 4.4 → 4.5.
+
+## Class identity in 4 reads, no vtable
+
+```
+Object* + 0xD8 -> StringName*  ->  _Data* + 0x08 -> char32_t*
+                                   length at (ptr - 8), uint64, includes NUL
+```
+Exact (`"Button"`, not `"Control"`). Use RTTI (`vptr-8` → `type_info` → `+8` → `4Node`) as an
+independent validator so offsets can be self-checked on a new build rather than trusted blindly.
+
+## Godot 4.5 deltas that invalidate older public tables
+
+- `CowData::USize` → **uint64** (4.3+): size at `ptr-8`, not `ptr-4`
+- `StringName::_Data` **dropped `cname`**: `name` at `+0x08` in 4.5, `+0x10` in 4.3/4.4
+- `Object` gained `signal_mutex` + `_translation_domain` in 4.5 (shifts everything after)
+- `Node::Data` gained `accessibility_element` in 4.5; `inside_tree` bit removed
+  (4.5's `is_inside_tree()` = `data.tree != null`)
+
+## Revised plan
+
+1. **Extend the DWARF parser into an offset generator** — re-run it after each game update
+   instead of maintaining a hardcoded table. (MegaCrit ships a fork revision every few weeks.)
+2. Bootstrap on `ObjectDB::object_slots`; version-gate on the `.rdata` version string.
+3. Identify classes via `_class_name_ptr`, validate via Itanium RTTI.
+4. For managed state: `Object.script_instance (0x68)` → `CSharpInstance` → `gchandle` →
+   raw managed object, then the CoreCLR field-name path we decoded from `untapped-scry`.
