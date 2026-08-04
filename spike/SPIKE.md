@@ -163,6 +163,59 @@ Most state is **public** — no reflection needed for the core:
 **Not applicable:** GDWeave and godot-mod-loader target *GDScript* games; StS2's logic is managed
 C# with an official loader. BepInEx has no mature Godot loader.
 
+## ✅ Working mod skeleton — `spike/mod/` (builds clean, 0 errors)
+
+`SpectraBridge` compiles against the real v0.107.1 game assemblies (`<Private>false</Private>`, so
+no game DLLs are copied). It has `[ModInitializer]`, a main-thread pump, `HttpListener` + WebSocket
+broadcast, a Run/Combat JSON snapshot builder, and a Harmony postfix on `RunManager.EnterRoom`.
+
+```bash
+cd spike/mod && dotnet build -c Release      # → 17.9 KB SpectraBridge.dll
+```
+
+`spike/apidump/` is an API explorer — `dotnet run -- CombatState PlayerCombatState` dumps real
+members (incl. private fields) without launching the game. **Keep this**: most published guidance
+is version-stale, so verify against the installed build rather than trusting docs.
+
+### ⚠️ Corrections to earlier assumptions (verified against metadata + a green build)
+
+1. **`IMod` does not exist.** The contract is `[ModInitializer(nameof(Method))]` on a class — no
+   interface. Omit the attribute entirely and the loader auto-runs `Harmony.PatchAll`.
+2. **`CombatState` has NO `DrawPile`/`DiscardPile`/`ExhaustPile`** — those live on
+   **`PlayerCombatState`**. STS2MCP's published state code targets an older build and **will not
+   compile against v0.107.1**. Use it for architecture, not for field paths.
+3. Model identity is `AbstractModel.Id` (not `.ModelId`); `Creature` uses `.CurrentHp`/`.MaxHp`.
+
+### Real v0.107.1 state access
+
+```csharp
+if (!RunManager.Instance.IsInProgress) return;
+RunState run = RunManager.Instance.DebugOnlyGetState();   // Act, ActFloor, TotalFloor,
+                                                          // AscensionLevel, CurrentRoom, Map
+Player me = run.Players[0];                               // Gold, Relics, Deck, Creature
+if (run.CurrentRoom is CombatRoom && CombatManager.Instance.IsInProgress) {
+    CombatState cs   = CombatManager.Instance.DebugOnlyGetState();  // RoundNumber, Enemies
+    PlayerCombatState p = me.PlayerCombatState;   // Hand/DrawPile/DiscardPile/ExhaustPile,
+}                                                 // Energy, TurnNumber, Phase
+```
+
+Scene-tree fallback: `(SceneTree)Engine.GetMainLoop()`, root `/root/Game`,
+run subtree `/root/Game/RootSceneContainer/Run/...` (literal paths present in the binary).
+
+### Manifest + install
+
+`<game>/mods/<ModId>/` — **create it; it does not exist.** Ship `SpectraBridge.dll` +
+`SpectraBridge.json`. Fields (JSON names): `id` (**required**, must match the DLL basename),
+`name`, `author`, `description`, `version` (valid semver), `has_pck`, `has_dll`, `dependencies`
+(`id` + `min_version`), `affects_gameplay` (**set false**), `min_game_version`.
+
+**Gotcha:** mod loading is gated behind a first-launch consent popup (`PlayerAgreedToModLoading`) —
+nothing loads until the user accepts. Also, an `HttpListener` prefix on `127.0.0.1` may need
+`netsh http add urlacl` on some non-admin setups; prefer the literal `localhost` prefix.
+
+MegaCrit ships **`sts2.xml`** (5.3 MB of real doc comments for `sts2.dll`) and references an
+official example mod at `gitlab.com/megacrit/sts2/example-mod`.
+
 ## Next steps
 
 1. Install [STS2MCP](https://github.com/Gennadiyev/STS2MCP), curl `localhost:15526`, diff its
