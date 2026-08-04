@@ -7,7 +7,9 @@ import koffi from 'koffi'
 
 const here = (f) => new URL('./' + f, import.meta.url)
 export const mts = JSON.parse(readFileSync(here('mts.json')))
-export const fieldsMeta = JSON.parse(readFileSync(here('fields.json')))
+// FieldDef rids are unique only within an assembly, so field metadata stays
+// partitioned by assembly and is looked up via the MethodTable's own origin.
+export const fieldsByAsm = mts.fields ?? {}
 
 const HEAP_LO = 0x10000000000n
 const HEAP_HI = 0x7f0000000000n
@@ -26,10 +28,15 @@ export class Heap {
     const k32 = koffi.load('kernel32.dll')
     this.VQE = k32.func('size_t VirtualQueryEx(void *h, void *addr, _Out_ uint8 *mbi, size_t len)')
     this.nameOfMT = new Map()
+    this.asmOfMT = new Map()
     this.mtOfName = new Map()
     for (const [n, l] of Object.entries(mts.types)) {
       this.mtOfName.set(n, l.map((x) => BigInt(x.addr)))
-      for (const m of l) this.nameOfMT.set(BigInt(m.addr).toString(), n)
+      for (const m of l) {
+        const k = BigInt(m.addr).toString()
+        this.nameOfMT.set(k, n)
+        this.asmOfMT.set(k, m.asm)
+      }
     }
     this._ee = new Map()
     this._f = new Map()
@@ -118,6 +125,8 @@ export class Heap {
       const m = chain[ci]
       const owner = this.nameOfMT.get(m.toString())
       if (!owner) continue // unnameable MT -> its FieldDescList is not trustworthy
+      const fieldsMeta = fieldsByAsm[this.asmOfMT.get(m.toString())]
+      if (!fieldsMeta) continue
       const ee = this.eeClass(m)
       if (!ee) continue
       const list = this.r.readU64(ee + 0x18n)

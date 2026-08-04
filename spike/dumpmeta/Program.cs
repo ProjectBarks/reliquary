@@ -10,6 +10,7 @@ using System.Reflection.PortableExecutable;
 
 if (args.Length > 1 && args[0] == "--tokens") { Tokens.Dump(args[1], args.Length > 2 ? args[2] : "tokens.json"); return; }
 if (args.Length > 1 && args[0] == "--fields") { Fields.Dump(args[1], args.Length > 2 ? args[2] : "fields.json"); return; }
+if (args.Length > 1 && args[0] == "--all") { Assemblies.Dump(args[1], args.Length > 2 ? args[2] : "meta"); return; }
 
 string dll = args.Length > 0
     ? args[0]
