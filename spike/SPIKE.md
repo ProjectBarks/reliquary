@@ -507,3 +507,32 @@ exact failure mode that would otherwise ship a reader that silently returns wron
 source (or cross-check against the shipped `mscordaccore.dll`, whose DAC structures mirror
 them), then re-run `validate.mjs` — it will confirm the layout the moment the offsets are right,
 because token→name matching is exact.
+
+### ROOT CAUSE of the failed validation (.NET 9 MethodTable refactor)
+
+Fetched CoreCLR `release/9.0` source. Two facts explain the failure:
+
+1. `SIZEOF__MethodTable_ = 0x10 + 6 * TARGET_POINTER_SIZE` — so a MethodTable is 16 bytes of
+   scalars followed by **6 pointers** (0x40 total). The scalar block guess was structurally fine.
+2. **The killer** — from `methodtable.inl`, verbatim:
+
+   ```cpp
+   inline PTR_Module MethodTable::GetLoaderModule()
+   {
+       LIMITED_METHOD_DAC_CONTRACT;
+       return GetAuxiliaryData()->GetLoaderModule();
+   }
+   ```
+
+   In .NET 9 the loader module is **NOT a direct field on MethodTable** — it lives in
+   `MethodTableAuxiliaryData`, reached through a pointer. My validator checked
+   `MethodTable+0x18` for a back-pointer to the Module, so it could never match; every
+   "hit" was coincidence, which is why the surviving candidates were `RanwidTheElder ×25`.
+
+The same refactor likely moved the TypeDef token (`m_wToken`) into auxiliary data too —
+`GetTypeDefRid`/`GetCl` are not in `methodtable.h`/`.inl`, consistent with that.
+
+**Corrected plan:** resolve `MethodTableAuxiliaryData`'s layout first, then
+`MethodTable → GetAuxiliaryData() → { LoaderModule, token }`. The token→name validator in
+`validate.mjs` is already correct and will confirm the layout instantly once it reads the
+token from the right place — it is exact, not heuristic.
