@@ -100,6 +100,69 @@ Regenerate anytime:
 cd spike/dumpmeta && dotnet run > ../game-api.txt
 ```
 
+## Environment (verified against this install)
+
+| | |
+| --- | --- |
+| Game | `v0.107.1` (commit 59260271) — key compat off `release_info.json`, **not** assembly version (always `0.1.0.0`) |
+| Godot | 4.5.1 · Runtime: **self-contained .NET 9.0.7** · Harmony **2.4.2** (shipped) |
+| Mod root | `<game>\mods\` — **does not exist yet, must be created** |
+| Logs | `sts2_stdout.log` / `sts2_stderr.log` in game root |
+
+**`Microsoft.AspNetCore.App` is NOT shipped** → Kestrel/minimal API is impossible (hostfxr already
+consumed its runtimeconfig before our DLL loads). But `System.Net.HttpListener`,
+`System.Net.WebSockets`, `System.Net.Sockets`, `System.IO.Pipes` **are** shipped → zero-dependency
+HTTP + WebSocket server for free.
+
+## Mod design rules (learned from STS2MCP, MIT, 458★ — our blueprint)
+
+```csharp
+[ModInitializer(nameof(Initialize))]
+public static class Reliquary {
+    public static void Initialize() {
+        new Harmony("me.brandonbarker.reliquary").PatchAll(typeof(Reliquary).Assembly);
+        var tree = (SceneTree)Engine.GetMainLoop();          // static access, no Node needed
+        tree.Connect(SceneTree.SignalName.ProcessFrame, Callable.From(OnProcessFrame));
+    }
+}
+```
+
+1. **Prefer the game's 144 semantic hooks over Harmony.** `AfterCardChangedPiles` gives push-based
+   deck-tracker updates with zero polling; `AfterModifyingCardRewardOptions` fires exactly when the
+   draft-advice panel needs data. Escalation order: override models → hooks → Harmony last.
+2. **The scene tree is NOT thread-safe.** Build an immutable snapshot on `ProcessFrame` and publish
+   it with one atomic `volatile` reference write; the HTTP thread only reads that reference.
+   No locks, no scene access off-thread.
+3. **Always guard `GodotObject.IsInstanceValid(node)`** — a freed node is a *hard process crash*,
+   not an exception.
+4. **Scene-tree child order ≠ visual order.** Sort `Control` nodes by `GlobalPosition` for card
+   rewards, or they come back scrambled intermittently.
+5. **Reflection must walk the hierarchy** — `Type.GetField(NonPublic)` does *not* search base
+   classes. Iterate `t = t.BaseType` with `DeclaredOnly`, cache in a `ConcurrentDictionary`.
+6. Never `.Wait()`/`.Result` a game `Task` inside a patch — deadlocks the command sequencer.
+7. Manifest: set **`affects_gameplay: false`** so runs aren't flagged as modded
+   (`IsRunningModded` / `GetGameplayRelevantModNameList` exist in the assembly).
+8. Call `_listener.Stop()` on shutdown or the game hangs on quit; throttle pushes (don't serialize
+   at 144 Hz).
+
+Most state is **public** — no reflection needed for the core:
+`combatState.DrawPile.Cards` · `.DiscardPile` · `.ExhaustPile` · `.Hand` ·
+`(monster.NextMove as MoveState).Intents` · `merchantRoom.GetLocalInventory()` ·
+`MegaCrit.Sts2.Core.Runs.RunManager.Instance`
+
+## Reference implementations
+
+| Repo | Why | License |
+| --- | --- | --- |
+| [Gennadiyev/STS2MCP](https://github.com/Gennadiyev/STS2MCP) | **Blueprint.** Mod + HttpListener REST on `:15526`; solves main-thread queue, IsInstanceValid, position-sorted holders, v0.107 changes | MIT ✅ |
+| [WRXinYue/STS2-KitLib](https://github.com/WRXinYue/STS2-KitLib) | Modular toolkit, WS live-reload | MIT ✅ |
+| [S0ul3r/BoberInSpire](https://github.com/S0ul3r/BoberInSpire) | Closest analog: C# mod → JSON → WS → overlay | ⚠️ unstated — read only |
+| [elliotttate/sts2-modding-mcp](https://github.com/elliotttate/sts2-modding-mcp) | Auto-decompiles sts2.dll via ilspycmd, indexes 3048 entities + 144 hooks | MIT ✅ |
+| [Modding-Tutorial](https://fresh-milkshake.github.io/Modding-Tutorial/) | De-facto handbook | — |
+
+**Not applicable:** GDWeave and godot-mod-loader target *GDScript* games; StS2's logic is managed
+C# with an official loader. BepInEx has no mature Godot loader.
+
 ## Next steps
 
 1. Install [STS2MCP](https://github.com/Gennadiyev/STS2MCP), curl `localhost:15526`, diff its
