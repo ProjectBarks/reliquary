@@ -135,8 +135,10 @@ public static class ModEntry
         o["sts2.nGameState"] = Snapshot.NGameState(run);
         o["sts2.pileState"] = Snapshot.PileState(inCombat ? me?.PlayerCombatState : null);
         o["sts2.enemiesState"] = Snapshot.EnemiesState(cs);
-        // sts2.layoutState needs on-screen positions from the scene tree; tracked
-        // separately (see SPIKE.md) — omitted rather than emitted wrong.
+        // RAW visible items (source + screen-fraction anchors). The Electron
+        // provider enriches these into sts2.layoutState with Codex stats, so the
+        // advice pipeline is unchanged.
+        o["_raw.visibleItems"] = Layout.VisibleItems();
 
         o["_meta"] = new Dictionary<string, object?>
         {

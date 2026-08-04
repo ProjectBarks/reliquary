@@ -15,13 +15,13 @@ namespace SpectraBridge;
 ///
 /// MUST be called on the Godot main thread.
 /// </summary>
-internal static class Snapshot
+public static class Snapshot
 {
     // ── null-safe reflection, for members whose exact shape varies by build ──
     private static readonly Dictionary<(Type, string), MemberInfo?> Cache = new();
 
     /// <summary>Field or property by name, walking the full inheritance chain.</summary>
-    internal static object? Get(object? src, string name)
+    public static object? Get(object? src, string name)
     {
         if (src is null) return null;
         var key = (src.GetType(), name);
@@ -52,7 +52,7 @@ internal static class Snapshot
         catch { return null; }   // freed Godot objects throw from getters
     }
 
-    internal static object? GetPath(object? root, params string[] path)
+    public static object? GetPath(object? root, params string[] path)
     {
         var cur = root;
         foreach (var seg in path) { cur = Get(cur, seg); if (cur is null) return null; }
@@ -60,7 +60,7 @@ internal static class Snapshot
     }
 
     /// <summary>ModelId → the bare entry string ("STRIKE_IRONCLAD"), matching Id.Entry.</summary>
-    internal static string? EntryOf(object? modelId)
+    public static string? EntryOf(object? modelId)
     {
         if (modelId is null) return null;
         if (Get(modelId, "Entry") is string e) return e;
@@ -74,7 +74,7 @@ internal static class Snapshot
     // ── sts2.pileState ───────────────────────────────────────────────────────
 
     /// <summary>Mirrors Sts2Card in src/shared/types.ts.</summary>
-    internal static Dictionary<string, object?> Card(CardModel c) => new()
+    public static Dictionary<string, object?> Card(CardModel c) => new()
     {
         ["id"] = EntryOf(Get(c, "Id")),
         ["upgradeLevel"] = c.CurrentUpgradeLevel,
@@ -103,9 +103,9 @@ internal static class Snapshot
         foreach (var c in cards) Cycled.Add(RuntimeHelpers_GetId(c));
     }
 
-    internal static void ResetCombatState() => Cycled.Clear();
+    public static void ResetCombatState() => Cycled.Clear();
 
-    internal static Dictionary<string, object?> PileState(PlayerCombatState? pcs)
+    public static Dictionary<string, object?> PileState(PlayerCombatState? pcs)
     {
         if (pcs is null)
             return new() { ["draw"] = Array.Empty<object>(), ["hand"] = Array.Empty<object>(), ["discard"] = Array.Empty<object>() };
@@ -131,7 +131,7 @@ internal static class Snapshot
 
     // ── sts2.enemiesState ────────────────────────────────────────────────────
 
-    internal static Dictionary<string, object?> EnemiesState(CombatState? cs)
+    public static Dictionary<string, object?> EnemiesState(CombatState? cs)
     {
         if (cs is null)
             return new() { ["enemies"] = Array.Empty<object>(), ["isCombatInProgress"] = false, ["currentSide"] = 1 };
@@ -215,7 +215,7 @@ internal static class Snapshot
         var n => n.Replace("Room", "").ToLowerInvariant()
     };
 
-    internal static Dictionary<string, object?> NGameState(RunState? run)
+    public static Dictionary<string, object?> NGameState(RunState? run)
     {
         var room = run?.CurrentRoom;
         var player = run?.Players is { Count: > 0 } ps ? ps[0] : null;
