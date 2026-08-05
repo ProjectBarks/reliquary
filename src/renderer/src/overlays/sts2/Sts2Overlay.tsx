@@ -1,4 +1,5 @@
 import type { Sts2StatPanel } from '@shared/types'
+import { ErrorBoundary } from '../../telemetry'
 import { useIpc, useSetting, useDiagnostics } from '../../hooks/useIpc'
 import { DeckTracker } from './DeckTracker'
 import { AttackSummary } from './AttackSummary'
@@ -79,13 +80,18 @@ export function Sts2Overlay(): JSX.Element {
     <div className="sts2-overlay">
       <ModeBadge mode={diagnostics?.mode ?? 'live'} />
 
+      {/* Each panel is isolated: the overlay is click-through and frameless, so
+          an unhandled render error would silently blank the whole surface with
+          nothing on screen to indicate anything went wrong. */}
       {enableAttackSummary && isCombat ? (
-        <AttackSummary
-          enemies={enemiesState?.enemies ?? null}
-          isCombatInProgress={enemiesState?.isCombatInProgress ?? false}
-          currentSide={enemiesState?.currentSide}
-          isObscured={!!isObscured}
-        />
+        <ErrorBoundary name="AttackSummary">
+          <AttackSummary
+            enemies={enemiesState?.enemies ?? null}
+            isCombatInProgress={enemiesState?.isCombatInProgress ?? false}
+            currentSide={enemiesState?.currentSide}
+            isObscured={!!isObscured}
+          />
+        </ErrorBoundary>
       ) : null}
 
       {enableDeckTracker &&
@@ -93,14 +99,18 @@ export function Sts2Overlay(): JSX.Element {
       !isObscured &&
       isCombat &&
       enemiesState?.isCombatInProgress ? (
-        <DeckTracker
-          pileState={pileState}
-          cardData={cardData}
-          isPeekButtonVisible={!!nGameState?.isPeekButtonVisible}
-        />
+        <ErrorBoundary name="DeckTracker">
+          <DeckTracker
+            pileState={pileState}
+            cardData={cardData}
+            isPeekButtonVisible={!!nGameState?.isPeekButtonVisible}
+          />
+        </ErrorBoundary>
       ) : null}
 
-      <StatPanels panels={panels} />
+      <ErrorBoundary name="StatPanels">
+        <StatPanels panels={panels} />
+      </ErrorBoundary>
     </div>
   )
 }

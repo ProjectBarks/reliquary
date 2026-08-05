@@ -107,7 +107,33 @@ launches: the dashboard runs, `SPECTRA_STUB` demo mode works, and the overlay wa
 
 ## Tech stack
 
-Electron 33 · React 18 · TypeScript · styled-components · electron-vite · electron-builder.
+Electron 33 · React 18 · TypeScript · styled-components · electron-vite · electron-builder ·
+PostHog (diagnostics).
+
+## Diagnostics
+
+Reliquary reads another process's memory and paints a click-through window over a game. When
+that breaks it usually breaks *silently* — no error, just an overlay that stopped showing
+numbers. So the app reports crashes and degraded states (game not found, native module missing,
+Codex rate-limited, a panel that failed to render) to PostHog, with breadcrumbs and recent log
+lines attached so the cause is reconstructable.
+
+**What is sent:** a random install id, app/OS/GPU versions, error messages and stack traces, and
+counters for which subsystems are failing.
+
+**What is never sent:** your name, account, Steam id, file paths (they are scrubbed), or anything
+about the run you are playing — no deck, cards, or game content.
+
+Turn it off entirely by setting `SPECTRA_TELEMETRY=0`. The **Debug** tab shows exactly what the
+reporter is doing, including every issue recorded in the current session.
+
+Building with reporting enabled requires a PostHog project key at build time:
+
+```bash
+POSTHOG_KEY=phc_yourkey npm run dist
+```
+
+Without that key, builds simply never send anything.
 
 ## Disclaimer
 

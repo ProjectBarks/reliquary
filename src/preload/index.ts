@@ -4,6 +4,7 @@ import {
   type DiagnosticsState,
   type KeyedSnapshot,
   type LogLine,
+  type RendererTelemetryEvent,
   type SpectraApi,
   type Sts2Settings,
   type StubScenario,
@@ -64,6 +65,15 @@ const api: SpectraApi = {
 
   windowControl(action: WindowAction): void {
     ipcRenderer.send(IPC.WindowControl, action)
+  },
+
+  report(event: RendererTelemetryEvent): void {
+    // Renderers never reach the network themselves; main owns the only client.
+    try {
+      ipcRenderer.send(IPC.Telemetry, event)
+    } catch {
+      // reporting must never break the surface it is reporting on
+    }
   }
 }
 

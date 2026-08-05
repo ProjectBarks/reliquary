@@ -1,4 +1,5 @@
 import { inspect } from 'util'
+import { telemetry } from './telemetry/Telemetry'
 import type { LogLine } from '@shared/types'
 
 /**
@@ -26,6 +27,34 @@ function record(level: LogLine['level'], args: unknown[]): void {
   buffer.push(line)
   if (buffer.length > RING_SIZE) buffer.shift()
   sink?.(line)
+
+  // Every log line becomes breadcrumb context for the next error report, and
+  // anything logged at error level is reported on its own. Console output is
+  // the app's richest description of what it was doing, so it is worth carrying
+  // into the crash report rather than leaving on the user's machine.
+  try {
+    telemetry.noteLog(level, line.text)
+    if (level === 'error') {
+      telemetry.issue(`console_error:${fingerprint(line.text)}`, 'error', { message: line.text })
+    } else if (level === 'warn') {
+      telemetry.crumb('warn', line.text)
+    }
+  } catch {
+    // logging must never fail because of telemetry
+  }
+}
+
+/**
+ * Collapse a log message to a stable key so the same failure aggregates even
+ * though its numbers, ids, and addresses differ every time.
+ */
+function fingerprint(text: string): string {
+  return text
+    .replace(/0x[0-9a-f]+/gi, '<addr>')
+    .replace(/\d+/g, '<n>')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .slice(0, 80)
 }
 
 /** Patch console once so all main-process logging is captured. Idempotent. */

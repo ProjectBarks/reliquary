@@ -1,4 +1,5 @@
 import { app } from 'electron'
+import { telemetry } from '../telemetry/Telemetry'
 import { createRequire } from 'module'
 import { existsSync } from 'fs'
 import { join } from 'path'
@@ -69,18 +70,25 @@ export function loadScryModule(): { module: ScryModule | null; error: string | n
   const binary = firstExisting(...candidates)
   if (!binary) {
     scryError = `untapped-scry native binary not found (looked in: ${candidates.join(', ')})`
+    // A broken/incomplete install. Knowing WHERE we looked is the whole fix.
+    telemetry.issue('scry_binary_missing', 'error', {
+      candidates,
+      packaged: process.env['NODE_ENV'] !== 'development'
+    })
     return { module: null, error: scryError }
   }
   try {
     const mod = req(binary) as ScryModule
     if (!mod.Scry || !mod.GodotScry || !mod.DotNetCoreScry) {
       scryError = `untapped-scry loaded but missing exports (got: ${Object.keys(mod).join(', ')})`
+      telemetry.issue('scry_missing_exports', 'error', { exports: Object.keys(mod) })
       return { module: null, error: scryError }
     }
     scryCache = mod
     return { module: mod, error: null }
   } catch (err) {
     scryError = err instanceof Error ? err.message : String(err)
+    telemetry.issue('scry_require_failed', 'error', { binary }, err)
     return { module: null, error: scryError }
   }
 }
@@ -119,6 +127,7 @@ export function loadNodeNative(): { module: NodeNativeModule | null; error: stri
     return { module: nativeCache, error: null }
   } catch (err) {
     nativeError = err instanceof Error ? err.message : String(err)
+    telemetry.issue('node_native_require_failed', 'error', {}, err)
     return { module: null, error: nativeError }
   }
 }

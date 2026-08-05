@@ -221,6 +221,8 @@ export interface DiagnosticsState {
   overlayBounds: WindowBounds | null
   scryModuleLoaded: boolean
   scryLoadError: string | null
+  /** Telemetry client state, surfaced in the Debug tab. */
+  telemetry?: Record<string, unknown>
   gameDetected: boolean
   gamePid: number | null
   scenario: StubScenario
@@ -264,11 +266,31 @@ export const IPC = {
   /** renderer -> main: perform a window control action on the dashboard window */
   WindowControl: 'spectra:window-control',
   /** main -> renderer: dashboard maximized-state changed (boolean) */
-  WindowMaximized: 'spectra:window-maximized'
+  WindowMaximized: 'spectra:window-maximized',
+  /** renderer -> main: a renderer error / diagnostic event to report */
+  Telemetry: 'spectra:telemetry'
 } as const
+
+/**
+ * A diagnostic event raised in a renderer and forwarded to the main process,
+ * which owns the only telemetry client. Renderers never talk to the network.
+ */
+export interface RendererTelemetryEvent {
+  kind: 'error' | 'event' | 'crumb'
+  /** Stable grouping key, e.g. 'overlay_render_failed'. */
+  name: string
+  /** Which window raised it. */
+  surface: 'overlay' | 'dashboard' | 'unknown'
+  message?: string
+  stack?: string
+  componentStack?: string
+  props?: Record<string, unknown>
+}
 
 /** The typed API the preload script exposes on window.spectra. */
 export interface SpectraApi {
+  /** Report a renderer error or diagnostic event to the main-process telemetry. */
+  report(event: RendererTelemetryEvent): void
   onData(cb: (snapshot: KeyedSnapshot) => void): () => void
   onTracker(cb: (state: TrackerState) => void): () => void
   onDiagnostics(cb: (state: DiagnosticsState) => void): () => void

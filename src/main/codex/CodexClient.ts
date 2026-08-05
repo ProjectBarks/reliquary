@@ -1,6 +1,7 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 
 import { request as httpsRequest } from 'https'
+import { telemetry } from '../telemetry/Telemetry'
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'fs'
 import { join } from 'path'
 import { app } from 'electron'
@@ -399,11 +400,19 @@ export class CodexClient {
         (res) => {
           if (res.statusCode == null || res.statusCode < 200 || res.statusCode >= 300) {
             // Honor rate limiting: back this endpoint off until Retry-After (or 30s).
+            let cooldownMs: number | null = null
             if (res.statusCode === 429 || res.statusCode === 503) {
               const ra = Number(res.headers['retry-after'])
-              const waitMs = Number.isFinite(ra) && ra > 0 ? ra * 1000 : 30_000
-              this.cooldownUntil.set(endpoint, Date.now() + waitMs)
+              cooldownMs = Number.isFinite(ra) && ra > 0 ? ra * 1000 : 30_000
+              this.cooldownUntil.set(endpoint, Date.now() + cooldownMs)
             }
+            // Codex outages/rate limits are the difference between "no numbers"
+            // and "wrong numbers"; both look identical to the user.
+            telemetry.issue('codex_http_error', res.statusCode === 429 ? 'warn' : 'error', {
+              endpoint,
+              status: res.statusCode,
+              cooldown_ms: cooldownMs
+            })
             res.resume()
             reject(new Error(`HTTP ${res.statusCode} ${path}`))
             return
@@ -415,13 +424,20 @@ export class CodexClient {
             try {
               resolve(JSON.parse(buf))
             } catch (err) {
+              telemetry.issue('codex_bad_json', 'error', { endpoint, bytes: buf.length }, err)
               reject(err)
             }
           })
         }
       )
-      req.on('timeout', () => req.destroy(new Error(`timeout ${path}`)))
-      req.on('error', reject)
+      req.on('timeout', () => {
+        telemetry.issue('codex_timeout', 'warn', { endpoint, timeout_ms: HTTP_TIMEOUT })
+        req.destroy(new Error(`timeout ${path}`))
+      })
+      req.on('error', (err) => {
+        telemetry.issue('codex_request_error', 'error', { endpoint }, err)
+        reject(err)
+      })
       if (payload) req.write(payload)
       req.end()
     })

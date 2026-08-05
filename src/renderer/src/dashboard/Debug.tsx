@@ -41,6 +41,19 @@ export function Debug(): JSX.Element {
   const scenario = diag?.scenario ?? 'combat'
   const devMode = diag?.mode === 'stub'
 
+  const tele = diag?.telemetry as
+    | {
+        enabled?: boolean
+        installId?: string
+        sessionId?: string
+        eventsSent?: number
+        breadcrumbs?: number
+        deliveryFailed?: boolean
+        aggregatedIssues?: Array<{ key: string; count: number }>
+      }
+    | undefined
+  const issues = tele?.aggregatedIssues ?? []
+
   return (
     <Wrap>
       <Grid>
@@ -87,6 +100,36 @@ export function Debug(): JSX.Element {
             resolved
           </Mono>
           {diag?.codex?.error ? <Mono className="err">{diag.codex.error}</Mono> : null}
+        </Card>
+
+        <Card>
+          <CardTitle>Diagnostics reporting</CardTitle>
+          <Status ok={!!tele?.enabled}>
+            {tele?.enabled ? 'Sending anonymous diagnostics' : 'Disabled — nothing is sent'}
+          </Status>
+          <Hint>
+            Anonymous crash and error reports only: no game content, account, or file paths. Set
+            SPECTRA_TELEMETRY=0 to turn it off.
+          </Hint>
+          {tele?.enabled ? (
+            <>
+              <Mono>
+                install {String(tele.installId ?? '—')} · session {String(tele.sessionId ?? '—')}
+              </Mono>
+              <Mono>
+                {Number(tele.eventsSent ?? 0)} events sent · {Number(tele.breadcrumbs ?? 0)}{' '}
+                breadcrumbs held
+              </Mono>
+              {issues.length ? (
+                <Mono className="err">
+                  issues this session: {issues.map((i) => `${i.key}×${i.count}`).join(', ')}
+                </Mono>
+              ) : (
+                <Mono>no issues recorded this session</Mono>
+              )}
+              {tele.deliveryFailed ? <Mono className="err">delivery failing</Mono> : null}
+            </>
+          ) : null}
         </Card>
 
         {devMode ? (

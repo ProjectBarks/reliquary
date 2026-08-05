@@ -1,6 +1,7 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 
 import { get as httpsGet } from 'https'
+import { telemetry } from '../telemetry/Telemetry'
 import { ScryConnection } from './connection'
 import { CodexClient, type DeckAdvice } from '../codex/CodexClient'
 import {
@@ -117,7 +118,10 @@ export class Sts2ScryProvider {
     this.cb.emit({ key: 'sts2.layoutState', value: { source: 'none', panels: [] } })
     // The Codex aggregates are game-agnostic — prime immediately so the advisor
     // is warm (and the dashboard shows status) before the game is even detected.
-    void this.codex.prime().catch((err) => console.warn('[codex-provider] prime failed', err))
+    void this.codex.prime().catch((err) => {
+          console.warn('[codex-provider] prime failed', err)
+          telemetry.issue('codex_prime_failed', 'warn', {}, err)
+        })
     this.detect()
     this.detectTimer = setInterval(() => this.detect(), DETECT_MS)
     // Self-heal a failed/incomplete prime (offline at launch, API rebuilding):
@@ -163,6 +167,7 @@ export class Sts2ScryProvider {
       this.detectInner()
     } catch (err) {
       console.error('[codex-provider] detect failed', err)
+      telemetry.issue('scry_detect_failed', 'error', {}, err)
     }
   }
 
@@ -180,17 +185,28 @@ export class Sts2ScryProvider {
       active: proc.active
     })
     if (!this.conn.isConnected() || this.conn.connectedPid !== proc.pid) {
-      if (this.conn.connect(proc.pid)) {
+      const connected = this.conn.connect(proc.pid)
+      telemetry.capture('scry_connect', { ok: connected, had_prior: this.conn.connectedPid != null })
+      if (!connected) {
+        // We can see the game but cannot attach — usually a permissions or
+        // anti-cheat interaction, and completely invisible to the user.
+        telemetry.issue('scry_connect_failed', 'error', { scry_error: this.scryError })
+      }
+      if (connected) {
         this.errorStreak = 0
         this.fetchCardData()
         // Prime the Codex snapshot (cached per API version; cheap no-op if fresh).
-        void this.codex.prime().catch((err) => console.warn('[codex-provider] prime failed', err))
+        void this.codex.prime().catch((err) => {
+          console.warn('[codex-provider] prime failed', err)
+          telemetry.issue('codex_prime_failed', 'warn', {}, err)
+        })
         this.startPolling()
       }
     }
   }
 
   private handleProcessGone(): void {
+    telemetry.capture('scry_process_gone', { error_streak: this.errorStreak })
     this.conn.disconnect()
     if (this.pollTimer) clearTimeout(this.pollTimer)
     this.pollTimer = null
@@ -220,6 +236,7 @@ export class Sts2ScryProvider {
         // poll() already handles read errors; this is a last-resort guard so a
         // throw from the error path (e.g. an emit) can never stop the loop.
         console.error('[codex-provider] poll tick failed', err)
+        telemetry.issue('poll_tick_failed', 'error', {}, err)
       } finally {
         // Always reschedule while running so one bad tick can't kill the loop.
         if (this.running && this.conn.isConnected()) {
@@ -248,9 +265,14 @@ export class Sts2ScryProvider {
       if (this.errorStreak === 1) {
         console.warn('[codex-provider] poll read failed', err)
       }
+      // Aggregated inside telemetry, so a persistent fault reports occurrences
+      // 1, 2, 5, 25… rather than ~6 events a second.
+      telemetry.issue('poll_read_failed', 'error', { error_streak: this.errorStreak }, err)
       if (this.errorStreak === RESTART_AFTER_ERRORS) {
+        telemetry.capture('scry_connection_restart', { error_streak: this.errorStreak })
         this.conn.restart()
       } else if (this.errorStreak >= REDETECT_AFTER_ERRORS) {
+        telemetry.issue('scry_redetect_after_errors', 'warn', { error_streak: this.errorStreak })
         this.handleProcessGone()
       }
     }
@@ -526,6 +548,7 @@ export class Sts2ScryProvider {
         this.adviceInFlight.delete(key)
         this.adviceBackoff.set(key, Date.now() + 15_000)
         console.warn('[codex-provider] advise handler failed', err)
+        telemetry.issue('draft_advice_failed', 'warn', {}, err)
       })
     return key
   }

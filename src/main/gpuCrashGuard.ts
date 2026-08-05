@@ -1,6 +1,7 @@
 import { app } from 'electron'
 import { join } from 'path'
 import { readFileSync, writeFileSync } from 'fs'
+import { telemetry } from './telemetry/Telemetry'
 
 /**
  * Survives the transparent-window GPU device-loss that otherwise reaps the app
@@ -51,9 +52,21 @@ function writeState(s: CrashState): void {
  */
 export function applyGpuCrashMitigation(): void {
   if (readState().disableHwa) {
+    hwaDisabled = true
     app.disableHardwareAcceleration()
     console.warn('[spectra] hardware acceleration disabled after repeated GPU crashes')
   }
+}
+
+let hwaDisabled = false
+
+/**
+ * Whether this launch is running without hardware acceleration because earlier
+ * runs kept losing the GPU. It changes how everything renders, so it belongs on
+ * every report as context rather than being buried in a one-off warning.
+ */
+export function gpuAccelerationDisabled(): boolean {
+  return hwaDisabled
 }
 
 /**
@@ -72,10 +85,23 @@ export function installGpuCrashGuard(nowMs: () => number = Date.now): void {
     console.error(
       `[spectra] ${label} — crash #${s.crashes}${s.disableHwa ? ' (HWA off next launch)' : ''}`
     )
+    // This is the crash class with no JS stack, so the surrounding state — how
+    // many times it has happened, whether HWA is about to be turned off, what
+    // the GPU reported — is the whole diagnosis.
+    telemetry.issue('gpu_crash_guard_trip', 'fatal', {
+      label,
+      crash_count: s.crashes,
+      hwa_disabled_next_launch: s.disableHwa,
+      relaunching: !relaunched,
+      gpu_feature_status: telemetry.guard('gpu_status', () => app.getGPUFeatureStatus(), null)
+    })
     if (!relaunched) {
       relaunched = true
-      app.relaunch()
-      app.exit(0)
+      // Give the batch a moment to leave the process before we exit it.
+      void telemetry.shutdown('gpu-crash-relaunch').finally(() => {
+        app.relaunch()
+        app.exit(0)
+      })
     }
   }
 
