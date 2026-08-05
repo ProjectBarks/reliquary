@@ -14,7 +14,7 @@ import {
 } from './gpuCrashGuard'
 import { SettingsStore } from './settings/SettingsStore'
 import { AutoUpdater } from './updater/AutoUpdater'
-import { telemetry } from './telemetry/Telemetry'
+import { APP_VERSION, telemetry } from './telemetry/Telemetry'
 import { installAppTelemetry, installProcessTelemetry } from './telemetry/install'
 import {
   IPC,
@@ -99,7 +99,8 @@ function diagnostics(): DiagnosticsState {
     gamePid: usingScry ? processState.pid : null,
     scenario: stub?.getScenario() ?? 'combat',
     codex: usingScry ? scryProvider?.codexStatus ?? null : null,
-    telemetry: telemetry.status()
+    telemetry: telemetry.status(),
+    appVersion: APP_VERSION
   }
 }
 

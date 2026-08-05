@@ -1,5 +1,6 @@
+import { useEffect, useState } from 'react'
 import styled from 'styled-components'
-import type { StubScenario, Sts2Settings } from '@shared/types'
+import type { StubScenario, Sts2Settings, UpdateState } from '@shared/types'
 import { useDiagnostics, useIpc, useTracker } from '../hooks/useIpc'
 import { Card, CardTitle, Hint, Mono, Status } from './ui'
 import { JsonView } from './JsonView'
@@ -40,6 +41,10 @@ export function Debug(): JSX.Element {
 
   const scenario = diag?.scenario ?? 'combat'
   const devMode = diag?.mode === 'stub'
+
+  const [upd, setUpd] = useState<UpdateState | null>(null)
+  const [checked, setChecked] = useState(false)
+  useEffect(() => window.spectra?.onUpdate(setUpd), [])
 
   const tele = diag?.telemetry as
     | {
@@ -100,6 +105,33 @@ export function Debug(): JSX.Element {
             resolved
           </Mono>
           {diag?.codex?.error ? <Mono className="err">{diag.codex.error}</Mono> : null}
+        </Card>
+
+        <Card>
+          <CardTitle>Updates</CardTitle>
+          <Mono>running version {String(diag?.appVersion ?? '—')}</Mono>
+          <Status ok={upd?.status !== 'error'}>{updateLabel(upd, checked)}</Status>
+          {upd?.error ? <Mono className="err">{upd.error}</Mono> : null}
+          <Hint>
+            Updates download in the background and install when you quit, so a new build never
+            interrupts a run.
+          </Hint>
+          <Buttons>
+            <ScenarioBtn
+              $active={false}
+              onClick={() => {
+                setChecked(true)
+                window.spectra?.updateAction('check')
+              }}
+            >
+              Check for updates
+            </ScenarioBtn>
+            {upd?.status === 'ready' ? (
+              <ScenarioBtn $active onClick={() => window.spectra?.updateAction('install')}>
+                Restart &amp; install {upd.version}
+              </ScenarioBtn>
+            ) : null}
+          </Buttons>
         </Card>
 
         <Card>
@@ -263,3 +295,25 @@ const DumpLabel = styled.div`
   color: var(--accent-teal);
   margin-bottom: 4px;
 `
+
+/** Human-readable one-liner for the current updater state. */
+function updateLabel(u: UpdateState | null, checked: boolean): string {
+  switch (u?.status) {
+    case 'checking':
+      return 'Checking for updates…'
+    case 'downloading':
+      return `Downloading ${u.version ?? 'update'}${u.percent ? ` — ${u.percent}%` : ''}`
+    case 'ready':
+      return `${u.version} ready — installs when you quit`
+    case 'current':
+      return 'Up to date'
+    case 'error':
+      return 'Update check failed'
+    case 'dev-disabled':
+      return 'Not available in a development run'
+    case 'disabled':
+      return 'Disabled by SPECTRA_NO_UPDATE'
+    default:
+      return checked ? 'Checking…' : 'Idle'
+  }
+}

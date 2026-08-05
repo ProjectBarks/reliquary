@@ -119,7 +119,9 @@ after launch and every few hours, downloads new versions in the background, and 
 underneath a run in progress would be worse than shipping the fix a session later.
 
 A pill in the titlebar shows download progress and turns into a **Restart** button once an update
-is staged. Ignoring it is fine; the update still installs the next time you close the app.
+is staged. Ignoring it is fine; the update still installs the next time you close the app. The
+**Debug** tab shows the running version and has a **Check for updates** button for checking on
+demand.
 
 Set `SPECTRA_NO_UPDATE=1` to disable update checks.
 

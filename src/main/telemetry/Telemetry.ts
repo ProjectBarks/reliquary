@@ -39,7 +39,8 @@ declare const __APP_VERSION__: string | undefined
 const BUILD_KEY = typeof __POSTHOG_KEY__ === 'string' ? __POSTHOG_KEY__ : ''
 const BUILD_HOST = typeof __POSTHOG_HOST__ === 'string' ? __POSTHOG_HOST__ : ''
 const DEFAULT_HOST = 'https://us.i.posthog.com'
-const APP_VERSION = typeof __APP_VERSION__ === 'string' ? __APP_VERSION__ : '0.0.0'
+/** Build-pinned app version. app.getVersion() reports Electron's in a dev run. */
+export const APP_VERSION = typeof __APP_VERSION__ === 'string' ? __APP_VERSION__ : '0.0.0'
 
 export type Severity = 'debug' | 'info' | 'warn' | 'error' | 'fatal'
 
@@ -151,9 +152,15 @@ class TelemetryClient {
   init(): void {
     try {
       // Runtime env wins over the baked-in build value, so a user can point a
-      // debug build at their own project without a rebuild.
-      const key = process.env['POSTHOG_KEY'] ?? process.env['SPECTRA_POSTHOG_KEY'] ?? BUILD_KEY
-      const host = process.env['POSTHOG_HOST'] ?? (BUILD_HOST || DEFAULT_HOST)
+      // debug build at their own project without a rebuild. An env var set to
+      // an empty string counts as unset — `??` would treat '' as a real value
+      // and silently disable reporting, which is how v0.2.0 shipped keyless.
+      const env = (n: string): string => {
+        const v = process.env[n]
+        return v != null && v.trim() !== '' ? v : ''
+      }
+      const key = env('POSTHOG_KEY') || env('SPECTRA_POSTHOG_KEY') || BUILD_KEY
+      const host = env('POSTHOG_HOST') || BUILD_HOST || DEFAULT_HOST
       const optedOut = process.env['SPECTRA_TELEMETRY'] === '0'
       const who = installId()
       this.id = who.id

@@ -221,6 +221,8 @@ export interface DiagnosticsState {
   overlayBounds: WindowBounds | null
   scryModuleLoaded: boolean
   scryLoadError: string | null
+  /** The running app version (build-pinned, not Electron's). */
+  appVersion?: string
   /** Telemetry client state, surfaced in the Debug tab. */
   telemetry?: Record<string, unknown>
   gameDetected: boolean

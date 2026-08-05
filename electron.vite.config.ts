@@ -9,6 +9,37 @@ const pkg = JSON.parse(readFileSync(resolve('package.json'), 'utf8')) as { versi
 const POSTHOG_PROJECT_KEY = 'phc_zUEL8ZYufd2os6ckVP5V5fGN8mrpvkyJMhAzkAzqz7wq'
 const POSTHOG_HOST = 'https://us.i.posthog.com'
 
+/**
+ * Resolve a build-time override.
+ *
+ * `??` is wrong here: GitHub Actions materialises `env: FOO: ${{ vars.UNSET }}`
+ * as an EMPTY STRING, not an absent variable, so `?? default` silently keeps the
+ * empty value and compiles the key out of the build. v0.2.0 shipped with no
+ * telemetry key for exactly this reason. Empty means "unset"; opting out is an
+ * explicit flag, never an accident.
+ */
+const buildEnv = (name: string, fallback: string): string => {
+  if (process.env['POSTHOG_DISABLED'] === '1') return ''
+  const v = process.env[name]
+  return v != null && v.trim() !== '' ? v : fallback
+}
+
+const resolvedKey = buildEnv('POSTHOG_KEY', POSTHOG_PROJECT_KEY)
+
+// Fail loudly rather than shipping a build that reports nothing. A silently
+// keyless release looks completely healthy from the outside — the app runs, the
+// installer works, and no diagnostics ever arrive to tell you otherwise.
+if (!resolvedKey && process.env['POSTHOG_DISABLED'] !== '1') {
+  throw new Error(
+    'Build would produce no PostHog key. Set POSTHOG_KEY, or POSTHOG_DISABLED=1 to opt out deliberately.'
+  )
+}
+console.log(
+  resolvedKey
+    ? `[build] telemetry key embedded (${resolvedKey.slice(0, 12)}…) → ${buildEnv('POSTHOG_HOST', POSTHOG_HOST)}`
+    : '[build] telemetry disabled (POSTHOG_DISABLED=1)'
+)
+
 export default defineConfig({
   main: {
     // Baked in at build time so release builds report without the user needing
@@ -21,8 +52,8 @@ export default defineConfig({
       // app.getVersion() returns Electron's version in an unpackaged run, which
       // would make dev and release reports disagree about what "version" means.
       __APP_VERSION__: JSON.stringify(pkg.version),
-      __POSTHOG_KEY__: JSON.stringify(process.env['POSTHOG_KEY'] ?? POSTHOG_PROJECT_KEY),
-      __POSTHOG_HOST__: JSON.stringify(process.env['POSTHOG_HOST'] ?? POSTHOG_HOST)
+      __POSTHOG_KEY__: JSON.stringify(resolvedKey),
+      __POSTHOG_HOST__: JSON.stringify(buildEnv('POSTHOG_HOST', POSTHOG_HOST))
     },
     build: {
       rollupOptions: {

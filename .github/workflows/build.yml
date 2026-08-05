@@ -35,11 +35,25 @@ jobs:
       - name: Build renderer + main (electron-vite)
         run: npm run build
         env:
-          # Optional override. The repo ships a working project key as the
-          # default, so this only needs setting to point CI at a different
-          # PostHog project (or to '' to build with reporting disabled).
+          # Optional override, only to point CI at a different PostHog project.
+          # An unset repo variable materialises as an EMPTY STRING here, which is
+          # why the config treats empty as "unset" and falls back to the shipped
+          # key — v0.2.0 shipped with telemetry compiled out because it did not.
           POSTHOG_KEY: ${{ vars.POSTHOG_KEY }}
           POSTHOG_HOST: ${{ vars.POSTHOG_HOST }}
+
+      # The key is a public, write-only project key and is meant to be in the
+      # binary. Assert it actually is, so a keyless build can never ship again:
+      # such a build looks perfectly healthy and just silently reports nothing.
+      - name: Verify telemetry key is embedded in the bundle
+        shell: bash
+        run: |
+          if grep -q "phc_" out/main/index.js; then
+            echo "OK: PostHog key present in out/main/index.js"
+          else
+            echo "FAIL: no PostHog key in the built bundle" >&2
+            exit 1
+          fi
 
       # On a v* tag this publishes the installer AND latest.yml to the GitHub
       # Release. latest.yml is the update feed electron-updater polls, so a
