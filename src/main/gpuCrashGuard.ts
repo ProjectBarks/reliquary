@@ -106,7 +106,11 @@ export function installGpuCrashGuard(nowMs: () => number = Date.now): void {
   }
 
   app.on('child-process-gone', (_e, details) => {
-    if (details.type === 'GPU' && details.reason !== 'clean-exit') {
+    // 'killed' means something outside the app terminated the process — Task
+    // Manager, a `taskkill`, a debugger. Counting those as GPU crashes lets an
+    // ordinary force-quit trip the hardware-acceleration disable, which then
+    // degrades rendering for every later run. Only genuine device loss counts.
+    if (details.type === 'GPU' && details.reason !== 'clean-exit' && details.reason !== 'killed') {
       onCrash(`GPU process gone (${details.reason})`)
     }
   })
