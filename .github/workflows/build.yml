@@ -34,6 +34,12 @@ jobs:
 
       - name: Build renderer + main (electron-vite)
         run: npm run build
+        env:
+          # Optional override. The repo ships a working project key as the
+          # default, so this only needs setting to point CI at a different
+          # PostHog project (or to '' to build with reporting disabled).
+          POSTHOG_KEY: ${{ vars.POSTHOG_KEY }}
+          POSTHOG_HOST: ${{ vars.POSTHOG_HOST }}
 
       - name: Package Windows installer (electron-builder, NSIS)
         run: npx electron-builder --win nsis --publish never

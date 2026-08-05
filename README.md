@@ -127,13 +127,16 @@ about the run you are playing — no deck, cards, or game content.
 Turn it off entirely by setting `SPECTRA_TELEMETRY=0`. The **Debug** tab shows exactly what the
 reporter is doing, including every issue recorded in the current session.
 
-Building with reporting enabled requires a PostHog project key at build time:
+Builds ship with a PostHog *project* key baked in, so reporting works out of the box. That key is
+write-only — it can send events and nothing else, grants no read access, and is extractable from
+any built binary regardless of where it is stored, so there is nothing gained by hiding it.
+
+To point a build at a different project, or to build with reporting compiled out entirely:
 
 ```bash
-POSTHOG_KEY=phc_yourkey npm run dist
+POSTHOG_KEY=phc_yourkey npm run dist   # your own project
+POSTHOG_KEY= npm run dist              # nothing is ever sent
 ```
-
-Without that key, builds simply never send anything.
 
 ## Disclaimer
 
