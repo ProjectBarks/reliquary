@@ -56,6 +56,10 @@ export class AutoUpdater {
     autoUpdater.autoDownload = true
     // Install on quit, not mid-session — see the class comment.
     autoUpdater.autoInstallOnAppQuit = true
+    // We ship a full NSIS installer, never a web installer. This is an updater
+    // RUNTIME property — it is not an electron-builder `nsis` build option, and
+    // putting it there fails the build on an unknown config key.
+    autoUpdater.disableWebInstaller = true
     autoUpdater.logger = {
       info: (m: unknown) => console.log(`[updater] ${String(m)}`),
       warn: (m: unknown) => console.warn(`[updater] ${String(m)}`),

@@ -57,8 +57,7 @@
       "shortcutName": "Reliquary",
       "uninstallDisplayName": "Reliquary",
       "installerIcon": "build/icon.ico",
-      "uninstallerIcon": "build/icon.ico",
-      "disableWebInstaller": true
+      "uninstallerIcon": "build/icon.ico"
     },
     "mac": {
       "icon": "build/icon.png",
