@@ -10,6 +10,14 @@
 </p>
 
 <p align="center">
+  <a href="https://github.com/ProjectBarks/reliquary/releases/latest">
+    <img alt="Download Reliquary for Windows"
+         src="https://img.shields.io/badge/Download%20for%20Windows-b47bff?style=for-the-badge&logo=windows&logoColor=white" />
+  </a>
+</p>
+
+<p align="center">
+  <a href="https://github.com/ProjectBarks/reliquary/releases/latest"><img alt="Latest release" src="https://img.shields.io/github/v/release/ProjectBarks/reliquary?color=b47bff&label=latest" /></a>
   <img alt="Electron" src="https://img.shields.io/badge/Electron-33-47848F?logo=electron&logoColor=white" />
   <img alt="React" src="https://img.shields.io/badge/React-18-61DAFB?logo=react&logoColor=black" />
   <img alt="TypeScript" src="https://img.shields.io/badge/TypeScript-5-3178C6?logo=typescript&logoColor=white" />
@@ -66,6 +74,19 @@ rebuilt from scratch on Electron + React.
 - Slay the Spire 2
 
 ## Getting started
+
+### Install (just want to use it)
+
+Grab the installer from the
+[latest release](https://github.com/ProjectBarks/reliquary/releases/latest) —
+`Reliquary-<version>-setup.exe` — and run it. Everything it needs is bundled; there are no
+extra steps. Launch Reliquary, then start Slay the Spire 2 (either order works).
+
+Windows SmartScreen will warn on first run because the installer is unsigned: choose
+**More info → Run anyway**. From then on Reliquary
+[keeps itself up to date](#updates) automatically.
+
+### Build from source (development)
 
 ```bash
 npm install
