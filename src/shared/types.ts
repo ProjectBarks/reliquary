@@ -268,8 +268,34 @@ export const IPC = {
   /** main -> renderer: dashboard maximized-state changed (boolean) */
   WindowMaximized: 'spectra:window-maximized',
   /** renderer -> main: a renderer error / diagnostic event to report */
-  Telemetry: 'spectra:telemetry'
+  Telemetry: 'spectra:telemetry',
+  /** main -> renderer: over-the-air update status changed */
+  Update: 'spectra:update',
+  /** renderer -> main: check for an update now, or install a downloaded one */
+  UpdateAction: 'spectra:update-action'
 } as const
+
+/** What the auto-updater is currently doing. */
+export interface UpdateState {
+  status:
+    | 'idle'
+    | 'checking'
+    | 'downloading'
+    | 'ready'
+    | 'current'
+    | 'error'
+    /** Unpackaged run — there is no installer to replace. */
+    | 'dev-disabled'
+    /** Turned off via SPECTRA_NO_UPDATE. */
+    | 'disabled'
+  /** The version being downloaded or ready to install. */
+  version: string | null
+  /** Download progress 0-100. */
+  percent: number
+  error: string | null
+}
+
+export type UpdateAction = 'check' | 'install'
 
 /**
  * A diagnostic event raised in a renderer and forwarded to the main process,
@@ -291,6 +317,9 @@ export interface RendererTelemetryEvent {
 export interface SpectraApi {
   /** Report a renderer error or diagnostic event to the main-process telemetry. */
   report(event: RendererTelemetryEvent): void
+
+  onUpdate(cb: (state: UpdateState) => void): () => void
+  updateAction(action: UpdateAction): void
   onData(cb: (snapshot: KeyedSnapshot) => void): () => void
   onTracker(cb: (state: TrackerState) => void): () => void
   onDiagnostics(cb: (state: DiagnosticsState) => void): () => void

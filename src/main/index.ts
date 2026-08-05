@@ -13,11 +13,13 @@ import {
   installGpuCrashGuard
 } from './gpuCrashGuard'
 import { SettingsStore } from './settings/SettingsStore'
+import { AutoUpdater } from './updater/AutoUpdater'
 import { telemetry } from './telemetry/Telemetry'
 import { installAppTelemetry, installProcessTelemetry } from './telemetry/install'
 import {
   IPC,
   type RendererTelemetryEvent,
+  type UpdateAction,
   type DiagnosticsState,
   type KeyedSnapshot,
   type Sts2Key,
@@ -55,6 +57,7 @@ let overlayHidden = false
 let scryProvider: Sts2ScryProvider | null = null
 let stub: Sts2Stub | null = null
 let settingsStore: SettingsStore | null = null
+let updater: AutoUpdater | null = null
 let usingScry = false
 
 let scryLoaded = false
@@ -244,6 +247,7 @@ function wireIpc(): void {
     // Replay retained log history and current window state to this window.
     const history = logHistory()
     if (history.length) wc.send(IPC.Log, history)
+    if (updater) wc.send(IPC.Update, updater.current)
     dashboard.emitMaximized()
   })
   on(IPC.SetScenario, (_e, scenario: StubScenario) => {
@@ -257,6 +261,11 @@ function wireIpc(): void {
     telemetry.capture('settings_changed', { keys: Object.keys(patch ?? {}), patch })
     emitSnapshot({ key: 'sts2.settings', value: settingsStore.patch(patch) })
   })
+  on(IPC.UpdateAction, (_e, action: UpdateAction) => {
+    if (action === 'install') updater?.installNow()
+    else updater?.check()
+  })
+
   on(IPC.WindowControl, (_e, action: WindowAction) => {
     dashboard.control(action)
   })
@@ -401,6 +410,11 @@ if (hasLock)
   // Seed the renderer with persisted settings (single owner; both modes).
   emitSnapshot({ key: 'sts2.settings', value: settingsStore.get() })
 
+  // Over-the-air updates from GitHub Releases. Downloads in the background and
+  // installs on quit, so a new build never interrupts a run in progress.
+  updater = new AutoUpdater((state) => broadcast(IPC.Update, state))
+  updater.start()
+
   const bound = globalShortcut.register(HIDE_OVERLAY_ACCELERATOR, toggleOverlayHidden)
   if (!bound) {
     console.warn(
@@ -426,6 +440,7 @@ app.on('will-quit', (e) => {
   globalShortcut.unregisterAll()
   scryProvider?.stop()
   stub?.stop()
+  updater?.stop()
   // Hold the quit briefly so the final batch — including the exit-time issue
   // summaries, which are the only record of failures that never crossed a
   // report threshold — actually leaves the process.

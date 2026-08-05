@@ -41,17 +41,23 @@ jobs:
           POSTHOG_KEY: ${{ vars.POSTHOG_KEY }}
           POSTHOG_HOST: ${{ vars.POSTHOG_HOST }}
 
+      # On a v* tag this publishes the installer AND latest.yml to the GitHub
+      # Release. latest.yml is the update feed electron-updater polls, so a
+      # release without it is invisible to already-installed clients.
       - name: Package Windows installer (electron-builder, NSIS)
-        run: npx electron-builder --win nsis --publish never
+        run: npx electron-builder --win nsis --publish ${{ startsWith(github.ref, 'refs/tags/v') && 'always' || 'never' }}
         env:
           # Unsigned build — don't attempt cert auto-discovery.
           CSC_IDENTITY_AUTO_DISCOVERY: false
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Upload installer artifact
         uses: actions/upload-artifact@v4
         with:
           name: Reliquary-windows-installer
-          path: release/*.exe
+          path: |
+            release/*.exe
+            release/latest.yml
           if-no-files-found: error
 
       # On a version tag (e.g. v0.1.0), attach the installer to a GitHub Release.

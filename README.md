@@ -110,6 +110,19 @@ launches: the dashboard runs, `SPECTRA_STUB` demo mode works, and the overlay wa
 Electron 33 · React 18 · TypeScript · styled-components · electron-vite · electron-builder ·
 PostHog (diagnostics).
 
+## Updates
+
+Reliquary updates itself over the air from GitHub Releases via
+[`electron-updater`](https://www.electron.build/docs/features/auto-update/). It checks shortly
+after launch and every few hours, downloads new versions in the background, and installs them
+**on quit** — never mid-session, because the overlay sits on top of a running game and relaunching
+underneath a run in progress would be worse than shipping the fix a session later.
+
+A pill in the titlebar shows download progress and turns into a **Restart** button once an update
+is staged. Ignoring it is fine; the update still installs the next time you close the app.
+
+Set `SPECTRA_NO_UPDATE=1` to disable update checks.
+
 ## Diagnostics
 
 Reliquary reads another process's memory and paints a click-through window over a game. When

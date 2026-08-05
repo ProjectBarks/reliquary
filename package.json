@@ -1,7 +1,7 @@
 {
   "name": "reliquary",
-  "version": "0.1.0",
-  "description": "Reliquary — a transparent, click-through Slay the Spire 2 companion overlay: deck tracker, draft advice, and attack forecasts.",
+  "version": "0.2.0",
+  "description": "Reliquary \u2014 a transparent, click-through Slay the Spire 2 companion overlay: deck tracker, draft advice, and attack forecasts.",
   "productName": "Reliquary",
   "main": "./out/main/index.js",
   "author": "Brandon Barker",
@@ -19,7 +19,7 @@
   "build": {
     "appId": "me.brandonbarker.reliquary",
     "productName": "Reliquary",
-    "copyright": "© 2026 Brandon Barker",
+    "copyright": "\u00a9 2026 Brandon Barker",
     "directories": {
       "output": "release",
       "buildResources": "build"
@@ -69,9 +69,17 @@
         "AppImage"
       ],
       "category": "Game"
-    }
+    },
+    "publish": [
+      {
+        "provider": "github",
+        "owner": "ProjectBarks",
+        "repo": "reliquary"
+      }
+    ]
   },
   "dependencies": {
+    "electron-updater": "^6.8.9",
     "posthog-node": "^5.47.10",
     "react-router-dom": "^6.28.0",
     "styled-components": "^5.3.11"

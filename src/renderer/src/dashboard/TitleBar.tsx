@@ -1,5 +1,6 @@
 import styled from 'styled-components'
 import { useMaximized } from '../hooks/useIpc'
+import { UpdateBanner } from './UpdateBanner'
 
 /** The three top-level dashboard tabs. */
 export type TabId = 'home' | 'debug' | 'logs'
@@ -49,7 +50,11 @@ export function TitleBar({
         ))}
       </Tabs>
 
-      <Controls>
+      {/* Balanced side columns keep the tabs optically centred whether or not
+          the update pill is showing, so nothing shifts when one appears. */}
+      <Right>
+        <UpdateBanner />
+        <Controls>
         <Ctl onClick={ctl('minimize')} title="Minimize" aria-label="Minimize">
           <svg viewBox="0 0 12 12">
             <line x1="2.5" y1="6" x2="9.5" y2="6" />
@@ -72,7 +77,8 @@ export function TitleBar({
             <line x1="9" y1="3" x2="3" y2="9" />
           </svg>
         </Ctl>
-      </Controls>
+        </Controls>
+      </Right>
     </Bar>
   )
 }
@@ -89,6 +95,7 @@ const Bar = styled.header`
 `
 
 const Brand = styled.div`
+  flex: 1 1 0;
   display: flex;
   align-items: center;
   gap: 9px;
@@ -120,10 +127,20 @@ const Gem = styled.svg`
 
 const Tabs = styled.nav`
   -webkit-app-region: no-drag;
-  flex: 1;
+  flex: 0 0 auto;
   display: flex;
   justify-content: center;
   gap: 6px;
+`
+
+/** Right column, weighted to match Brand so Tabs stays centred. */
+const Right = styled.div`
+  flex: 1 1 0;
+  min-width: 150px;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 10px;
 `
 
 const Tab = styled.button<{ $active: boolean }>`
