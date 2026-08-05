@@ -154,7 +154,7 @@ class TelemetryClient {
       // Runtime env wins over the baked-in build value, so a user can point a
       // debug build at their own project without a rebuild. An env var set to
       // an empty string counts as unset — `??` would treat '' as a real value
-      // and silently disable reporting, which is how v0.2.0 shipped keyless.
+      // and silently disable reporting for anyone who exports the var blank.
       const env = (n: string): string => {
         const v = process.env[n]
         return v != null && v.trim() !== '' ? v : ''

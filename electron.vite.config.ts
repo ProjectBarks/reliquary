@@ -12,11 +12,12 @@ const POSTHOG_HOST = 'https://us.i.posthog.com'
 /**
  * Resolve a build-time override.
  *
- * `??` is wrong here: GitHub Actions materialises `env: FOO: ${{ vars.UNSET }}`
- * as an EMPTY STRING, not an absent variable, so `?? default` silently keeps the
- * empty value and compiles the key out of the build. v0.2.0 shipped with no
- * telemetry key for exactly this reason. Empty means "unset"; opting out is an
- * explicit flag, never an accident.
+ * `??` is a footgun here. An env var set to an empty string is still *present*,
+ * so `process.env.FOO ?? DEFAULT` keeps the '' and compiles the key out. CI
+ * passes `env: FOO: ${{ vars.UNSET }}`, and whether that arrives as absent or
+ * empty depends on the runner — a difference that would silently decide whether
+ * a release reports anything. Empty means "unset"; opting out is an explicit
+ * flag, never an accident of shell semantics.
  */
 const buildEnv = (name: string, fallback: string): string => {
   if (process.env['POSTHOG_DISABLED'] === '1') return ''
