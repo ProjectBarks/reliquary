@@ -162,6 +162,12 @@ export interface Sts2LayoutState {
 
 /** User-toggleable overlay switches (mirrors the sts2.enable* settings). */
 export interface Sts2Settings {
+  /**
+   * Send anonymous crash/error reports. A privacy control belongs in the UI —
+   * requiring an environment variable to turn one off is not a real choice for
+   * the people it protects. SPECTRA_TELEMETRY=0 still forces it off.
+   */
+  enableTelemetry: boolean
   enableDeckTracker: boolean
   enableAttackSummary: boolean
   enableCardRewardStats: boolean
@@ -172,6 +178,7 @@ export interface Sts2Settings {
 
 /** Single source of truth for default toggles (shared by the store + providers). */
 export const DEFAULT_SETTINGS: Sts2Settings = {
+  enableTelemetry: true,
   enableDeckTracker: true,
   enableAttackSummary: true,
   enableCardRewardStats: true,

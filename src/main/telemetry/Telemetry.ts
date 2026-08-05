@@ -147,6 +147,7 @@ class TelemetryClient {
   private logTail: string[] = []
   private sentCount = 0
   private failed = false
+  private optedOut = false
 
   /** Call once, after app is ready. Safe to call when no key is configured. */
   init(): void {
@@ -198,7 +199,25 @@ class TelemetryClient {
   }
 
   isEnabled(): boolean {
-    return this.enabled
+    return this.enabled && !this.optedOut
+  }
+
+  /**
+   * Apply the user's persisted choice. Kept separate from init() because
+   * settings load after the client is constructed, and because flipping it must
+   * take effect immediately rather than at next launch.
+   */
+  setOptOut(optOut: boolean): void {
+    if (this.optedOut === optOut) return
+    this.optedOut = optOut
+    console.log(`[telemetry] ${optOut ? 'paused by user setting' : 'resumed by user setting'}`)
+    if (!optOut) return
+    // Drop anything buffered so opting out does not ship one last batch.
+    try {
+      void this.client?.flush().catch(() => {})
+    } catch {
+      /* never throw */
+    }
   }
 
   /** Merge properties attached to every subsequent event. */
@@ -252,7 +271,7 @@ class TelemetryClient {
 
   /** Fire a product/diagnostic event. */
   capture(event: string, props: Record<string, unknown> = {}): void {
-    if (!this.enabled || !this.client) return
+    if (!this.enabled || this.optedOut || !this.client) return
     try {
       this.sentCount++
       this.client.capture({
@@ -351,7 +370,8 @@ class TelemetryClient {
   /** A snapshot of what telemetry itself is doing, for the Debug tab. */
   status(): Record<string, unknown> {
     return {
-      enabled: this.enabled,
+      enabled: this.enabled && !this.optedOut,
+      optedOut: this.optedOut,
       installId: this.id ? this.id.slice(0, 8) + '…' : null,
       sessionId: this.sessionId.slice(0, 8) + '…',
       eventsSent: this.sentCount,

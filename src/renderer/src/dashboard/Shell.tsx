@@ -2,8 +2,7 @@ import { useState } from 'react'
 import styled from 'styled-components'
 import { TitleBar, type TabId } from './TitleBar'
 import { Home } from './Home'
-import { Debug } from './Debug'
-import { Logs } from './Logs'
+import { Settings } from './Settings'
 import { ErrorBoundary, reportEvent } from '../telemetry'
 
 /**
@@ -28,8 +27,7 @@ export function Shell(): JSX.Element {
             Logs tab with it, since Logs is where a user goes to describe it. */}
         <ErrorBoundary name={`tab:${tab}`} fallback={<TabCrashed />}>
           {tab === 'home' && <Home />}
-          {tab === 'debug' && <Debug />}
-          {tab === 'logs' && <Logs />}
+          {tab === 'settings' && <Settings />}
         </ErrorBoundary>
       </Content>
     </Frame>

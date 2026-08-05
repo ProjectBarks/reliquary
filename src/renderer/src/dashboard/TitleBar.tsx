@@ -3,12 +3,11 @@ import { useMaximized } from '../hooks/useIpc'
 import { UpdateBanner } from './UpdateBanner'
 
 /** The three top-level dashboard tabs. */
-export type TabId = 'home' | 'debug' | 'logs'
+export type TabId = 'home' | 'settings'
 
 const TABS: { id: TabId; label: string }[] = [
   { id: 'home', label: 'Home' },
-  { id: 'debug', label: 'Debug' },
-  { id: 'logs', label: 'Logs' }
+  { id: 'settings', label: 'Settings' }
 ]
 
 /**
@@ -100,7 +99,7 @@ const Brand = styled.div`
   align-items: center;
   gap: 9px;
   min-width: 150px;
-  font-family: 'Kreon', serif;
+  font-family: var(--font-display);
   font-size: 18px;
   letter-spacing: 0.5px;
   color: var(--sts-color-cream);
@@ -148,7 +147,7 @@ const Tab = styled.button<{ $active: boolean }>`
   cursor: pointer;
   padding: 7px 18px;
   border-radius: 8px;
-  font-family: 'Kreon', serif;
+  font-family: var(--font-display);
   font-size: 15px;
   letter-spacing: 0.5px;
   color: ${(p) => (p.$active ? '#1a1613' : 'var(--sts-color-cream)')};

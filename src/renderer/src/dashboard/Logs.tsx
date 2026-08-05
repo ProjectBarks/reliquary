@@ -4,9 +4,12 @@ import type { LogLine } from '@shared/types'
 import { useLogs } from '../hooks/useIpc'
 
 /**
- * Logs tab: a live view of captured main-process console output. Streams from
- * the IPC log bus (history replayed on mount), with level filtering, a clear
- * (view-only) cutoff, and sticky auto-scroll that releases when you scroll up.
+ * Live view of captured main-process console output. Streams from the IPC log
+ * bus (history replayed on mount), with level filtering, a view-only clear
+ * cutoff, and sticky auto-scroll that releases the moment you scroll up.
+ *
+ * `embedded` drops the outer padding so it can sit inside the settings screen's
+ * technical disclosure and fill whatever height that frame gives it.
  */
 
 type Filter = 'all' | 'log' | 'warn' | 'error'
@@ -17,7 +20,7 @@ const FILTERS: { id: Filter; label: string }[] = [
   { id: 'error', label: 'Error' }
 ]
 
-export function Logs(): JSX.Element {
+export function Logs({ embedded = false }: { embedded?: boolean } = {}): JSX.Element {
   const all = useLogs()
   const [filter, setFilter] = useState<Filter>('all')
   const [clearedAt, setClearedAt] = useState(0)
@@ -55,7 +58,7 @@ export function Logs(): JSX.Element {
   }, [all, clearedAt])
 
   return (
-    <Wrap>
+    <Wrap $embedded={embedded}>
       <Toolbar>
         <Filters>
           {FILTERS.map((f) => (
@@ -108,12 +111,13 @@ function fmtTime(t: number): string {
   return `${p(d.getHours())}:${p(d.getMinutes())}:${p(d.getSeconds())}.${p(d.getMilliseconds(), 3)}`
 }
 
-const Wrap = styled.div`
+const Wrap = styled.div<{ $embedded: boolean }>`
   height: 100%;
   display: flex;
   flex-direction: column;
-  padding: 14px 16px 16px;
-  gap: 12px;
+  padding: ${(p) => (p.$embedded ? '10px 10px 12px' : '14px 16px 16px')};
+  gap: 10px;
+  background: ${(p) => (p.$embedded ? 'rgba(0, 0, 0, 0.22)' : 'transparent')};
 `
 
 const Toolbar = styled.div`
@@ -135,7 +139,7 @@ const FilterBtn = styled.button<{ $active: boolean }>`
   font-size: 13px;
   color: ${(p) => (p.$active ? '#1a1613' : 'var(--sts-color-cream)')};
   background: ${(p) => (p.$active ? 'var(--brand)' : 'oklch(1 0 0 / 5%)')};
-  border: 1px solid ${(p) => (p.$active ? 'var(--brand)' : 'oklch(1 0 0 / 12%)')};
+  border: 1px solid ${(p) => (p.$active ? 'var(--brand)' : 'var(--line-strong)')};
   &:hover {
     background: ${(p) => (p.$active ? 'var(--brand)' : 'oklch(1 0 0 / 10%)')};
   }
@@ -147,7 +151,7 @@ const Spacer = styled.div`
 
 const Meta = styled.div`
   font-size: 12px;
-  color: #9c9384;
+  color: var(--ink-dim);
   b {
     font-weight: 600;
   }
@@ -191,9 +195,9 @@ const Body = styled.div`
   overflow-y: auto;
   border-radius: 10px;
   background: rgba(0, 0, 0, 0.4);
-  border: 1px solid oklch(1 0 0 / 8%);
+  border: 1px solid var(--line);
   padding: 8px 4px;
-  font-family: 'Cascadia Code', Consolas, monospace;
+  font-family: var(--font-mono);
   font-size: 12px;
   line-height: 1.5;
   &::-webkit-scrollbar {
@@ -221,7 +225,7 @@ const Row = styled.div<{ $level: LogLine['level'] }>`
 
 const Time = styled.span`
   flex: 0 0 auto;
-  color: #6f685c;
+  color: var(--ink-faint);
 `
 
 const Lvl = styled.span<{ $level: LogLine['level'] }>`
@@ -243,6 +247,6 @@ const Text = styled.span`
 const Empty = styled.div`
   padding: 24px;
   text-align: center;
-  color: #6f685c;
-  font-family: 'Montserrat', sans-serif;
+  color: var(--ink-faint);
+  font-family: var(--font-body);
 `

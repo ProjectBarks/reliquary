@@ -260,7 +260,10 @@ function wireIpc(): void {
     // actually take effect during real play and survive relaunch.
     if (!settingsStore) return
     telemetry.capture('settings_changed', { keys: Object.keys(patch ?? {}), patch })
-    emitSnapshot({ key: 'sts2.settings', value: settingsStore.patch(patch) })
+    const next = settingsStore.patch(patch)
+    // Applied before the snapshot so an opt-out takes effect on this very tick.
+    telemetry.setOptOut(!next.enableTelemetry)
+    emitSnapshot({ key: 'sts2.settings', value: next })
   })
   on(IPC.UpdateAction, (_e, action: UpdateAction) => {
     if (action === 'install') updater?.installNow()
@@ -345,6 +348,7 @@ if (hasLock)
 
   // Owns user settings for both modes; persists to userData.
   settingsStore = new SettingsStore()
+  telemetry.setOptOut(!settingsStore.get().enableTelemetry)
 
   // Windows taskbar identity (grouping + correct icon/notifications).
   app.setAppUserModelId('me.brandonbarker.reliquary')

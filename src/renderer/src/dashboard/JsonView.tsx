@@ -110,7 +110,7 @@ function Primitive({ value }: { value: unknown }): JSX.Element {
 }
 
 const Root = styled.div`
-  font-family: 'Cascadia Code', Consolas, monospace;
+  font-family: var(--font-mono);
   font-size: 11px;
   line-height: 1.55;
   color: #cdc3b1;

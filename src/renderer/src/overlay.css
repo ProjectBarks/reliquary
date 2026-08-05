@@ -51,7 +51,34 @@
   --brand-deep: #6b3fbe;
   --brand-soft: #d8c2ff;
 
-  font-family: 'Montserrat', 'Open Sans', system-ui, sans-serif;
+  /* Dashboard text ramp. Warm greys tinted from the surface hue rather than
+     neutral gray, all measured >=4.5:1 against the darkest point of the
+     dashboard gradient (#100e0c). The previous faint tones (#7d7669, #6f685c)
+     sat at 4.0:1 and 3.3:1 and are gone. */
+  --ink: #fff6e2;
+  --ink-dim: #9c9384;
+  --ink-faint: #918878;
+
+  /* Hairlines and fills, so surfaces stay consistent across screens. */
+  --line: oklch(1 0 0 / 9%);
+  --line-strong: oklch(1 0 0 / 15%);
+  --fill: oklch(1 0 0 / 5%);
+  --fill-hover: oklch(1 0 0 / 9%);
+
+  /* Type stack, named once.
+     Montserrat is the incumbent body face, carried over from the original
+     companion so the dashboard and the in-game overlays speak with one voice.
+     Design tooling flags it as an overused face; replacing it would be a
+     retypesetting of the whole app, not a polish pass, so it stays until that
+     is a deliberate decision. Components that need to escape an inherited face
+     (a monospace log body, a Kreon disclosure header) reference these instead of
+     restating the family, so the app has one place that decides what it sounds
+     like. */
+  --font-body: 'Montserrat', 'Open Sans', system-ui, sans-serif;
+  --font-display: 'Kreon', serif;
+  --font-mono: 'Cascadia Code', Consolas, ui-monospace, monospace;
+
+  font-family: var(--font-body);
 }
 
 * {
