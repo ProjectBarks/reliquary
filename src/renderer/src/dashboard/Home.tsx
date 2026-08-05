@@ -1,41 +1,110 @@
 import styled, { keyframes } from 'styled-components'
+import type { DiagnosticsState } from '@shared/types'
 import { useDiagnostics, useTracker } from '../hooks/useIpc'
 
 /**
- * Home: the app's face, and the one screen that answers "is this working?"
- * without asking you to read anything.
+ * Home: the one screen a stranger sees first, and the only place they can work
+ * out whether this thing is working.
  *
- * Four readouts, weighted rather than uniform. Whatever is wrong takes the
- * colour; whatever is fine stays quiet. A grid where every tile shouts equally
- * has to be read left to right every time — this one you glance at, and only a
- * problem stops your eye.
+ * It is state-driven rather than a fixed readout. Someone who has just clicked
+ * past a SmartScreen warning and launched an app that draws nothing visible
+ * needs one sentence telling them what to do next — the previous version showed
+ * "Overlay: On" while the screen was empty, which is technically true and
+ * actively misleading. Waiting now reads as waiting, not as a fault; only a real
+ * fault takes colour.
  */
+
+type Phase = 'broken' | 'demo' | 'waiting' | 'degraded' | 'connected'
+
+interface AppState {
+  phase: Phase
+  /** The one line that names what is happening. */
+  headline: string
+  /** What to do next, when there is something. Absent once nothing is required. */
+  action: string | null
+}
+
+function readPhase(diag: DiagnosticsState | null, target: string): AppState {
+  const live = diag?.mode !== 'stub'
+
+  if (live && diag && !diag.scryModuleLoaded) {
+    return {
+      phase: 'broken',
+      headline: 'Can’t read the game',
+      action: 'Open Settings → Technical details and copy a report, so this can be fixed.'
+    }
+  }
+  if (!live) {
+    return {
+      phase: 'demo',
+      headline: 'Showing demo data',
+      action: 'Nothing here comes from a real game — this build was started in demo mode.'
+    }
+  }
+  if (!diag?.gameDetected) {
+    return {
+      phase: 'waiting',
+      headline: `Waiting for ${target}`,
+      action: `Start ${target}. Reliquary draws on top of the game window, not in here.`
+    }
+  }
+  if (diag.codex?.error) {
+    return {
+      phase: 'degraded',
+      headline: 'Watching your run',
+      action: 'Card win rates are unavailable right now. The overlays still work.'
+    }
+  }
+  return { phase: 'connected', headline: 'Watching your run', action: null }
+}
+
 export function Home(): JSX.Element {
   const diag = useDiagnostics()
   const tracker = useTracker()
+  const target = tracker?.target ?? 'Slay the Spire 2'
+  const state = readPhase(diag ?? null, target)
 
   const live = diag?.mode !== 'stub'
-  const codexReady = diag?.codex?.state === 'ready'
   const gameFound = !!diag?.gameDetected
+  const codexReady = diag?.codex?.state === 'ready'
+  const codexFailed = !!diag?.codex?.error
 
   const gems: GemData[] = [
     {
       label: 'Game',
       value: gameFound ? 'Found' : 'Waiting',
       tone: gameFound ? 'ok' : 'idle',
-      hint: gameFound ? 'reading live state' : (tracker?.target ?? 'Slay the Spire 2')
+      hint: gameFound ? 'reading live state' : 'not running yet'
     },
     {
+      // Before the game is running the overlay is on but covering nothing, so
+      // "On" reads as a contradiction. "Ready" is the honest word for that.
       label: 'Overlay',
-      value: diag?.overlayVisible ? 'On' : diag?.overlayCreated ? 'Hidden' : 'Off',
-      tone: diag?.overlayVisible ? 'ok' : diag?.overlayCreated ? 'idle' : 'bad',
-      hint: diag?.overlayVisible ? 'drawing over the game' : 'Ctrl+Shift+H to show'
+      value: !diag?.overlayCreated
+        ? 'Off'
+        : !diag.overlayVisible
+          ? 'Hidden'
+          : gameFound
+            ? 'Showing'
+            : 'Ready',
+      tone: !diag?.overlayCreated ? 'bad' : 'ok',
+      hint: !diag?.overlayCreated
+        ? 'window failed to open'
+        : !diag.overlayVisible
+          ? 'Ctrl+Shift+H to show'
+          : gameFound
+            ? 'drawing over the game'
+            : 'waiting for the game'
     },
     {
       label: 'Advisor',
-      value: codexReady ? 'Ready' : cap(diag?.codex?.state ?? 'idle'),
-      tone: codexReady ? 'ok' : 'idle',
-      hint: codexReady ? `${diag?.codex?.cardVocab ?? 0} cards primed` : 'loading win rates'
+      value: codexFailed ? 'Offline' : codexReady ? 'Ready' : 'Loading',
+      tone: codexFailed ? 'warn' : 'ok',
+      hint: codexFailed
+        ? 'win rates unavailable'
+        : codexReady
+          ? `${diag?.codex?.cardVocab ?? 0} cards primed`
+          : 'fetching win rates'
     },
     {
       label: 'Data',
@@ -45,51 +114,47 @@ export function Home(): JSX.Element {
     }
   ]
 
-  // Only the headline changes when something is off; the tiles carry the detail.
-  // Naming the blocker here means you rarely need to open Settings at all.
-  const headline = !live
-    ? 'Running on demo data'
-    : gameFound
-      ? 'Watching your run'
-      : 'Waiting for Slay the Spire 2'
-
   return (
     <Wrap>
-      <Hero>
-        <Mark viewBox="0 0 24 24" aria-hidden>
-          <path d="M12 2.5 L20 7 L20 17 L12 21.5 L4 17 L4 7 Z" />
-          <path
-            className="facet"
-            d="M12 7 L16.2 9.6 L16.2 14.4 L12 17 L7.8 14.4 L7.8 9.6 Z M12 2.5 L12 7 M20 7 L16.2 9.6 M20 17 L16.2 14.4 M12 21.5 L12 17 M4 17 L7.8 14.4 M4 7 L7.8 9.6"
-          />
-          <circle cx="12" cy="12" r="2.3" style={{ fill: 'var(--brand)', stroke: 'none' }} />
-        </Mark>
-        <Word>Reliquary</Word>
-        <Headline $live={gameFound && live}>{headline}</Headline>
-      </Hero>
+      <Middle>
+        <Hero>
+          <Mark viewBox="0 0 24 24" aria-hidden>
+            <path d="M12 2.5 L20 7 L20 17 L12 21.5 L4 17 L4 7 Z" />
+            <path
+              className="facet"
+              d="M12 7 L16.2 9.6 L16.2 14.4 L12 17 L7.8 14.4 L7.8 9.6 Z M12 2.5 L12 7 M20 7 L16.2 9.6 M20 17 L16.2 14.4 M12 21.5 L12 17 M4 17 L7.8 14.4 M4 7 L7.8 9.6"
+            />
+            <circle cx="12" cy="12" r="2.3" style={{ fill: 'var(--brand)', stroke: 'none' }} />
+          </Mark>
+          <Word>Reliquary</Word>
+          <Headline $phase={state.phase}>{state.headline}</Headline>
+          {state.action ? <Action $phase={state.phase}>{state.action}</Action> : null}
+        </Hero>
 
-      <Gems>
-        {gems.map((g) => (
-          <Gem key={g.label} $tone={g.tone}>
-            <GemLabel>{g.label}</GemLabel>
-            <GemValue $tone={g.tone}>{g.value}</GemValue>
-            <GemHint>{g.hint}</GemHint>
-          </Gem>
-        ))}
-      </Gems>
+        <Gems>
+          {gems.map((g) => (
+            <Gem key={g.label} $tone={g.tone}>
+              <GemLabel>{g.label}</GemLabel>
+              <GemValue $tone={g.tone}>{g.value}</GemValue>
+              <GemHint>{g.hint}</GemHint>
+            </Gem>
+          ))}
+        </Gems>
 
-      <Keys>
-        <kbd>Ctrl</kbd>
-        <kbd>Shift</kbd>
-        <kbd>H</kbd>
-        <span>hide or show every overlay</span>
-      </Keys>
+        {/* An expert affordance. It only earns the newcomer's sightline once
+            there is actually an overlay on screen to hide. */}
+        {gameFound ? (
+          <Keys>
+            <kbd>Ctrl</kbd>
+            <kbd>Shift</kbd>
+            <kbd>H</kbd>
+            <span>hide or show every overlay</span>
+          </Keys>
+        ) : null}
+      </Middle>
     </Wrap>
   )
 }
-
-/** Raw provider states arrive lowercase; the tiles read as one voice. */
-const cap = (s: string): string => s.charAt(0).toUpperCase() + s.slice(1)
 
 type Tone = 'ok' | 'warn' | 'bad' | 'idle'
 
@@ -122,11 +187,24 @@ const rise = keyframes`
 const Wrap = styled.div`
   min-height: 100%;
   display: flex;
+  padding: 40px 28px 48px;
+  @media (max-width: 520px) {
+    padding: 28px 18px 36px;
+  }
+`
+
+/**
+ * `margin: auto` rather than `justify-content: center`: a centred flex child
+ * overflows equally in both directions, which puts the top of the content above
+ * the scroll origin and makes it unreachable in a short window.
+ */
+const Middle = styled.div`
+  margin: auto;
+  width: 100%;
+  display: flex;
   flex-direction: column;
   align-items: center;
-  justify-content: center;
-  gap: 44px;
-  padding: 48px 28px 56px;
+  gap: 40px;
 `
 
 const Hero = styled.div`
@@ -157,11 +235,15 @@ const Mark = styled.svg`
     stroke-width: 0.9;
     opacity: 0.55;
   }
+  @media (max-width: 520px) {
+    width: 58px;
+    height: 58px;
+  }
 `
 
 const Word = styled.h1`
   font-family: var(--font-display);
-  font-size: 52px;
+  font-size: clamp(38px, 6vw, 52px);
   line-height: 1.05;
   letter-spacing: -0.01em;
   margin: 18px 0 0;
@@ -169,12 +251,32 @@ const Word = styled.h1`
   text-shadow: 3px 3px 0 oklch(0 0 0 / 45%);
 `
 
-const Headline = styled.p<{ $live: boolean }>`
+const Headline = styled.p<{ $phase: Phase }>`
   margin: 10px 0 0;
   font-size: 14px;
   letter-spacing: 0.14em;
   text-transform: uppercase;
-  color: ${(p) => (p.$live ? 'var(--brand-soft)' : 'var(--ink-dim)')};
+  color: ${(p) =>
+    p.$phase === 'broken'
+      ? 'var(--sts-color-red)'
+      : p.$phase === 'demo'
+        ? 'var(--sts-color-orange)'
+        : p.$phase === 'connected' || p.$phase === 'degraded'
+          ? 'var(--brand-soft)'
+          : 'var(--ink-dim)'};
+`
+
+/**
+ * The sentence that turns a status screen into an instruction. Measure is held
+ * well inside the reading maximum because it is read at a glance, not settled
+ * into.
+ */
+const Action = styled.p<{ $phase: Phase }>`
+  margin: 12px 0 0;
+  max-width: 44ch;
+  font-size: 13.5px;
+  line-height: 1.55;
+  color: ${(p) => (p.$phase === 'broken' ? 'var(--ink)' : 'var(--ink-dim)')};
 `
 
 const Gems = styled.div`
@@ -202,9 +304,9 @@ const Gem = styled.div<{ $tone: Tone }>`
     transform 0.18s cubic-bezier(0.16, 1, 0.3, 1),
     border-color 0.2s ease;
 
-  /* A problem earns the accent; a healthy tile stays quiet. */
+  /* A problem earns the accent; waiting and healthy both stay quiet. */
   ${(p) =>
-    p.$tone !== 'ok' && p.$tone !== 'idle'
+    p.$tone === 'warn' || p.$tone === 'bad'
       ? `border-color: color-mix(in oklch, ${toneColor(p.$tone)} 45%, transparent);`
       : ''}
 
@@ -225,7 +327,7 @@ const GemValue = styled.div<{ $tone: Tone }>`
   font-family: var(--font-display);
   font-size: 24px;
   line-height: 1.15;
-  color: ${(p) => (p.$tone === 'ok' || p.$tone === 'idle' ? 'var(--ink)' : toneColor(p.$tone))};
+  color: ${(p) => (p.$tone === 'warn' || p.$tone === 'bad' ? toneColor(p.$tone) : 'var(--ink)')};
 `
 
 const GemHint = styled.div`

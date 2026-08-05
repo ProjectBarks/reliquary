@@ -286,6 +286,20 @@ export function Settings(): JSX.Element {
               />
             </RowAside>
           </Row>
+
+          {/* Someone who just clicked past a SmartScreen warning deserves a
+              straight answer about what this reads. Stated once, here, rather
+              than on Home where it would raise a worry most people never had. */}
+          <Row>
+            <RowMain>
+              <RowLabel>How Reliquary reads your run</RowLabel>
+              <RowDesc>
+                It reads the game&rsquo;s memory from outside the process, the same way a
+                screen reader reads a window. It never modifies the game, installs no mod, and
+                touches no save file. The source is public.
+              </RowDesc>
+            </RowMain>
+          </Row>
         </Panel>
       </Section>
 
@@ -416,6 +430,9 @@ const Wrap = styled.div`
   max-width: 680px;
   margin: 0 auto;
   padding: 28px 24px 56px;
+  @media (max-width: 520px) {
+    padding: 20px 14px 40px;
+  }
 `
 
 const Kbd = styled.kbd`
@@ -479,7 +496,7 @@ const Buttons = styled.div`
 `
 
 const LogFrame = styled.div`
-  height: 300px;
+  height: min(300px, 50vh);
   border-radius: 10px;
   overflow: hidden;
   border: 1px solid var(--line);

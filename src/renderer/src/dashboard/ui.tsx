@@ -44,7 +44,8 @@ export const Section = styled.section`
 export const SectionHead = styled.div`
   display: flex;
   align-items: baseline;
-  gap: 10px;
+  flex-wrap: wrap;
+  gap: 4px 10px;
   margin: 0 0 10px;
   padding: 0 2px;
 `
@@ -70,7 +71,14 @@ export const Panel = styled.div`
   overflow: hidden;
 `
 
-/** Label + description on the left, control on the right. */
+/**
+ * Label + description on the left, control on the right.
+ *
+ * Below ~480px the two columns stop fitting and the description starts
+ * crowding the control. Rather than shrinking the switch — the primary
+ * affordance, and the one that has to stay easy to hit — the row stacks and the
+ * control moves under its own label.
+ */
 export const Row = styled.div`
   display: flex;
   align-items: center;
@@ -79,6 +87,13 @@ export const Row = styled.div`
   min-height: 52px;
   & + & {
     border-top: 1px solid var(--line);
+  }
+
+  @media (max-width: 480px) {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 10px;
+    padding: 14px;
   }
 `
 
@@ -105,6 +120,10 @@ export const RowAside = styled.div`
   display: flex;
   align-items: center;
   gap: 8px;
+
+  @media (max-width: 480px) {
+    justify-content: flex-start;
+  }
 `
 
 // ── text ──────────────────────────────────────────────────────────────────
