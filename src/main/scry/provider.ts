@@ -59,6 +59,22 @@ export interface ScryProviderCallbacks {
   onProcess(state: ProcessState): void
 }
 
+/**
+ * True for failures that come from reading a moving target rather than from a
+ * bug: a freed scene during a room swap, or a pointer read across a write.
+ * They recover on the next tick by themselves.
+ */
+function isTransientRead(err: unknown): boolean {
+  const anyErr = err as { type?: string; message?: string } | null
+  if (anyErr?.type === 'memory-access-exception') return true
+  const m = anyErr?.message ?? ''
+  return (
+    m.includes('Invalid access to memory location') ||
+    m.includes('Only part of a ReadProcessMemory') ||
+    m.includes('Failed to read')
+  )
+}
+
 export class Sts2ScryProvider {
   private conn = new ScryConnection()
   private pollTimer: NodeJS.Timeout | null = null
@@ -66,6 +82,8 @@ export class Sts2ScryProvider {
   private errorStreak = 0
   /** Reads that failed once and succeeded on retry — torn, not broken. */
   private tornReads = 0
+  /** Reads that failed twice but are inherent to unsynchronised access. */
+  private transientReads = 0
   private running = false
 
   // Change-detection caches so we only emit when something actually changed.
@@ -281,18 +299,32 @@ export class Sts2ScryProvider {
         // Fall through: a failure that survives a retry is a real one.
       }
       const err = first
+      // Reading a live process without synchronisation means some failures are
+      // inherent, not defects: the game frees a scene mid-traversal, or a
+      // pointer is sampled across a write. These are worth counting and worth
+      // escalating if sustained, but reporting them at error severity buried
+      // the genuine faults — they were 65% of all errors while being the least
+      // actionable thing in the set.
+      const transient = isTransientRead(err)
       this.errorStreak++
+      if (transient) this.transientReads++
       // Log the first failure in a streak so a silently-stalled overlay leaves a
       // trace (rate-limited so a persistent fault doesn't flood the ring at ~6/s).
-      if (this.errorStreak === 1) {
+      // Only the first of a streak, and only when it is not the expected kind —
+      // a scene freed mid-read is normal and does not deserve a stack trace.
+      if (this.errorStreak === 1 && !transient) {
         console.warn('[codex-provider] poll read failed', err)
       }
       // Aggregated inside telemetry, so a persistent fault reports occurrences
       // 1, 2, 5, 25… rather than ~6 events a second.
       telemetry.issue(
-        'poll_read_failed',
-        'error',
-        { error_streak: this.errorStreak, torn_reads_recovered: this.tornReads },
+        transient ? 'poll_read_transient' : 'poll_read_failed',
+        transient ? 'warn' : 'error',
+        {
+          error_streak: this.errorStreak,
+          torn_reads_recovered: this.tornReads,
+          transient_total: this.transientReads
+        },
         err
       )
       if (this.errorStreak === RESTART_AFTER_ERRORS) {
