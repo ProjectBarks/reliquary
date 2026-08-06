@@ -1,6 +1,6 @@
 {
   "name": "reliquary",
-  "version": "0.3.3",
+  "version": "0.3.4",
   "description": "Reliquary — a transparent, click-through Slay the Spire 2 companion overlay: deck tracker, draft advice, and attack forecasts.",
   "productName": "Reliquary",
   "main": "./out/main/index.js",
@@ -49,15 +49,16 @@
       "artifactName": "${productName}-${version}-setup.${ext}"
     },
     "nsis": {
-      "oneClick": false,
+      "oneClick": true,
       "perMachine": false,
-      "allowToChangeInstallationDirectory": true,
       "createDesktopShortcut": true,
       "createStartMenuShortcut": true,
       "shortcutName": "Reliquary",
       "uninstallDisplayName": "Reliquary",
       "installerIcon": "build/icon.ico",
-      "uninstallerIcon": "build/icon.ico"
+      "uninstallerIcon": "build/icon.ico",
+      "runAfterFinish": true,
+      "deleteAppDataOnUninstall": false
     },
     "mac": {
       "icon": "build/icon.png",

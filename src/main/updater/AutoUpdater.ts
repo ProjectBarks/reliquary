@@ -15,6 +15,9 @@ import type { UpdateState } from '@shared/types'
  *  - Installation happens on QUIT, never mid-session. Reliquary is pinned over a
  *    running game; relaunching underneath someone mid-run would be worse than
  *    shipping the fix a session later.
+ *  - The install itself is silent. The packaging is one-click and per-user
+ *    precisely so an update can apply without a wizard and without elevation;
+ *    an update the user has to click through is one they learn to postpone.
  *  - A failed update check is a non-event for the user. It is reported, but it
  *    never surfaces a dialog and never blocks startup — an update server being
  *    down must not degrade an app that is otherwise working fine.
@@ -115,9 +118,12 @@ export class AutoUpdater {
   installNow(): void {
     if (this.state.status !== 'ready') return
     telemetry.capture('update_install_requested', { to: this.state.version })
-    // isSilent=false so the NSIS installer shows progress; isForceRunAfter=true
-    // so the user lands back in the app rather than at their desktop.
-    autoUpdater.quitAndInstall(false, true)
+    // Silent, and relaunch afterwards. This only works because the installer is
+    // one-click and per-user: an assisted installer shows its wizard on every
+    // update and, with isSilent, finishes without relaunching the app at all;
+    // a per-machine install would raise UAC each time. The user asked to
+    // restart — they should get the new version, not an installer.
+    autoUpdater.quitAndInstall(true, true)
   }
 
   private set(patch: Partial<UpdateState>): void {

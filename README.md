@@ -79,8 +79,9 @@ rebuilt from scratch on Electron + React.
 
 Grab the installer from the
 [latest release](https://github.com/ProjectBarks/reliquary/releases/latest) —
-`Reliquary-<version>-setup.exe` — and run it. Everything it needs is bundled; there are no
-extra steps. Launch Reliquary, then start Slay the Spire 2 (either order works).
+`Reliquary-<version>-setup.exe` — and run it. It installs for the current user with no prompts
+and no elevation, which is also what lets updates apply silently later. Everything it needs is
+bundled; there are no extra steps. Launch Reliquary, then start Slay the Spire 2 (either order works).
 
 Windows SmartScreen will warn on first run because the installer is unsigned: choose
 **More info → Run anyway**. From then on Reliquary
@@ -139,8 +140,8 @@ after launch and every few hours, downloads new versions in the background, and 
 **on quit** — never mid-session, because the overlay sits on top of a running game and relaunching
 underneath a run in progress would be worse than shipping the fix a session later.
 
-A pill in the titlebar shows download progress and turns into a **Restart** button once an update
-is staged. Ignoring it is fine; the update still installs the next time you close the app. The
+Updates install **silently** — no wizard, no elevation prompt, no reinstall flow. A pill in the
+titlebar shows download progress and turns into a **Restart** button once an update is staged. Ignoring it is fine; the update still installs the next time you close the app. The
 **Debug** tab shows the running version and has a **Check for updates** button for checking on
 demand.
 
