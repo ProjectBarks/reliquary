@@ -410,7 +410,7 @@ if (hasLock)
   dashboard.browserWindow?.webContents.once('did-finish-load', () => dashboard.show())
 
   overlay.create()
-  overlay.load('/overlay/sts2', devUrl)
+  overlay.load(process.env['SPECTRA_MOCK'] ? '/mock/tracker' : '/overlay/sts2', devUrl)
   watchLoad('overlay', overlay.browserWindow)
   overlay.browserWindow?.webContents.once('did-finish-load', () => {
     overlay.show()
