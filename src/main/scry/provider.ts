@@ -90,6 +90,10 @@ export class Sts2ScryProvider {
   // recent non-empty pile read. Used to deck-condition draft-advice without a
   // full-deck memory reader (piles are the only owned-card surface we read).
   private deckSnapshot: string[] = []
+  /** Last reported reason advice was skipped, so it reports on change only. */
+  private lastAdviceSkip = ''
+  /** Last reported deck/pile sizes, so deck reads report on change only. */
+  private lastDeckShape = ''
   private deckHash = ''
   private character = ''
   // offerKey -> per-offered-id deck advice (filled async by ensureAdvise).
@@ -484,6 +488,25 @@ export class Sts2ScryProvider {
     // choices are NOT additive and fall back to global context stats. offerIds are
     // already filtered to card ids upstream, so shop relics/potions are excluded.
     const additive = source === 'cardReward' || source === 'chooseACard' || source === 'merchant'
+    // Name the reason advice was skipped. Without this, "no For-your-deck row"
+    // is indistinguishable from "advice said nothing" — and the four causes
+    // (wrong surface, too few offers, advisor cold, no deck seen yet) need
+    // completely different fixes. Reported once per distinct reason per offer.
+    const skip = !additive
+      ? `source:${source}`
+      : offerIds.length < 2
+        ? `offers:${offerIds.length}`
+        : !this.codex.isReady()
+          ? `advisor:${this.codex.status().state}`
+          : this.deckSnapshot.length === 0
+            ? 'deck:empty'
+            : null
+    if (skip && skip !== this.lastAdviceSkip) {
+      this.lastAdviceSkip = skip
+      this.dbg(`deck advice skipped (${skip})`)
+      telemetry.capture('deck_advice_skipped', { reason: skip, source, offers: offerIds.length })
+    }
+    if (!skip) this.lastAdviceSkip = ''
     if (!additive || offerIds.length < 2 || !this.codex.isReady()) {
       this.lastOfferKey = ''
       this.offerKeyStreak = 0
@@ -574,12 +597,34 @@ export class Sts2ScryProvider {
    * would otherwise inflate the deck sent to draft-advice. Piles are the only
    * owned-card surface we read, so mid-combat this is a near-complete deck (powers
    * in play are the only gap); between combats it's the last-combat snapshot.
-   * Ignore empty reads so a card-reward screen doesn't wipe the snapshot.
+   * Ignore empty reads so a transient bad read doesn't wipe the snapshot.
    */
   private captureDeckSnapshot(raw: RawPileState): void {
+    // Prefer the player's actual deck: it is readable outside combat, which is
+    // precisely when card offers appear. The combat piles remain a fallback for
+    // builds or states where the deck itself cannot be read, since a
+    // near-complete deck beats none.
+    // The isPermanent filter exists to strip combat-generated temporaries
+    // (Shivs, statuses) out of the PILES. Everything in the owned deck is owned
+    // by definition, and its cards carry no _deckVersion — so applying the
+    // filter there discarded every card and left advice with an empty deck.
+    const fromOwned = raw.deck.length > 0
+    const source = fromOwned ? raw.deck : [...raw.draw, ...raw.hand, ...raw.discard, ...raw.exhaust]
+    // Report over telemetry rather than the console: stdout from the reader is
+    // block-buffered through the host, so a console line can sit unwritten for
+    // minutes — useless for diagnosing a live screen.
+    const shape = `${raw.deck.length}|${raw.draw.length + raw.hand.length + raw.discard.length + raw.exhaust.length}`
+    if (shape !== this.lastDeckShape) {
+      this.lastDeckShape = shape
+      telemetry.capture('deck_read', {
+        owned_deck: raw.deck.length,
+        combat_piles: raw.draw.length + raw.hand.length + raw.discard.length + raw.exhaust.length,
+        using: raw.deck.length ? 'owned' : 'piles'
+      })
+    }
     const ids: string[] = []
-    for (const c of [...raw.draw, ...raw.hand, ...raw.discard, ...raw.exhaust]) {
-      if (c.id && c.isPermanent) ids.push(c.id)
+    for (const c of source) {
+      if (c.id && (fromOwned || c.isPermanent)) ids.push(c.id)
     }
     if (!ids.length) return
     this.deckSnapshot = ids

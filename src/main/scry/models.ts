@@ -131,6 +131,18 @@ export class Player extends ScryObject {
     const value = this.object('PlayerCombatState', true)
     return value ? new PlayerCombatState(value) : null
   }
+  /**
+   * The owned deck, independent of combat.
+   *
+   * Deck-conditioned advice previously reconstructed this from the combat piles,
+   * which only exist inside a fight — so on a reward screen straight after
+   * launch there was no deck at all and advice fell back to global stats. This
+   * is the real thing and is readable anywhere in a run.
+   */
+  get Deck(): CardPile | null {
+    const value = this.object('Deck', true)
+    return value ? new CardPile(value) : null
+  }
 }
 
 export class Creature extends ScryObject {
@@ -284,7 +296,20 @@ export class NCapstoneContainer extends ScryObject {
   }
 }
 
+/**
+ * A grid-based card select used for ADDITIVE choices — event rewards, discovery
+ * effects, "pick a card to gain". It carries a `_grid` like removal/transform
+ * screens do, so shape alone cannot tell them apart and it has to be named.
+ * Confirmed against a live 5-card add-a-card screen that was being reported as
+ * a plain grid and therefore denied deck-conditioned advice.
+ */
+export const NSimpleCardSelectScreenClassName =
+  'MegaCrit.Sts2.Core.Nodes.Screens.CardSelection.NSimpleCardSelectScreen'
+
 export class IOverlayScreen extends ScryGodotObject {
+  isNSimpleCardSelectScreen(): boolean {
+    return this.className === NSimpleCardSelectScreenClassName
+  }
   isNGameOverScreen(): boolean {
     return this.className === NGameOverScreenClassName
   }
@@ -301,11 +326,20 @@ export class IOverlayScreen extends ScryGodotObject {
     return this.cast(NChooseACardSelectionScreen)
   }
   private _isGrid: boolean | null = null
+  /**
+   * Grid screens are identified by having a `_grid` field rather than by class,
+   * because several screens share the grid implementation.
+   *
+   * The nullable read is load-bearing and was previously self-defeating: passing
+   * `true` makes a missing field return null instead of throwing, so the catch
+   * this relied on never fired and EVERY non-reward overlay was reported as a
+   * grid. Grid is excluded from deck advice, so that silently suppressed
+   * "For your deck" on screens that should have had it.
+   */
   isNCardGridSelectionScreen(): boolean {
     if (this._isGrid === null) {
       try {
-        this.object('_grid', true)
-        this._isGrid = true
+        this._isGrid = this.object('_grid', true) !== null
       } catch {
         this._isGrid = false
       }

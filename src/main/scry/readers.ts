@@ -63,16 +63,49 @@ export interface RawPileState {
   hand: RawCard[]
   /** Exhaust pile — not drawable this combat, but part of the owned deck. */
   exhaust: RawCard[]
+  /**
+   * The owned deck, read from the player rather than assembled from combat
+   * piles. Present outside combat too, which is exactly when card offers appear.
+   */
+  deck: RawCard[]
 }
 
-/** Returns null when the player is not currently in a combat room. */
+/** Returns null only when there is no run at all. Piles are empty outside combat. */
 export function readPileState(context: GodotContext): RawPileState | null {
   const nGame = NGame.getInstance(context)
   const scene = nGame.getCurrentScene()
   if (!scene || (scene as any).className !== NRun.ClassName) return null
   const run = scene as NRun
+
+  const cards = (list: { map: <R>(fn: (c: CardModel | undefined) => R) => R[] } | undefined | null): RawCard[] =>
+    list
+      ? list
+          .map((c: CardModel | undefined) => toCardData(c))
+          .filter((c: RawCard | null): c is RawCard => c !== null)
+      : []
+
+  // Read the owned deck first and unconditionally: it is the thing advice needs,
+  // and card offers happen outside combat where the piles below do not exist.
+  let deck: RawCard[] = []
+  try {
+    const player = findLocalPlayer(context, run)
+    const pile = player?.Deck
+    deck = cards(pile?._cards)
+    if (process.env['SPECTRA_DEBUG']) {
+      console.log(
+        `[reader] deck read: player=${player ? 'yes' : 'NO'} pile=${pile ? 'yes' : 'NO'} cards=${deck.length}`
+      )
+    }
+  } catch (err) {
+    if (process.env['SPECTRA_DEBUG']) {
+      console.log(`[reader] deck read failed: ${err instanceof Error ? err.message : String(err)}`)
+    }
+  }
+
   const currentRoom = run.getCurrentRoom()
-  if (!currentRoom || (currentRoom as any).className !== NCombatRoom.ClassName) return null
+  if (!currentRoom || (currentRoom as any).className !== NCombatRoom.ClassName) {
+    return { draw: [], discard: [], hand: [], exhaust: [], deck }
+  }
 
   const combatRoom = currentRoom as NCombatRoom
   const piles = combatRoom.Ui._combatPilesContainer
@@ -81,16 +114,12 @@ export function readPileState(context: GodotContext): RawPileState | null {
   const exhaust = piles._exhaustPile._pile?._cards
   const hand = findLocalPlayer(context, run)?.PlayerCombatState?.Hand._cards
 
-  // A pile that momentarily reports one fewer card is correct; a throw here
-  // drops every pile for that tick and the overlay goes stale.
-  const cards = (list: typeof draw): RawCard[] =>
-    list ? list.map((c) => toCardData(c as CardModel | undefined)).filter((c): c is RawCard => c !== null) : []
-
   return {
     draw: cards(draw),
     discard: cards(discard),
     hand: cards(hand),
-    exhaust: cards(exhaust)
+    exhaust: cards(exhaust),
+    deck
   }
 }
 
@@ -264,12 +293,23 @@ export function readVisibleItems(context: GodotContext): RawVisibleItems | null 
     let holders: NGridCardHolder[] | null = null
     let source: RawVisibleItems['source'] = 'cardReward'
     let isGrid = false
+    if (process.env['SPECTRA_DEBUG']) {
+      // The overlay's own class, so a wrong `source` can be traced to the game
+      // rather than guessed at from the symptom.
+      console.log(`[reader] overlay class: ${safe(() => overlay.className, '?')}`)
+    }
     if (overlay.isNCardRewardSelectionScreen()) {
       holders = overlay.asNCardRewardSelectionScreen()._cardRow.getCardHolders()
       source = 'cardReward'
     } else if (overlay.isNChooseACardSelectionScreen()) {
       holders = overlay.asNChooseACardSelectionScreen()._cardRow.getCardHolders()
       source = 'chooseACard'
+    } else if (overlay.isNSimpleCardSelectScreen()) {
+      // Must precede the grid branch: this screen has a `_grid` and would
+      // otherwise be swallowed by it and treated as non-additive.
+      holders = overlay.asNCardGridSelectionScreen()._grid.getCardHolders()
+      source = 'chooseACard'
+      isGrid = true
     } else if (overlay.isNCardGridSelectionScreen()) {
       holders = overlay.asNCardGridSelectionScreen()._grid.getCardHolders()
       source = 'grid'
