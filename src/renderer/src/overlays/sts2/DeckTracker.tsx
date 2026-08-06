@@ -4,45 +4,56 @@ import type { Sts2Card, Sts2CardData, Sts2PileState } from '@shared/types'
 import { CardTile } from './CardTile'
 import { useFloatingPanel } from '../../hooks/useFloatingPanel'
 import { BG, resolveCost } from './theme'
+import {
+  COL_GAP,
+  DENSITIES,
+  layoutBalance,
+  layoutPacker,
+  layoutScale,
+  layoutSqueeze,
+  type LayoutGroup,
+  type LayoutMode,
+  type TrackerLayout
+} from './trackerLayout'
 
 /**
  * Draw-pile odds tracker: what is left to draw, grouped by card type, with
- * count/total and draw-% per group.
+ * count/total and draw-% per group. Placeable anywhere, resizable.
  *
- * It used to be a fixed-width strip that could only slide up and down the left
- * edge. It is now placeable anywhere and resizable, which changes the layout
- * problem entirely — a short, wide panel has to put the same content into
- * several columns.
+ * The visual language is the original strip's: bare type headers over tight
+ * rows on one translucent surface. The earlier boxed-well treatment made
+ * groups obvious but spent ~28px of chrome per group; what actually carries
+ * grouping across columns is cheaper — a type-hued header with a matching
+ * hairline, atomic (or explicitly "continued") column breaks, and a ruled
+ * gutter between columns.
  *
- * Wrapping is where grouping normally dies: once "Attack" and "Skill" sit side
- * by side, a bare list of rows gives no clue where one ends. Three things keep
- * it legible, in order of how much work they do:
- *
- *   1. Groups are atomic. `break-inside: avoid` means a type never splits
- *      across a column boundary, so every column break is also a group break.
- *   2. Each group carries a type-coloured spine down its left edge — the signal
- *      that survives being read horizontally instead of vertically.
- *   3. The header repeats per group, so a column that starts mid-panel still
- *      says what you are looking at.
+ * Where the content goes is trackerLayout's job. All modes except 'flow'
+ * guarantee NO scrollbar: content is computed to fit the box, the shell
+ * shrinks to hug whatever is actually used, and anything that truly cannot
+ * fit is declared in a "+N hidden" chip.
  */
 
 type GroupRow = Sts2Card & { count: number; total: number }
-interface TypeGroup {
-  type: string
-  cards: GroupRow[]
-  count: number
-  total: number
-}
+
+const TITLEBAR_H = 30
+const PAD = 7
+/** Shell border, both sides. */
+const EDGE = 2
+/** Line reserved for the "+N hidden" chip when content overflows. */
+const CHIP_H = 22
 
 export function DeckTracker({
   pileState,
   cardData,
   isPeekButtonVisible,
+  mode = 'balance',
   storageKey = 'sts2.deckTracker.placement'
 }: {
   pileState: Sts2PileState
   cardData: Sts2CardData | null
   isPeekButtonVisible: boolean
+  /** Layout strategy; see trackerLayout.ts. */
+  mode?: LayoutMode
   /** Where placement persists. Distinct keys allow more than one panel. */
   storageKey?: string
 }): JSX.Element {
@@ -69,6 +80,50 @@ export function DeckTracker({
 
   const active = hovered || panel.dragging || panel.resizing
   const drawLeft = pileState.draw.length
+  const p = panel.placement
+
+  const availW = p.w - PAD * 2 - EDGE
+  const availH = p.h - TITLEBAR_H - PAD * 2 - EDGE
+
+  const layout: TrackerLayout<GroupRow> | null = useMemo(() => {
+    if (mode === 'flow') return null
+    const run = (h: number): TrackerLayout<GroupRow> => {
+      switch (mode) {
+        case 'packer':
+          return layoutPacker(groupedCards, h)
+        case 'scale':
+          return layoutScale(groupedCards, availW, h)
+        case 'squeeze':
+          return layoutSqueeze(groupedCards, availW, h, (row) => row.count === 0)
+        default:
+          return layoutBalance(groupedCards, availW, h)
+      }
+    }
+    const first = run(availH)
+    // Overflow costs a line: the "+N hidden" chip gets its own row, so it
+    // never sits on top of a card.
+    return first.hiddenRows > 0 ? run(availH - CHIP_H) : first
+  }, [mode, groupedCards, availW, availH])
+
+  // The shell hugs its content: the dragged rectangle is a maximum, not a
+  // hole to keep open. Because anchored edges are expressed as inset from
+  // that edge, shrinking always pulls the far edge inward — a panel pinned
+  // bottom-right stays flush bottom-right and gives space back top-left.
+  const style: React.CSSProperties = { ...panel.style }
+  if (layout) {
+    const cols = layout.columns.length
+    const contentW = cols > 0 ? cols * layout.colW + (cols - 1) * COL_GAP : 120
+    const shellW = Math.min(
+      Math.max(p.w, mode === 'packer' ? contentW + PAD * 2 + EDGE : 0),
+      contentW + PAD * 2 + EDGE
+    )
+    const chipH = layout.hiddenRows > 0 ? CHIP_H : 0
+    const shellH = Math.min(p.h, layout.usedH + chipH + TITLEBAR_H + PAD * 2 + EDGE)
+    style.width = shellW
+    style.height = shellH
+    if (p.ax === 'center') style.marginLeft = `calc(${p.dx}% - ${shellW / 2}px)`
+    if (p.ay === 'middle') style.marginTop = `calc(${p.dy}% - ${shellH / 2}px)`
+  }
 
   if (hidden) {
     return (
@@ -93,7 +148,7 @@ export function DeckTracker({
 
       <Shell
         className="interactive"
-        style={panel.style}
+        style={style}
         $active={active}
         $peek={!!isPeekButtonVisible}
         onMouseEnter={() => {
@@ -122,31 +177,75 @@ export function DeckTracker({
           </Close>
         </TitleBar>
 
-        <Columns>
-          {groupedCards.map((group) => (
-            <Group key={group.type} $type={group.type}>
-              <GroupHeader>
-                <GroupName $type={group.type}>{typeLabel(group.type)}</GroupName>
-                <GroupStats>
-                  <span>{`${group.count}/${group.total}`}</span>
-                  <DrawChance>{formatChance(group.count, drawLeft)}</DrawChance>
-                </GroupStats>
-              </GroupHeader>
-              {group.cards.map((row) => (
-                <CardTile
-                  card={row}
-                  jsonCard={cardData?.[row.id]}
-                  key={getCardGroupKey(row, cardData)}
-                />
-              ))}
-            </Group>
-          ))}
-        </Columns>
+        {layout ? (
+          <Body>
+            {layout.columns.map((column, i) => (
+              <Col key={i} style={{ width: layout.colW, gap: layout.density.groupGap }}>
+                {column.map((seg) => (
+                  <Seg key={`${seg.group.type}·${seg.part}`} style={{ gap: layout.density.rowGap }}>
+                    <GroupHeader
+                      $type={seg.group.type}
+                      style={{ height: layout.density.headerH - layout.density.rowGap }}
+                    >
+                      <GroupName $type={seg.group.type}>
+                        {typeLabel(seg.group.type)}
+                        {seg.part > 1 ? <Cont> · cont</Cont> : null}
+                      </GroupName>
+                      {seg.part === 1 ? (
+                        <GroupStats>
+                          <span>{`${seg.group.count}/${seg.group.total}`}</span>
+                          <DrawChance>{formatChance(seg.group.count, drawLeft)}</DrawChance>
+                        </GroupStats>
+                      ) : null}
+                    </GroupHeader>
+                    {seg.rows.map((row) => (
+                      <CardTile
+                        card={row}
+                        jsonCard={cardData?.[row.id]}
+                        rowH={layout.density.rowH}
+                        fontSize={layout.density.font}
+                        countSize={layout.density.countFont}
+                        key={getCardGroupKey(row, cardData)}
+                      />
+                    ))}
+                    {seg.showSummary ? (
+                      <Summary style={{ height: layout.density.rowH }}>
+                        {`+${seg.group.collapsed} ${seg.group.collapsedLabel}`}
+                      </Summary>
+                    ) : null}
+                  </Seg>
+                ))}
+              </Col>
+            ))}
+            {layout.hiddenRows > 0 ? <HiddenChip>{`+${layout.hiddenRows} hidden`}</HiddenChip> : null}
+          </Body>
+        ) : (
+          <FlowColumns>
+            {groupedCards.map((group) => (
+              <FlowGroup key={group.type}>
+                <GroupHeader $type={group.type} style={{ height: 17 }}>
+                  <GroupName $type={group.type}>{typeLabel(group.type)}</GroupName>
+                  <GroupStats>
+                    <span>{`${group.count}/${group.total}`}</span>
+                    <DrawChance>{formatChance(group.count, drawLeft)}</DrawChance>
+                  </GroupStats>
+                </GroupHeader>
+                {group.rows.map((row) => (
+                  <CardTile
+                    card={row}
+                    jsonCard={cardData?.[row.id]}
+                    key={getCardGroupKey(row, cardData)}
+                  />
+                ))}
+              </FlowGroup>
+            ))}
+          </FlowColumns>
+        )}
 
         <ResizeHandle
           $active={active}
-          $ax={panel.placement.ax}
-          $ay={panel.placement.ay}
+          $ax={p.ax}
+          $ay={p.ay}
           title="Drag to resize"
           {...panel.resizeHandlers}
         />
@@ -155,7 +254,7 @@ export function DeckTracker({
   )
 }
 
-// ── grouping helpers (unchanged) ──
+// ── grouping helpers ──
 
 function getCardGroupKey(card: Sts2Card, cardData: Sts2CardData | null): string {
   return `${resolveCost(card, cardData?.[card.id]) ?? ''}|${card.id}|${card.upgradeLevel}|${
@@ -197,7 +296,7 @@ const TYPE_ORDER: Record<string, number> = {
   quest: 5
 }
 
-function groupByType(cards: GroupRow[], cardData: Sts2CardData | null): TypeGroup[] {
+function groupByType(cards: GroupRow[], cardData: Sts2CardData | null): LayoutGroup<GroupRow>[] {
   const byType = new Map<string, GroupRow[]>()
   for (const row of cards) {
     let type = cardData?.[row.id]?.type?.toLowerCase() ?? ''
@@ -207,11 +306,13 @@ function groupByType(cards: GroupRow[], cardData: Sts2CardData | null): TypeGrou
     else byType.set(type, [row])
   }
   return [...byType.entries()]
-    .map(([type, groupCardsArr]) => ({
+    .map(([type, rows]) => ({
       type,
-      cards: groupCardsArr,
-      count: groupCardsArr.reduce((sum, card) => sum + card.count, 0),
-      total: groupCardsArr.reduce((sum, card) => sum + card.total, 0)
+      rows,
+      count: rows.reduce((sum, card) => sum + card.count, 0),
+      total: rows.reduce((sum, card) => sum + card.total, 0),
+      collapsed: 0,
+      collapsedLabel: ''
     }))
     .sort((a, b) => (TYPE_ORDER[a.type] ?? 99) - (TYPE_ORDER[b.type] ?? 99))
 }
@@ -249,7 +350,7 @@ function sortGroups(groups: GroupRow[], cardData: Sts2CardData | null): GroupRow
 
 // ── styling ──
 
-/** One hue per card type — the thing that keeps a group readable once wrapped. */
+/** One hue per card type — what keeps a group identifiable once wrapped. */
 const TYPE_HUE: Record<string, string> = {
   attack: 'var(--sts-color-red)',
   skill: 'var(--sts-color-blue)',
@@ -263,8 +364,8 @@ const Shell = styled.div<{ $active: boolean; $peek: boolean }>`
   display: flex;
   flex-direction: column;
   overflow: hidden;
-  border-radius: 12px;
-  background: ${BG}e8;
+  border-radius: 10px;
+  background: ${BG}e0;
   border: 1px solid ${(p) => (p.$active ? 'oklch(1 0 0 / 26%)' : 'oklch(1 0 0 / 12%)')};
   box-shadow: 7px 7px 0 oklch(0 0 0 / 30%);
   transition:
@@ -275,10 +376,11 @@ const Shell = styled.div<{ $active: boolean; $peek: boolean }>`
 
 const TitleBar = styled.div<{ $active: boolean }>`
   flex: 0 0 auto;
+  height: ${TITLEBAR_H}px;
   display: flex;
   align-items: center;
-  gap: 8px;
-  padding: 7px 8px 7px 9px;
+  gap: 7px;
+  padding: 0 6px 0 9px;
   cursor: grab;
   user-select: none;
   border-bottom: 1px solid oklch(1 0 0 / 10%);
@@ -346,64 +448,47 @@ const Close = styled.button`
   }
 `
 
-/**
- * The column engine. `column-width` rather than `column-count` so the number of
- * columns follows the width the user dragged, instead of the panel guessing.
- */
-const Columns = styled.div`
+/** Computed layout: explicit columns, no scrolling, hairline-ruled gutter. */
+const Body = styled.div`
   flex: 1;
   min-height: 0;
-  overflow-y: auto;
-  padding: 8px 8px 2px;
-  columns: 168px auto;
-  column-gap: 14px;
-  /* A ruled gutter. Without it two adjacent columns read as one stream of
-     cards, which is the exact confusion wrapping introduces. */
-  column-rule: 1px solid oklch(1 0 0 / 10%);
-
-  /* Fade the last few pixels so a clipped row reads as "more below" instead of
-     as a rendering fault. Only applied when there is actually overflow. */
-  mask-image: linear-gradient(to bottom, #000 calc(100% - 14px), transparent 100%);
-
-  &::-webkit-scrollbar {
-    width: 7px;
-  }
-  &::-webkit-scrollbar-thumb {
-    background: oklch(1 0 0 / 16%);
-    border-radius: 4px;
-  }
+  display: flex;
+  align-items: flex-start;
+  padding: ${PAD}px;
+  overflow: hidden;
 `
 
-/**
- * A group reads as one bounded object rather than a run of rows.
- *
- * The first attempt used a thin coloured spine, which was invisible in practice:
- * the card tiles carry the character's own strong frame colour (every Ironclad
- * card is red), so a 2px red rail beside red cards said nothing. What survives
- * that competition is enclosure and space — a tinted well, a full-height rail,
- * and a clear gap — none of which the tiles themselves use.
- */
-const Group = styled.div<{ $type: string }>`
-  /* Atomic: a type never straddles a column boundary, so every column break is
-     also a group break and no card is orphaned from its heading. */
-  break-inside: avoid;
-  page-break-inside: avoid;
+const Col = styled.div`
+  flex: 0 0 auto;
   display: flex;
   flex-direction: column;
-  gap: 3px;
-  padding: 6px 6px 8px 9px;
-  margin-bottom: 14px;
-  border-radius: 8px;
-  border: 1px solid ${(p) => `color-mix(in oklch, ${hueOf(p.$type)} 26%, transparent)`};
-  border-left: 3px solid ${(p) => hueOf(p.$type)};
-  background: oklch(0 0 0 / 26%);
+  position: relative;
+
+  & + & {
+    margin-left: ${COL_GAP}px;
+    &::before {
+      content: '';
+      position: absolute;
+      left: ${-(COL_GAP / 2) - 0.5}px;
+      top: 2px;
+      bottom: 2px;
+      width: 1px;
+      background: oklch(1 0 0 / 9%);
+    }
+  }
 `
 
-const GroupHeader = styled.div`
+const Seg = styled.div`
+  display: flex;
+  flex-direction: column;
+`
+
+const GroupHeader = styled.div<{ $type: string }>`
   display: flex;
   align-items: baseline;
   gap: 6px;
-  padding-bottom: 2px;
+  box-sizing: border-box;
+  border-bottom: 1px solid ${(p) => `color-mix(in oklch, ${hueOf(p.$type)} 45%, transparent)`};
 `
 
 const GroupName = styled.span<{ $type: string }>`
@@ -413,22 +498,87 @@ const GroupName = styled.span<{ $type: string }>`
   font-weight: 700;
   letter-spacing: 0.12em;
   text-transform: uppercase;
-  /* The heading takes the group's hue, so name and rail agree even when the
-     rail is beside cards of a different colour. */
+  white-space: nowrap;
+  overflow: hidden;
   color: ${(p) => hueOf(p.$type)};
+  text-shadow: 1px 1px 0 oklch(0 0 0 / 55%);
+`
+
+const Cont = styled.span`
+  font-weight: 400;
+  color: oklch(1 0 0 / 45%);
+  letter-spacing: 0.04em;
+  text-transform: none;
 `
 
 const GroupStats = styled.div`
+  flex: 0 0 auto;
   display: flex;
   align-items: baseline;
   gap: 6px;
   font-family: 'Cascadia Code', Consolas, monospace;
   font-size: 10px;
-  color: oklch(1 0 0 / 55%);
+  color: oklch(1 0 0 / 68%);
 `
 
 const DrawChance = styled.span`
   color: var(--sts-color-aqua);
+`
+
+/** One-line stand-in for rows folded away by the squeeze strategy. */
+const Summary = styled.div`
+  display: flex;
+  align-items: center;
+  padding-left: 4px;
+  font-family: 'Cascadia Code', Consolas, monospace;
+  font-size: 10px;
+  color: oklch(1 0 0 / 45%);
+`
+
+/** Honest overflow: content that genuinely cannot fit is counted, not clipped. */
+const HiddenChip = styled.div`
+  position: absolute;
+  right: 6px;
+  bottom: 5px;
+  padding: 1px 7px;
+  border-radius: 8px;
+  font-family: 'Cascadia Code', Consolas, monospace;
+  font-size: 10px;
+  color: var(--sts-color-cream);
+  background: oklch(0 0 0 / 55%);
+  border: 1px solid oklch(1 0 0 / 18%);
+`
+
+/** 'flow' control: CSS multicol + scroll, scrollbar kept out of the layout. */
+const FlowColumns = styled.div`
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: ${PAD}px;
+  columns: 168px auto;
+  column-gap: ${COL_GAP}px;
+  column-rule: 1px solid oklch(1 0 0 / 9%);
+  mask-image: linear-gradient(to bottom, #000 calc(100% - 14px), transparent 100%);
+
+  &::-webkit-scrollbar {
+    width: 4px;
+  }
+  &::-webkit-scrollbar-thumb {
+    background: transparent;
+    border-radius: 2px;
+  }
+  &:hover::-webkit-scrollbar-thumb {
+    background: oklch(1 0 0 / 22%);
+  }
+`
+
+const FlowGroup = styled.div`
+  break-inside: avoid;
+  page-break-inside: avoid;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin-bottom: 10px;
 `
 
 /**

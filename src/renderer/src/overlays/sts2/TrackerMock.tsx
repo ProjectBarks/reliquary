@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import styled from 'styled-components'
 import { DeckTracker } from './DeckTracker'
+import type { LayoutMode } from './trackerLayout'
 import { FIXTURE_PILE, FIXTURE_PILE_SMALL, FIXTURE_CARD_DATA } from './trackerFixture'
 
 /**
@@ -24,10 +25,26 @@ const PRESETS = [
   { key: 'mock.c', label: '4 columns · bottom centre', p: { ax: 'center', ay: 'bottom', dx: 4, dy: 9, w: 790, h: 330, free: false } }
 ] as const
 
+/** The five layout strategies under test; see trackerLayout.ts. */
+const MODES: Array<{ key: LayoutMode; label: string }> = [
+  { key: 'flow', label: 'A · flow (scroll)' },
+  { key: 'packer', label: 'B · packer (fit height)' },
+  { key: 'balance', label: 'C · balance (fill box)' },
+  { key: 'scale', label: 'D · scale (shrink)' },
+  { key: 'squeeze', label: 'E · squeeze (collapse)' }
+]
+
 export function TrackerMock(): JSX.Element {
   const [small, setSmall] = useState(false)
   const [peek, setPeek] = useState(false)
   const [gallery, setGallery] = useState(true)
+  const [mode, setMode] = useState<LayoutMode>(
+    () => (localStorage.getItem('mock.mode') as LayoutMode) || 'balance'
+  )
+  const pickMode = (m: LayoutMode): void => {
+    localStorage.setItem('mock.mode', m)
+    setMode(m)
+  }
 
   // Seed each preset once so the panels open at the size they are meant to show.
   if (typeof localStorage !== 'undefined') {
@@ -44,25 +61,37 @@ export function TrackerMock(): JSX.Element {
         <Backdrop />
         {PRESETS.map((preset) => (
           <DeckTracker
-            key={preset.key}
+            key={`${preset.key}:${mode}`}
             storageKey={preset.key}
+            mode={mode}
             pileState={small ? FIXTURE_PILE_SMALL : FIXTURE_PILE}
             cardData={FIXTURE_CARD_DATA}
             isPeekButtonVisible={false}
           />
         ))}
         <Toolbar>
-          <button onClick={() => setGallery(false)}>Single panel</button>
-          <button onClick={() => setSmall((s) => !s)}>{small ? 'Full pile' : 'Nearly empty'}</button>
-          <button
-            onClick={() => {
-              for (const preset of PRESETS) localStorage.removeItem(preset.key)
-              location.reload()
-            }}
-          >
-            Reset
-          </button>
-          <Note>every panel is the same component at a different width</Note>
+          <ModeRow>
+            {MODES.map((m) => (
+              <ModeButton key={m.key} $on={m.key === mode} onClick={() => pickMode(m.key)}>
+                {m.label}
+              </ModeButton>
+            ))}
+          </ModeRow>
+          <Row>
+            <button onClick={() => setGallery(false)}>Single panel</button>
+            <button onClick={() => setSmall((s) => !s)}>
+              {small ? 'Full pile' : 'Nearly empty'}
+            </button>
+            <button
+              onClick={() => {
+                for (const preset of PRESETS) localStorage.removeItem(preset.key)
+                location.reload()
+              }}
+            >
+              Reset
+            </button>
+            <Note>every panel is the same component at a different dragged size</Note>
+          </Row>
         </Toolbar>
       </Stage>
     )
@@ -72,21 +101,33 @@ export function TrackerMock(): JSX.Element {
     <Stage className="sts2-overlay">
       <Backdrop />
       <Toolbar>
-        <button onClick={() => setSmall((s) => !s)}>{small ? 'Full pile' : 'Nearly empty'}</button>
-        <button onClick={() => setPeek((p) => !p)}>{peek ? 'Peek off' : 'Peek on'}</button>
-        <button onClick={() => setGallery(true)}>Gallery</button>
-        <button
-          onClick={() => {
-            localStorage.removeItem('sts2.deckTracker.placement')
-            location.reload()
-          }}
-        >
-          Reset placement
-        </button>
-        <Note>drag the title bar · drag the corner to resize</Note>
+        <ModeRow>
+          {MODES.map((m) => (
+            <ModeButton key={m.key} $on={m.key === mode} onClick={() => pickMode(m.key)}>
+              {m.label}
+            </ModeButton>
+          ))}
+        </ModeRow>
+        <Row>
+          <button onClick={() => setSmall((s) => !s)}>
+            {small ? 'Full pile' : 'Nearly empty'}
+          </button>
+          <button onClick={() => setPeek((p) => !p)}>{peek ? 'Peek off' : 'Peek on'}</button>
+          <button onClick={() => setGallery(true)}>Gallery</button>
+          <button
+            onClick={() => {
+              localStorage.removeItem('sts2.deckTracker.placement')
+              location.reload()
+            }}
+          >
+            Reset placement
+          </button>
+          <Note>drag the title bar · drag the corner to resize</Note>
+        </Row>
       </Toolbar>
 
       <DeckTracker
+        mode={mode}
         pileState={small ? FIXTURE_PILE_SMALL : FIXTURE_PILE}
         cardData={FIXTURE_CARD_DATA}
         isPeekButtonVisible={peek}
@@ -128,8 +169,8 @@ const Toolbar = styled.div`
   transform: translateX(-50%);
   z-index: 50;
   display: flex;
-  align-items: center;
-  gap: 8px;
+  flex-direction: column;
+  gap: 7px;
   padding: 8px 10px;
   border-radius: 10px;
   background: oklch(0 0 0 / 55%);
@@ -146,6 +187,32 @@ const Toolbar = styled.div`
     &:hover {
       background: oklch(1 0 0 / 14%);
     }
+  }
+`
+
+const Row = styled.div`
+  display: flex;
+  align-items: center;
+  gap: 8px;
+`
+
+const ModeRow = styled.div`
+  display: flex;
+  align-items: center;
+  gap: 5px;
+`
+
+const ModeButton = styled.button<{ $on: boolean }>`
+  cursor: pointer;
+  font-family: inherit;
+  font-size: 11px;
+  color: ${(p) => (p.$on ? '#1b1512' : 'var(--sts-color-cream)')};
+  background: ${(p) => (p.$on ? 'var(--sts-color-cream)' : 'oklch(1 0 0 / 8%)')};
+  border: 1px solid oklch(1 0 0 / 16%);
+  border-radius: 7px;
+  padding: 4px 9px;
+  &:hover {
+    background: ${(p) => (p.$on ? 'var(--sts-color-cream)' : 'oklch(1 0 0 / 14%)')};
   }
 `
 
