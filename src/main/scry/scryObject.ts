@@ -34,12 +34,37 @@ export interface ItemCtor<T> {
 export class ScryObject {
   constructor(public obj: any) {}
 
+  /**
+   * Every read goes through here so a native failure says WHAT it was reading.
+   *
+   * The native layer raises bare messages like "No such property" with no
+   * indication of the field or the owning type, which makes a real report
+   * (likely a field a newer game build renamed) impossible to act on. Naming
+   * the key and the class turns one unexplained error into a fixable one.
+   */
+  protected read(key: string): any {
+    try {
+      return this.obj.get(key)
+    } catch (err) {
+      const cls = (() => {
+        try {
+          return this.obj?.className ?? this.obj?.getClassName?.() ?? 'unknown'
+        } catch {
+          return 'unknown'
+        }
+      })()
+      throw new ScryError(
+        `reading '${key}' on ${cls}: ${err instanceof Error ? err.message : String(err)}`
+      )
+    }
+  }
+
   unsafe(key: string): any {
-    return this.obj.get(key)
+    return this.read(key)
   }
 
   object(key: string, nullable?: boolean): any {
-    const value = this.obj.get(key)
+    const value = this.read(key)
     if (value === null || value === undefined) {
       if (nullable) return null
       throw new ScryError(`${key} is null`)
@@ -54,7 +79,7 @@ export class ScryObject {
   }
 
   array<T = any>(key: string, opts?: { nullable?: boolean; itemCtor?: ItemCtor<T> }): ScryArray<T> | null {
-    const value = this.obj.get(key)
+    const value = this.read(key)
     if (value === null || value === undefined) {
       if (opts?.nullable) return null
       throw new ScryError(`${key} is null`)
@@ -66,7 +91,7 @@ export class ScryObject {
   }
 
   boolean(key: string, nullable?: boolean): boolean | null {
-    const value = this.obj.get(key)
+    const value = this.read(key)
     if (value === null || value === undefined) {
       if (nullable) return null
       throw new ScryError(`${key} is null`)
@@ -78,7 +103,7 @@ export class ScryObject {
   }
 
   string(key: string, nullable?: boolean): string | null {
-    const value = this.obj.get(key)
+    const value = this.read(key)
     if (value === null || value === undefined) {
       if (nullable) return null
       throw new ScryError(`${key} is null`)
@@ -90,7 +115,7 @@ export class ScryObject {
   }
 
   number(key: string, nullable?: boolean): number | null {
-    const value = this.obj.get(key)
+    const value = this.read(key)
     if (value === null || value === undefined) {
       if (nullable) return null
       throw new ScryError(`${key} is null`)

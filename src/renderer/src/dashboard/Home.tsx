@@ -91,7 +91,9 @@ export function Home(): JSX.Element {
       hint: !diag?.overlayCreated
         ? 'window failed to open'
         : !diag.overlayVisible
-          ? 'Ctrl+Shift+H to show'
+          ? diag.hideHotkey
+            ? `${keyCaps(diag.hideHotkey).join('+')} to show`
+            : 'no hide shortcut available'
           : gameFound
             ? 'drawing over the game'
             : 'waiting for the game'
@@ -142,18 +144,31 @@ export function Home(): JSX.Element {
         </Gems>
 
         {/* An expert affordance. It only earns the newcomer's sightline once
-            there is actually an overlay on screen to hide. */}
-        {gameFound ? (
+            there is actually an overlay on screen to hide — and only when a key
+            genuinely bound, because naming a dead shortcut is worse than
+            saying nothing. */}
+        {gameFound && diag?.hideHotkey ? (
           <Keys>
-            <kbd>Ctrl</kbd>
-            <kbd>Shift</kbd>
-            <kbd>H</kbd>
+            {keyCaps(diag.hideHotkey).map((k) => (
+              <kbd key={k}>{k}</kbd>
+            ))}
             <span>hide or show every overlay</span>
           </Keys>
         ) : null}
       </Middle>
     </Wrap>
   )
+}
+
+const isMac = typeof navigator !== 'undefined' && navigator.platform.startsWith('Mac')
+
+/**
+ * Split an Electron accelerator into keycaps, in the platform's own words.
+ * Which shortcut bound depends on what was free on this machine, so it cannot
+ * be hardcoded — the app used to print Ctrl+Shift+H even when nothing bound.
+ */
+function keyCaps(accel: string): string[] {
+  return accel.split('+').map((k) => (k === 'CommandOrControl' ? (isMac ? 'Cmd' : 'Ctrl') : k))
 }
 
 type Tone = 'ok' | 'warn' | 'bad' | 'idle'

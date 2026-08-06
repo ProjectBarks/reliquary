@@ -64,6 +64,8 @@ export class Sts2ScryProvider {
   private pollTimer: NodeJS.Timeout | null = null
   private detectTimer: NodeJS.Timeout | null = null
   private errorStreak = 0
+  /** Reads that failed once and succeeded on retry — torn, not broken. */
+  private tornReads = 0
   private running = false
 
   // Change-detection caches so we only emit when something actually changed.
@@ -252,13 +254,33 @@ export class Sts2ScryProvider {
   private poll(): void {
     const context = this.conn.getContext()
     if (!context) return
-    try {
+    const readAll = (): void => {
       this.pollNGame(context)
       this.pollPile(context)
       this.pollEnemies(context)
       this.pollItems(context)
+    }
+    try {
+      readAll()
       this.errorStreak = 0
-    } catch (err) {
+    } catch (first) {
+      // Most read failures are TORN reads: an 8-byte pointer sampled while the
+      // game was mid-write, so it comes back with garbage high bytes
+      // (B800007FFF480CD1) or byte-shifted (0000007FFF2226D2). The write has
+      // landed by the time we look again, so one immediate retry recovers the
+      // tick instead of leaving the overlay stale for a poll interval.
+      try {
+        readAll()
+        this.errorStreak = 0
+        this.tornReads++
+        if (this.tornReads === 1 || this.tornReads % 50 === 0) {
+          telemetry.capture('poll_read_retry_recovered', { total: this.tornReads })
+        }
+        return
+      } catch {
+        // Fall through: a failure that survives a retry is a real one.
+      }
+      const err = first
       this.errorStreak++
       // Log the first failure in a streak so a silently-stalled overlay leaves a
       // trace (rate-limited so a persistent fault doesn't flood the ring at ~6/s).
@@ -267,7 +289,12 @@ export class Sts2ScryProvider {
       }
       // Aggregated inside telemetry, so a persistent fault reports occurrences
       // 1, 2, 5, 25… rather than ~6 events a second.
-      telemetry.issue('poll_read_failed', 'error', { error_streak: this.errorStreak }, err)
+      telemetry.issue(
+        'poll_read_failed',
+        'error',
+        { error_streak: this.errorStreak, torn_reads_recovered: this.tornReads },
+        err
+      )
       if (this.errorStreak === RESTART_AFTER_ERRORS) {
         telemetry.capture('scry_connection_restart', { error_streak: this.errorStreak })
         this.conn.restart()

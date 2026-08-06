@@ -230,6 +230,12 @@ export interface DiagnosticsState {
   scryLoadError: string | null
   /** The running app version (build-pinned, not Electron's). */
   appVersion?: string
+  /**
+   * The hide-overlay accelerator that actually bound this launch, or null if
+   * every candidate was taken. The UI must render this rather than a constant —
+   * naming a shortcut that does nothing is worse than admitting there isn't one.
+   */
+  hideHotkey?: string | null
   /** Telemetry client state, surfaced in the Debug tab. */
   telemetry?: Record<string, unknown>
   gameDetected: boolean

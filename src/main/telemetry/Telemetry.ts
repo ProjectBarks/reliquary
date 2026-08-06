@@ -148,6 +148,8 @@ class TelemetryClient {
   private sentCount = 0
   private failed = false
   private optedOut = false
+  /** Epoch ms of the last explicit issue(), for console de-duplication. */
+  private lastIssueAt = 0
 
   /** Call once, after app is ready. Safe to call when no key is configured. */
   init(): void {
@@ -239,6 +241,20 @@ class TelemetryClient {
     }
   }
 
+  /**
+   * True when an explicit issue() fired moments ago, meaning a console.error
+   * arriving now is almost certainly the same failure being narrated.
+   *
+   * Every structured report already carries the message, the stack, and
+   * subsystem context; the console copy carries none of it, so reporting both
+   * doubled the issue list with a strictly worse duplicate. The GPU crash did
+   * exactly this: gpu_crash_guard_trip plus a bare console_error saying the
+   * same thing with no crash count and no GPU status.
+   */
+  recentlyReported(withinMs = 250): boolean {
+    return Date.now() - this.lastIssueAt <= withinMs
+  }
+
   /** Mirror of the console ring, so an error report carries recent log output. */
   noteLog(level: string, text: string): void {
     try {
@@ -309,6 +325,7 @@ class TelemetryClient {
       const detail = err === undefined ? {} : describeError(err)
       const merged = { ...props, ...detail }
 
+      this.lastIssueAt = now
       let agg = this.issues.get(key)
       if (!agg || now - agg.lastAt > AGGREGATE_WINDOW_MS) {
         agg = { count: 0, firstAt: now, lastAt: now, lastProps: merged, reported: 0 }

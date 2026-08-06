@@ -35,7 +35,11 @@ function record(level: LogLine['level'], args: unknown[]): void {
   try {
     telemetry.noteLog(level, line.text)
     if (level === 'error') {
-      telemetry.issue(`console_error:${fingerprint(line.text)}`, 'error', { message: line.text })
+      // Subsystems that report their own failures also log them. Keep only the
+      // structured report — it carries the stack and the surrounding state that
+      // this line does not — and keep the console text as a breadcrumb.
+      if (telemetry.recentlyReported()) telemetry.crumb('error', line.text)
+      else telemetry.issue(`console_error:${fingerprint(line.text)}`, 'error', { message: line.text })
     } else if (level === 'warn') {
       telemetry.crumb('warn', line.text)
     }

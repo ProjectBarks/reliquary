@@ -590,8 +590,14 @@ export class NRun extends ScryObject {
   get _roomContainer(): NSceneContainer {
     return new NSceneContainer(this.object('_roomContainer'))
   }
-  get GlobalUi(): NGlobalUi {
-    return new NGlobalUi(this.object('GlobalUi'))
+  /**
+   * Absent while a run is tearing down or a scene is swapping. The non-optional
+   * accessor threw there ("GlobalUi is null"), which cost the whole poll tick
+   * for a state that is simply "not yet".
+   */
+  get GlobalUi(): NGlobalUi | null {
+    const value = this.object('GlobalUi', true)
+    return value ? new NGlobalUi(value) : null
   }
   getCurrentRoom(): NCombatRoom | ScryObject | null {
     const currentScene = this._roomContainer._currentScene
@@ -603,7 +609,8 @@ export class NRun extends ScryObject {
   }
   /** Topmost overlay screen (card reward/selection/game-over), or null. */
   getCurrentOverlay(): IOverlayScreen | null {
-    const overlays = this.GlobalUi.Overlays._overlays
+    const overlays = this.GlobalUi?.Overlays._overlays
+    if (!overlays) return null
     return overlays.length > 0 ? (overlays.last() ?? null) : null
   }
 }

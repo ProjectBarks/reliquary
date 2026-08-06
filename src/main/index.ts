@@ -46,8 +46,23 @@ applyGpuCrashMitigation()
 
 const GAME_LABEL = 'Slay the Spire 2'
 
-/** Global hotkey to hide/show every overlay (works while the game is focused). */
-const HIDE_OVERLAY_ACCELERATOR = 'CommandOrControl+Shift+H'
+/**
+ * Global hotkeys to hide/show every overlay, in preference order.
+ *
+ * A global accelerator is exclusive per machine, so the first choice is often
+ * already owned by something else — telemetry shows the binding failing on real
+ * installs. Falling through a short list means the user keeps a working way to
+ * hide an always-on-top window, and whichever one binds is reported so the UI
+ * can name the real key instead of a dead one.
+ */
+const HIDE_OVERLAY_ACCELERATORS = [
+  'CommandOrControl+Shift+H',
+  'Alt+Shift+H',
+  'CommandOrControl+Alt+H'
+]
+
+/** The accelerator that actually bound this launch, or null if none did. */
+let hideOverlayAccelerator: string | null = null
 
 const overlay = new OverlayWindow()
 const dashboard = new DashboardWindow()
@@ -100,7 +115,8 @@ function diagnostics(): DiagnosticsState {
     scenario: stub?.getScenario() ?? 'combat',
     codex: usingScry ? scryProvider?.codexStatus ?? null : null,
     telemetry: telemetry.status(),
-    appVersion: APP_VERSION
+    appVersion: APP_VERSION,
+    hideHotkey: hideOverlayAccelerator
   }
 }
 
@@ -420,15 +436,26 @@ if (hasLock)
   updater = new AutoUpdater((state) => broadcast(IPC.Update, state))
   updater.start()
 
-  const bound = globalShortcut.register(HIDE_OVERLAY_ACCELERATOR, toggleOverlayHidden)
-  if (!bound) {
-    console.warn(
-      `[spectra] could not register hide-overlay hotkey (${HIDE_OVERLAY_ACCELERATOR}); it may be taken by another app.`
-    )
-    telemetry.issue('hotkey_register_failed', 'warn', { accelerator: HIDE_OVERLAY_ACCELERATOR })
-  } else {
-    console.log(`[spectra] hide-overlay hotkey: ${HIDE_OVERLAY_ACCELERATOR}`)
+  const tried: string[] = []
+  for (const accel of HIDE_OVERLAY_ACCELERATORS) {
+    tried.push(accel)
+    if (telemetry.guard('hotkey_register', () => globalShortcut.register(accel, toggleOverlayHidden), false)) {
+      hideOverlayAccelerator = accel
+      break
+    }
   }
+  if (!hideOverlayAccelerator) {
+    console.warn(
+      `[spectra] no hide-overlay hotkey could be registered (tried ${tried.join(', ')}); all are taken by other apps.`
+    )
+    telemetry.issue('hotkey_register_failed', 'warn', { tried })
+  } else {
+    console.log(`[spectra] hide-overlay hotkey: ${hideOverlayAccelerator}`)
+    if (hideOverlayAccelerator !== HIDE_OVERLAY_ACCELERATORS[0]) {
+      telemetry.capture('hotkey_fallback_used', { accelerator: hideOverlayAccelerator, tried })
+    }
+  }
+  pushDiagnostics()
 
   const captureDir = process.env['SPECTRA_CAPTURE']
   if (captureDir) void captureScreens(captureDir)

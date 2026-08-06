@@ -36,7 +36,14 @@ export interface RawCard {
   baseAddress: any
 }
 
-export function toCardData(card: CardModel): RawCard {
+/**
+ * A pile slot can be empty while the game is mutating the list, so this accepts
+ * absence rather than trusting a cast. The old call sites wrote
+ * `toCardData(c as CardModel)` over a `T | undefined`, which asserted away the
+ * one case that actually happens and threw on it — losing the whole poll tick.
+ */
+export function toCardData(card: CardModel | null | undefined): RawCard | null {
+  if (!card) return null
   const energyCost = card._energyCost
   return {
     id: card.Id.Entry,
@@ -74,11 +81,16 @@ export function readPileState(context: GodotContext): RawPileState | null {
   const exhaust = piles._exhaustPile._pile?._cards
   const hand = findLocalPlayer(context, run)?.PlayerCombatState?.Hand._cards
 
+  // A pile that momentarily reports one fewer card is correct; a throw here
+  // drops every pile for that tick and the overlay goes stale.
+  const cards = (list: typeof draw): RawCard[] =>
+    list ? list.map((c) => toCardData(c as CardModel | undefined)).filter((c): c is RawCard => c !== null) : []
+
   return {
-    draw: draw ? draw.map((c) => toCardData(c as CardModel)) : [],
-    discard: discard ? discard.map((c) => toCardData(c as CardModel)) : [],
-    hand: hand ? hand.map((c) => toCardData(c as CardModel)) : [],
-    exhaust: exhaust ? exhaust.map((c) => toCardData(c as CardModel)) : []
+    draw: cards(draw),
+    discard: cards(discard),
+    hand: cards(hand),
+    exhaust: cards(exhaust)
   }
 }
 
@@ -135,6 +147,7 @@ export function readNGameState(context: GodotContext): RawNGameState | null {
   if (!scene || (scene as any).className !== NRun.ClassName) return null
   const run = scene as NRun
   const globalUi = run.GlobalUi
+  if (!globalUi) return null
   const currentRoom = run.getCurrentRoom()
 
   let roomType: string | null = null
@@ -237,7 +250,7 @@ export function readVisibleItems(context: GodotContext): RawVisibleItems | null 
   const scene = nGame.getCurrentScene()
   if (!scene || (scene as any).className !== NRun.ClassName) return null
   const run = scene as NRun
-  const screenSize = run.GlobalUi.getSize()
+  const screenSize = run.GlobalUi?.getSize()
   if (!screenSize || !screenSize[0] || !screenSize[1]) return null
 
   // 1) Card-selection overlay on top. These are DISTINCT screens: only the reward

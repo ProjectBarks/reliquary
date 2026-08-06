@@ -77,6 +77,12 @@ const SCENARIOS: { id: StubScenario; label: string }[] = [
   { id: 'idle', label: 'Idle' }
 ]
 
+/** Electron accelerator -> keycaps. Which one bound depends on what was free. */
+function keyCaps(accel: string): string[] {
+  const mac = typeof navigator !== 'undefined' && navigator.platform.startsWith('Mac')
+  return accel.split('+').map((k) => (k === 'CommandOrControl' ? (mac ? 'Cmd' : 'Ctrl') : k))
+}
+
 /** Raw provider states arrive lowercase; the UI reads as one voice. */
 const cap = (s: string): string => s.charAt(0).toUpperCase() + s.slice(1)
 
@@ -188,7 +194,17 @@ export function Settings(): JSX.Element {
             <RowMain>
               <RowLabel>Overlay window</RowLabel>
               <RowDesc>
-                Press <Kbd>Ctrl</Kbd> <Kbd>Shift</Kbd> <Kbd>H</Kbd> any time to hide or show it.
+                {diag?.hideHotkey ? (
+                  <>
+                    Press{' '}
+                    {keyCaps(diag.hideHotkey).map((k) => (
+                      <Kbd key={k}>{k}</Kbd>
+                    ))}{' '}
+                    any time to hide or show it.
+                  </>
+                ) : (
+                  'No hide shortcut could be registered — every candidate is already taken by another app.'
+                )}
               </RowDesc>
             </RowMain>
             <RowAside>
@@ -436,6 +452,7 @@ const Wrap = styled.div`
 `
 
 const Kbd = styled.kbd`
+  margin-right: 3px;
   font-family: var(--font-mono);
   font-size: 11px;
   color: var(--ink-dim);
