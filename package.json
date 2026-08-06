@@ -1,6 +1,6 @@
 {
   "name": "reliquary",
-  "version": "0.3.4",
+  "version": "0.3.5",
   "description": "Reliquary — a transparent, click-through Slay the Spire 2 companion overlay: deck tracker, draft advice, and attack forecasts.",
   "productName": "Reliquary",
   "main": "./out/main/index.js",

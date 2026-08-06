@@ -80,8 +80,6 @@ export class Sts2ScryProvider {
   private pollTimer: NodeJS.Timeout | null = null
   private detectTimer: NodeJS.Timeout | null = null
   private errorStreak = 0
-  /** Reads that failed once and succeeded on retry — torn, not broken. */
-  private tornReads = 0
   /** Reads that failed twice but are inherent to unsynchronised access. */
   private transientReads = 0
   private running = false
@@ -272,33 +270,13 @@ export class Sts2ScryProvider {
   private poll(): void {
     const context = this.conn.getContext()
     if (!context) return
-    const readAll = (): void => {
+    try {
       this.pollNGame(context)
       this.pollPile(context)
       this.pollEnemies(context)
       this.pollItems(context)
-    }
-    try {
-      readAll()
       this.errorStreak = 0
-    } catch (first) {
-      // Most read failures are TORN reads: an 8-byte pointer sampled while the
-      // game was mid-write, so it comes back with garbage high bytes
-      // (B800007FFF480CD1) or byte-shifted (0000007FFF2226D2). The write has
-      // landed by the time we look again, so one immediate retry recovers the
-      // tick instead of leaving the overlay stale for a poll interval.
-      try {
-        readAll()
-        this.errorStreak = 0
-        this.tornReads++
-        if (this.tornReads === 1 || this.tornReads % 50 === 0) {
-          telemetry.capture('poll_read_retry_recovered', { total: this.tornReads })
-        }
-        return
-      } catch {
-        // Fall through: a failure that survives a retry is a real one.
-      }
-      const err = first
+    } catch (err) {
       // Reading a live process without synchronisation means some failures are
       // inherent, not defects: the game frees a scene mid-traversal, or a
       // pointer is sampled across a write. These are worth counting and worth
@@ -308,8 +286,6 @@ export class Sts2ScryProvider {
       const transient = isTransientRead(err)
       this.errorStreak++
       if (transient) this.transientReads++
-      // Log the first failure in a streak so a silently-stalled overlay leaves a
-      // trace (rate-limited so a persistent fault doesn't flood the ring at ~6/s).
       // Only the first of a streak, and only when it is not the expected kind —
       // a scene freed mid-read is normal and does not deserve a stack trace.
       if (this.errorStreak === 1 && !transient) {
@@ -322,7 +298,6 @@ export class Sts2ScryProvider {
         transient ? 'warn' : 'error',
         {
           error_streak: this.errorStreak,
-          torn_reads_recovered: this.tornReads,
           transient_total: this.transientReads
         },
         err

@@ -12,6 +12,30 @@
 
 export class ScryError extends Error {}
 
+/**
+ * True for a read that failed because the value moved under us, not because
+ * anything is wrong: the game freed a scene mid-traversal, or an 8-byte pointer
+ * was sampled across a write (giving a valid low half under a garbage high
+ * byte, e.g. B800007FF97D03D1).
+ */
+function isTransientRead(err: unknown): boolean {
+  const e = err as { type?: string; message?: string } | null
+  if (e?.type === 'memory-access-exception') return true
+  const m = e?.message ?? ''
+  return m.includes('Invalid access to memory location') || m.includes('Only part of a Read')
+}
+
+/**
+ * How many times to re-sample a torn read before giving up.
+ *
+ * A torn pointer is a nanosecond-scale window: the writer has finished long
+ * before a JS loop comes back around, so an immediate re-read almost always
+ * lands on the settled value. Retrying HERE rather than around the whole poll
+ * is what matters — re-running an entire snapshot re-reads dozens of other
+ * pointers and simply gives the next one a chance to tear instead.
+ */
+const READ_ATTEMPTS = 4
+
 function isScryArrayLike(obj: any): boolean {
   return (
     typeof obj === 'object' &&
@@ -43,20 +67,27 @@ export class ScryObject {
    * the key and the class turns one unexplained error into a fixable one.
    */
   protected read(key: string): any {
-    try {
-      return this.obj.get(key)
-    } catch (err) {
-      const cls = (() => {
-        try {
-          return this.obj?.className ?? this.obj?.getClassName?.() ?? 'unknown'
-        } catch {
-          return 'unknown'
-        }
-      })()
-      throw new ScryError(
-        `reading '${key}' on ${cls}: ${err instanceof Error ? err.message : String(err)}`
-      )
+    let last: unknown
+    for (let attempt = 0; attempt < READ_ATTEMPTS; attempt++) {
+      try {
+        return this.obj.get(key)
+      } catch (err) {
+        last = err
+        // A genuine fault (missing property, dead handle) will not fix itself,
+        // so only re-sample the kind that can.
+        if (!isTransientRead(err)) break
+      }
     }
+    const cls = (() => {
+      try {
+        return this.obj?.className ?? this.obj?.getClassName?.() ?? 'unknown'
+      } catch {
+        return 'unknown'
+      }
+    })()
+    throw new ScryError(
+      `reading '${key}' on ${cls}: ${last instanceof Error ? last.message : String(last)}`
+    )
   }
 
   unsafe(key: string): any {
@@ -335,11 +366,21 @@ export function getValid(classObj: any, key: string, type?: string): any {
   // bare native messages with no indication of what was being read — four such
   // reports arrived from patched builds while every instance read was named.
   let value: any
-  try {
-    value = classObj.get(key)
-  } catch (err) {
+  let last: unknown
+  let got = false
+  for (let attempt = 0; attempt < READ_ATTEMPTS; attempt++) {
+    try {
+      value = classObj.get(key)
+      got = true
+      break
+    } catch (err) {
+      last = err
+      if (!isTransientRead(err)) break
+    }
+  }
+  if (!got) {
     throw new ScryError(
-      `reading static '${key}': ${err instanceof Error ? err.message : String(err)}`
+      `reading static '${key}': ${last instanceof Error ? last.message : String(last)}`
     )
   }
   if (value === null || value === undefined) throw new ScryError(`${key} is null`)
