@@ -5,3 +5,6 @@ release/
 *.log
 *.tsbuildinfo
 .DS_Store
+
+# Agent worktrees are local scratch, never part of the repo
+.claude/worktrees/
