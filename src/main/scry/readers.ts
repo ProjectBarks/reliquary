@@ -159,7 +159,10 @@ export function readNGameState(context: GodotContext): RawNGameState | null {
 
   let isGameOver = false
   for (const overlay of globalUi.Overlays._overlays) {
-    if (overlay?.isNGameOverScreen()) isGameOver = true
+    // The overlay stack can hold an entry the game has already freed, and
+    // reading its class dereferences null. Unknown class simply means "not the
+    // game-over screen", which is the only thing being asked here.
+    if (safe(() => overlay?.isNGameOverScreen() ?? false, false)) isGameOver = true
   }
 
   const inspectCard = safe(() => nGame.InspectCardScreen?.getControl()?.isVisible() ?? false, false)

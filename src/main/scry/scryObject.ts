@@ -22,6 +22,10 @@ export function isTransientRead(err: unknown): boolean {
   const e = err as { type?: string; message?: string } | null
   if (e?.type === 'memory-access-exception') return true
   const m = e?.message ?? ''
+  // A read AT address zero is a null pointer we followed, not a value that
+  // moved under us. Retrying it is pointless and calling it inherent hides a
+  // real defect — one such read was silently dropping whole snapshots.
+  if (/remote address 0+:/.test(m)) return false
   return m.includes('Invalid access to memory location') || m.includes('Only part of a Read')
 }
 

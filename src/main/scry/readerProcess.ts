@@ -135,32 +135,51 @@ function startPolling(): void {
 function poll(): void {
   const context = conn.getContext()
   if (!context) return
-  try {
-    send({
-      type: 'snapshot',
-      nGame: readNGameState(context),
-      pile: readPileState(context),
-      enemies: readEnemiesState(context),
-      items: readVisibleItems(context)
-    })
-    errorStreak = 0
-  } catch (err) {
-    const d = describe(err)
-    errorStreak++
-    if (d.transient) transientReads++
-    send({
-      type: 'readFailed',
-      ...d,
-      errorStreak,
-      transientTotal: transientReads
-    })
-    if (errorStreak === RESTART_AFTER_ERRORS) {
-      log('warn', `restarting scry connection after ${errorStreak} failures`)
-      conn.restart()
-    } else if (errorStreak >= REDETECT_AFTER_ERRORS) {
-      log('warn', `re-detecting game after ${errorStreak} failures`)
-      processGone()
+
+  // Each read stands alone. They used to be four expressions inside one
+  // object literal, so a dead pointer while reading room state threw before
+  // the other three were evaluated and the whole snapshot was dropped — the
+  // card recommendations vanished because something unrelated failed. A read
+  // that fails now costs only its own field.
+  let failures = 0
+  let firstError: unknown = null
+  const read = <T>(fn: () => T): T | null => {
+    try {
+      return fn()
+    } catch (err) {
+      failures++
+      if (!firstError) firstError = err
+      return null
     }
+  }
+
+  const snapshot = {
+    nGame: read(() => readNGameState(context)),
+    pile: read(() => readPileState(context)),
+    enemies: read(() => readEnemiesState(context)),
+    items: read(() => readVisibleItems(context))
+  }
+  send({ type: 'snapshot', ...snapshot })
+
+  if (failures === 0) {
+    errorStreak = 0
+    return
+  }
+  const d = describe(firstError)
+  errorStreak++
+  if (d.transient) transientReads++
+  send({
+    type: 'readFailed',
+    ...d,
+    errorStreak,
+    transientTotal: transientReads
+  })
+  if (errorStreak === RESTART_AFTER_ERRORS) {
+    log('warn', `restarting scry connection after ${errorStreak} failures`)
+    conn.restart()
+  } else if (errorStreak >= REDETECT_AFTER_ERRORS) {
+    log('warn', `re-detecting game after ${errorStreak} failures`)
+    processGone()
   }
 }
 
