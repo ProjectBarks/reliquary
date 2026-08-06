@@ -179,7 +179,7 @@ export function readNGameState(context: GodotContext): RawNGameState | null {
     capstoneScreen: safe(() => globalUi.CapstoneContainer.CurrentCapstoneScreen !== null, false),
     isInspectCardScreenOpen: inspectCard,
     isInspectRelicScreenOpen: inspectRelic,
-    currentActIndex: safe(() => run._state._currentActIndex, 0),
+    currentActIndex: safe(() => run._state?._currentActIndex ?? 0, 0),
     characterId: localPlayer ? safe(() => localPlayer.getCharacterId(), null) : null
   }
 }

@@ -584,23 +584,28 @@ export class NRun extends ScryObject {
   get className(): string {
     return NRun.ClassName
   }
-  get _state(): RunState {
-    return new RunState(this.object('_state'))
-  }
-  get _roomContainer(): NSceneContainer {
-    return new NSceneContainer(this.object('_roomContainer'))
-  }
   /**
-   * Absent while a run is tearing down or a scene is swapping. The non-optional
-   * accessor threw there ("GlobalUi is null"), which cost the whole poll tick
-   * for a state that is simply "not yet".
+   * NRun's own children are read on every poll and are legitimately absent while
+   * a run loads or tears down. The throwing accessor turned each of those
+   * moments into a reported error — "_roomContainer is null" arrived from a real
+   * install — when the honest reading is "not yet". Nullable, and callers treat
+   * absence as no data for that tick.
    */
+  get _state(): RunState | null {
+    const value = this.object('_state', true)
+    return value ? new RunState(value) : null
+  }
+  get _roomContainer(): NSceneContainer | null {
+    const value = this.object('_roomContainer', true)
+    return value ? new NSceneContainer(value) : null
+  }
+  /** Absent for the same reason, and reported the same way. */
   get GlobalUi(): NGlobalUi | null {
     const value = this.object('GlobalUi', true)
     return value ? new NGlobalUi(value) : null
   }
   getCurrentRoom(): NCombatRoom | ScryObject | null {
-    const currentScene = this._roomContainer._currentScene
+    const currentScene = this._roomContainer?._currentScene
     const sceneName = currentScene?.getClassName()
     if (sceneName === NCombatRoom.ClassName) return new NCombatRoom(currentScene)
     if (sceneName === NMerchantRoomClassName) return new NMerchantRoom(currentScene)
@@ -701,8 +706,10 @@ export class ReleaseInfoManager extends ScryObject {
 }
 
 export function findLocalPlayer(context: GodotContext, run: NRun): Player | null {
+  const state = run._state
+  if (!state) return null
   const localNetId = LocalContext.NetId(context)
-  for (const player of run._state._players) {
+  for (const player of state._players) {
     if (player && player.NetId === localNetId) return player
   }
   return null
