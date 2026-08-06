@@ -58,8 +58,16 @@ export default defineConfig({
     },
     build: {
       rollupOptions: {
+        // Two main-process entries. `reader` is forked as a utilityProcess so
+        // the native memory reader runs in its own OS process — a segfault
+        // there kills that process alone instead of the whole app.
+        input: {
+          index: resolve('src/main/index.ts'),
+          reader: resolve('src/main/scry/readerProcess.ts')
+        },
         // native/optional deps must stay external (not bundled)
-        external: ['node-window-manager']
+        external: ['node-window-manager'],
+        output: { entryFileNames: '[name].js' }
       }
     },
     resolve: {

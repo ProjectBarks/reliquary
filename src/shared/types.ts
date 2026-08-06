@@ -238,6 +238,14 @@ export interface DiagnosticsState {
   hideHotkey?: string | null
   /** Telemetry client state, surfaced in the Debug tab. */
   telemetry?: Record<string, unknown>
+  /**
+   * Health of the isolated reader process. A rising restart count is the
+   * signal that the memory reader is crashing repeatedly — invisible otherwise,
+   * because the app now survives it.
+   */
+  readerRestarts?: number
+  /** Age of the newest reads in ms; null before the first successful poll. */
+  snapshotAgeMs?: number | null
   gameDetected: boolean
   gamePid: number | null
   scenario: StubScenario

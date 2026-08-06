@@ -18,7 +18,7 @@ export class ScryError extends Error {}
  * was sampled across a write (giving a valid low half under a garbage high
  * byte, e.g. B800007FF97D03D1).
  */
-function isTransientRead(err: unknown): boolean {
+export function isTransientRead(err: unknown): boolean {
   const e = err as { type?: string; message?: string } | null
   if (e?.type === 'memory-access-exception') return true
   const m = e?.message ?? ''

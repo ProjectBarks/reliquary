@@ -375,6 +375,13 @@ export function Settings(): JSX.Element {
                   : 'no issues recorded this session'}
               </Mono>
               <Mono>
+                reader process: {Number(diag?.readerRestarts ?? 0)} restart
+                {diag?.readerRestarts === 1 ? '' : 's'} ·{' '}
+                {diag?.snapshotAgeMs == null
+                  ? 'no reads yet'
+                  : `last read ${Math.round(diag.snapshotAgeMs / 1000)}s ago`}
+              </Mono>
+              <Mono>
                 overlay bounds:{' '}
                 {diag?.overlayBounds
                   ? `${diag.overlayBounds.width}×${diag.overlayBounds.height} @ ${diag.overlayBounds.x},${diag.overlayBounds.y}`

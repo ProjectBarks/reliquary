@@ -2,17 +2,16 @@
 
 import { get as httpsGet } from 'https'
 import { telemetry } from '../telemetry/Telemetry'
-import { ScryConnection } from './connection'
+import { ReaderHost } from './ReaderHost'
+import type { ReaderToHost } from './readerProtocol'
 import { CodexClient, type DeckAdvice } from '../codex/CodexClient'
-import {
-  readEnemiesState,
-  readNGameState,
-  readPileState,
-  readVisibleItems,
-  readGameVersion,
-  type RawCard,
-  type RawPileState,
-  type RawVisibleItems
+// Types only: the reads themselves now happen in the forked reader process.
+import type {
+  RawCard,
+  RawEnemiesState,
+  RawNGameState,
+  RawPileState,
+  RawVisibleItems
 } from './readers'
 import type {
   KeyedSnapshot,
@@ -38,10 +37,6 @@ import type {
  * views on a crash, and re-detect when the process comes and goes.
  */
 
-const POLL_MS = 150
-const DETECT_MS = 1000
-const RESTART_AFTER_ERRORS = 8
-const REDETECT_AFTER_ERRORS = 40
 
 // A card offer must be stable for this many consecutive polls (~450ms at 150ms)
 // before we spend a deck-conditioned draft-advice API call on it.
@@ -59,29 +54,12 @@ export interface ScryProviderCallbacks {
   onProcess(state: ProcessState): void
 }
 
-/**
- * True for failures that come from reading a moving target rather than from a
- * bug: a freed scene during a room swap, or a pointer read across a write.
- * They recover on the next tick by themselves.
- */
-function isTransientRead(err: unknown): boolean {
-  const anyErr = err as { type?: string; message?: string } | null
-  if (anyErr?.type === 'memory-access-exception') return true
-  const m = anyErr?.message ?? ''
-  return (
-    m.includes('Invalid access to memory location') ||
-    m.includes('Only part of a ReadProcessMemory') ||
-    m.includes('Failed to read')
-  )
-}
-
 export class Sts2ScryProvider {
-  private conn = new ScryConnection()
-  private pollTimer: NodeJS.Timeout | null = null
-  private detectTimer: NodeJS.Timeout | null = null
+  private reader: ReaderHost
+  private readerPid: number | null = null
+  private connectError: string | null = null
+  private moduleLoaded = false
   private errorStreak = 0
-  /** Reads that failed twice but are inherent to unsynchronised access. */
-  private transientReads = 0
   private running = false
 
   // Change-detection caches so we only emit when something actually changed.
@@ -128,7 +106,9 @@ export class Sts2ScryProvider {
   private lastOfferKey = ''
   private offerKeyStreak = 0
 
-  constructor(private readonly cb: ScryProviderCallbacks) {}
+  constructor(private readonly cb: ScryProviderCallbacks) {
+    this.reader = new ReaderHost((msg) => this.onReaderMessage(msg))
+  }
 
   start(): void {
     this.running = true
@@ -140,8 +120,7 @@ export class Sts2ScryProvider {
           console.warn('[codex-provider] prime failed', err)
           telemetry.issue('codex_prime_failed', 'warn', {}, err)
         })
-    this.detect()
-    this.detectTimer = setInterval(() => this.detect(), DETECT_MS)
+    this.reader.start()
     // Self-heal a failed/incomplete prime (offline at launch, API rebuilding):
     // retry periodically until the snapshot is ready.
     this.reprimeTimer = setInterval(() => {
@@ -154,80 +133,139 @@ export class Sts2ScryProvider {
 
   stop(): void {
     this.running = false
-    if (this.detectTimer) clearInterval(this.detectTimer)
-    if (this.pollTimer) clearTimeout(this.pollTimer)
     if (this.cardDataRetryTimer) clearTimeout(this.cardDataRetryTimer)
     if (this.reprimeTimer) clearInterval(this.reprimeTimer)
-    this.detectTimer = null
-    this.pollTimer = null
     this.cardDataRetryTimer = null
     this.reprimeTimer = null
-    this.conn.disconnect()
+    this.reader.stop()
   }
 
   get scryError(): string | null {
-    return this.conn.error
+    return this.connectError
   }
   get connectedPid(): number | null {
-    return this.conn.connectedPid
+    return this.readerPid
+  }
+  /** How many times the reader process has been restarted this session. */
+  get readerRestarts(): number {
+    return this.reader.restartCount
+  }
+  /**
+   * Whether the native reader loaded. Answered by the child now, since the
+   * main process no longer loads the binary at all — that was the point.
+   */
+  get scryModuleLoaded(): boolean {
+    return this.moduleLoaded
+  }
+  /** Age of the newest reads, for the diagnostics panel. Null before first poll. */
+  get snapshotAgeMs(): number | null {
+    return this.reader.lastSnapshot?.ageMs ?? null
   }
   /** Primed-snapshot status for the dashboard diagnostics panel. */
   get codexStatus(): ReturnType<CodexClient['status']> {
     return this.codex.status()
   }
 
-  // ── process detection ──
+  // ── reader process ──
 
-  private detect(): void {
-    // Runs from a setInterval; a throw here would escape uncaught and kill the
-    // process (no JS stack — a crashpad-kill profile). Never let it propagate.
-    try {
-      this.detectInner()
-    } catch (err) {
-      console.error('[codex-provider] detect failed', err)
-      telemetry.issue('scry_detect_failed', 'error', {}, err)
-    }
-  }
+  /**
+   * Everything the reader tells us. The child owns detection, the connection
+   * and the raw reads; this owns what they mean. A reader crash therefore costs
+   * one snapshot — Codex state, settings and the emitted values all live here
+   * and survive the restart untouched.
+   */
+  private onReaderMessage(msg: ReaderToHost): void {
+    switch (msg.type) {
+      case 'spawned':
+        this.readerPid = msg.pid
+        break
 
-  private detectInner(): void {
-    const { proc } = ScryConnection.findGameProcess()
-    if (!proc) {
-      if (this.conn.isConnected()) this.handleProcessGone()
-      this.cb.onProcess({ detected: false, pid: null, bounds: null, active: false })
-      return
-    }
-    this.cb.onProcess({
-      detected: true,
-      pid: proc.pid,
-      bounds: proc.bounds,
-      active: proc.active
-    })
-    if (!this.conn.isConnected() || this.conn.connectedPid !== proc.pid) {
-      const connected = this.conn.connect(proc.pid)
-      telemetry.capture('scry_connect', { ok: connected, had_prior: this.conn.connectedPid != null })
-      if (!connected) {
-        // We can see the game but cannot attach — usually a permissions or
-        // anti-cheat interaction, and completely invisible to the user.
-        telemetry.issue('scry_connect_failed', 'error', { scry_error: this.scryError })
-      }
-      if (connected) {
-        this.errorStreak = 0
-        this.fetchCardData()
-        // Prime the Codex snapshot (cached per API version; cheap no-op if fresh).
-        void this.codex.prime().catch((err) => {
-          console.warn('[codex-provider] prime failed', err)
-          telemetry.issue('codex_prime_failed', 'warn', {}, err)
+      case 'process':
+        this.cb.onProcess({
+          detected: msg.detected,
+          pid: msg.pid,
+          bounds: msg.bounds,
+          active: msg.active
         })
-        this.startPolling()
-      }
+        break
+
+      case 'connect':
+        this.connectError = msg.error
+        telemetry.capture('scry_connect', { ok: msg.ok })
+        if (!msg.ok) {
+          // We can see the game but cannot attach — usually a permissions or
+          // anti-cheat interaction, and completely invisible to the user.
+          telemetry.issue('scry_connect_failed', 'error', { scry_error: msg.error })
+        } else {
+          this.errorStreak = 0
+          void this.codex.prime().catch((err) => {
+            telemetry.issue('codex_prime_failed', 'warn', {}, err)
+          })
+        }
+        break
+
+      case 'gameVersion':
+        this.fetchCardData(msg.version)
+        break
+
+      case 'snapshot':
+        this.errorStreak = 0
+        telemetry.guard('poll_ngame', () => this.pollNGame(msg.nGame), undefined)
+        telemetry.guard('poll_pile', () => this.pollPile(msg.pile), undefined)
+        telemetry.guard('poll_enemies', () => this.pollEnemies(msg.enemies), undefined)
+        telemetry.guard('poll_items', () => this.pollItems(msg.items), undefined)
+        break
+
+      case 'readFailed':
+        this.errorStreak = msg.errorStreak
+        telemetry.issue(
+          msg.transient ? 'poll_read_transient' : 'poll_read_failed',
+          msg.transient ? 'warn' : 'error',
+          {
+            error_streak: msg.errorStreak,
+            transient_total: msg.transientTotal,
+            error_message: msg.message,
+            error_stack: msg.stack
+          }
+        )
+        break
+
+      case 'processGone':
+        this.handleProcessGone()
+        break
+
+      case 'error':
+        telemetry.issue(`reader_${msg.scope}`, msg.transient ? 'warn' : 'error', {
+          error_message: msg.message,
+          error_stack: msg.stack
+        })
+        break
+
+      case 'log':
+        // The child has no console of its own that anyone can see, so its
+        // output is replayed here to reach the log ring and the Logs view.
+        if (msg.level === 'error') console.error(`[reader] ${msg.text}`)
+        else if (msg.level === 'warn') console.warn(`[reader] ${msg.text}`)
+        else console.log(`[reader] ${msg.text}`)
+        break
+
+      case 'moduleStatus':
+        this.moduleLoaded = msg.loaded
+        if (!msg.loaded) {
+          this.connectError = msg.error
+          telemetry.issue('scry_module_load_failed', 'error', { reason: msg.error })
+          console.warn(`[reader] native module did not load: ${msg.error}`)
+        }
+        break
+
+      case 'ready':
+        console.log(`[reader] ready (pid ${msg.pid})`)
+        break
     }
   }
 
   private handleProcessGone(): void {
     telemetry.capture('scry_process_gone', { error_streak: this.errorStreak })
-    this.conn.disconnect()
-    if (this.pollTimer) clearTimeout(this.pollTimer)
-    this.pollTimer = null
     this.resetRunState()
     this.lastNGame = this.lastPile = this.lastEnemies = this.lastLayout = ''
     this.cb.emit({ key: 'sts2.nGameState', value: idleNGameState() })
@@ -239,81 +277,7 @@ export class Sts2ScryProvider {
     this.cb.emit({ key: 'sts2.layoutState', value: { source: 'none', panels: [] } })
   }
 
-  // ── polling loop ──
-
-  private startPolling(): void {
-    if (this.pollTimer) return
-    const tick = (): void => {
-      if (!this.running || !this.conn.isConnected()) {
-        this.pollTimer = null
-        return
-      }
-      try {
-        this.poll()
-      } catch (err) {
-        // poll() already handles read errors; this is a last-resort guard so a
-        // throw from the error path (e.g. an emit) can never stop the loop.
-        console.error('[codex-provider] poll tick failed', err)
-        telemetry.issue('poll_tick_failed', 'error', {}, err)
-      } finally {
-        // Always reschedule while running so one bad tick can't kill the loop.
-        if (this.running && this.conn.isConnected()) {
-          this.pollTimer = setTimeout(tick, POLL_MS)
-        } else {
-          this.pollTimer = null
-        }
-      }
-    }
-    this.pollTimer = setTimeout(tick, POLL_MS)
-  }
-
-  private poll(): void {
-    const context = this.conn.getContext()
-    if (!context) return
-    try {
-      this.pollNGame(context)
-      this.pollPile(context)
-      this.pollEnemies(context)
-      this.pollItems(context)
-      this.errorStreak = 0
-    } catch (err) {
-      // Reading a live process without synchronisation means some failures are
-      // inherent, not defects: the game frees a scene mid-traversal, or a
-      // pointer is sampled across a write. These are worth counting and worth
-      // escalating if sustained, but reporting them at error severity buried
-      // the genuine faults — they were 65% of all errors while being the least
-      // actionable thing in the set.
-      const transient = isTransientRead(err)
-      this.errorStreak++
-      if (transient) this.transientReads++
-      // Only the first of a streak, and only when it is not the expected kind —
-      // a scene freed mid-read is normal and does not deserve a stack trace.
-      if (this.errorStreak === 1 && !transient) {
-        console.warn('[codex-provider] poll read failed', err)
-      }
-      // Aggregated inside telemetry, so a persistent fault reports occurrences
-      // 1, 2, 5, 25… rather than ~6 events a second.
-      telemetry.issue(
-        transient ? 'poll_read_transient' : 'poll_read_failed',
-        transient ? 'warn' : 'error',
-        {
-          error_streak: this.errorStreak,
-          transient_total: this.transientReads
-        },
-        err
-      )
-      if (this.errorStreak === RESTART_AFTER_ERRORS) {
-        telemetry.capture('scry_connection_restart', { error_streak: this.errorStreak })
-        this.conn.restart()
-      } else if (this.errorStreak >= REDETECT_AFTER_ERRORS) {
-        telemetry.issue('scry_redetect_after_errors', 'warn', { error_streak: this.errorStreak })
-        this.handleProcessGone()
-      }
-    }
-  }
-
-  private pollNGame(context: NonNullable<ReturnType<ScryConnection['getContext']>>): void {
-    const raw = readNGameState(context)
+  private pollNGame(raw: RawNGameState | null): void {
     const value: Sts2NGameState = raw
       ? {
           room: raw.roomType ? { type: raw.roomType } : null,
@@ -377,8 +341,7 @@ export class Sts2ScryProvider {
     }
   }
 
-  private pollPile(context: NonNullable<ReturnType<ScryConnection['getContext']>>): void {
-    const raw = readPileState(context)
+  private pollPile(raw: RawPileState | null): void {
     const value: Sts2PileState = raw
       ? this.toPileState(raw)
       : { draw: [], hand: [], discard: [] }
@@ -389,8 +352,7 @@ export class Sts2ScryProvider {
     }
   }
 
-  private pollEnemies(context: NonNullable<ReturnType<ScryConnection['getContext']>>): void {
-    const raw = readEnemiesState(context)
+  private pollEnemies(raw: RawEnemiesState | null): void {
     const value: Sts2EnemiesState = raw
       ? {
           enemies: raw.enemies.map((e) => ({ intents: e.intents })),
@@ -416,8 +378,7 @@ export class Sts2ScryProvider {
     }
   }
 
-  private pollItems(context: NonNullable<ReturnType<ScryConnection['getContext']>>): void {
-    const raw = readVisibleItems(context)
+  private pollItems(raw: RawVisibleItems | null): void {
     const value: Sts2LayoutState = raw
       ? this.toLayoutState(raw)
       : { source: 'none', panels: [] }
@@ -649,16 +610,8 @@ export class Sts2ScryProvider {
 
   // ── card metadata (CDN) ──
 
-  private fetchCardData(): void {
+  private fetchCardData(version: string | null): void {
     if (this.cardDataFetching) return
-    const context = this.conn.getContext()
-    if (!context) return
-    let version: string | null = null
-    try {
-      version = readGameVersion(context)
-    } catch {
-      version = null
-    }
     if (version && version === this.cardDataVersion) return
     this.cardDataFetching = true
     const candidates = version
@@ -722,7 +675,7 @@ export class Sts2ScryProvider {
     )
     this.cardDataRetryTimer = setTimeout(() => {
       this.cardDataRetryTimer = null
-      if (this.running && this.conn.isConnected()) this.fetchCardData()
+      if (this.running) this.fetchCardData(this.cardDataVersion)
     }, delay)
   }
 }

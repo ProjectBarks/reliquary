@@ -5,7 +5,6 @@ import { OverlayWindow } from './overlay/OverlayWindow'
 import { DashboardWindow } from './windows/DashboardWindow'
 import { Sts2Stub } from './stub/sts2Stub'
 import { Sts2ScryProvider, type ProcessState } from './scry/provider'
-import { loadScryModule } from './scry/native'
 import { installLogCapture, setLogSink, logHistory } from './logBus'
 import {
   applyGpuCrashMitigation,
@@ -108,7 +107,7 @@ function diagnostics(): DiagnosticsState {
     overlayCreated: !!overlay.browserWindow,
     overlayVisible: overlay.browserWindow?.isVisible() ?? false,
     overlayBounds: b,
-    scryModuleLoaded: scryLoaded,
+    scryModuleLoaded: usingScry ? scryProvider?.scryModuleLoaded ?? false : scryLoaded,
     scryLoadError: usingScry ? scryProvider?.scryError ?? scryLoadError : scryLoadError,
     gameDetected: usingScry ? processState.detected : false,
     gamePid: usingScry ? processState.pid : null,
@@ -116,6 +115,8 @@ function diagnostics(): DiagnosticsState {
     codex: usingScry ? scryProvider?.codexStatus ?? null : null,
     telemetry: telemetry.status(),
     appVersion: APP_VERSION,
+    readerRestarts: usingScry ? scryProvider?.readerRestarts ?? 0 : 0,
+    snapshotAgeMs: usingScry ? scryProvider?.snapshotAgeMs ?? null : null,
     hideHotkey: hideOverlayAccelerator
   }
 }
@@ -369,15 +370,11 @@ if (hasLock)
   // Windows taskbar identity (grouping + correct icon/notifications).
   app.setAppUserModelId('me.brandonbarker.reliquary')
 
-  const scry = loadScryModule()
-  scryLoaded = !!scry.module
-  scryLoadError = scry.error
-  telemetry.setContext({ scry_module_loaded: scryLoaded, mode: devStubEarly() ? 'stub' : 'live' })
-  if (!scryLoaded) {
-    // Without the reader the app runs but can never show live data — the single
-    // most important thing to know about a broken install.
-    telemetry.issue('scry_module_load_failed', 'error', { reason: scry.error })
-  }
+  // The native binary is deliberately NOT loaded here. It lives in the forked
+  // reader process, so a segfault inside it cannot take this process — and
+  // therefore the windows, the overlay and the crash reporter — down with it.
+  // Its load status arrives from the child instead.
+  telemetry.setContext({ mode: devStubEarly() ? 'stub' : 'live' })
   // Live is the default. Stub is a developer-only flag, never a silent fallback:
   // if the native module can't load we still run live so the dashboard surfaces
   // the real error instead of masking it with fake data.
@@ -385,12 +382,8 @@ if (hasLock)
   usingScry = !devStub
   if (devStub) {
     console.log('[spectra] SPECTRA_STUB dev flag set; using stub data (scenario switcher active).')
-  } else if (scryLoaded) {
-    console.log('[spectra] scry module loaded; using live game data.')
   } else {
-    console.warn(
-      `[spectra] scry module failed to load (${scry.error}); running live anyway — overlays will wait for the game and the dashboard shows the error.`
-    )
+    console.log('[spectra] live mode; the reader process reports its own status.')
   }
 
   const devUrl = process.env['ELECTRON_RENDERER_URL']

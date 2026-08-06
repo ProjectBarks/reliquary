@@ -6,7 +6,6 @@ import type {
   Sts2LayoutState,
   Sts2NGameState,
   Sts2PileState,
-  Sts2Settings,
   StubScenario
 } from '@shared/types'
 
