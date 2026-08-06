@@ -205,10 +205,17 @@ export const Button = styled.button<{ $primary?: boolean }>`
   color: ${(p) => (p.$primary ? '#1a1613' : 'var(--ink)')};
   background: ${(p) => (p.$primary ? 'var(--brand)' : 'var(--fill)')};
   border: 1px solid ${(p) => (p.$primary ? 'var(--brand)' : 'var(--line-strong)')};
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
   transition:
     background 0.14s ease,
-    border-color 0.14s ease;
+    border-color 0.14s ease,
+    transform 0.1s cubic-bezier(0.16, 1, 0.3, 1);
 
+  &:active:not(:disabled) {
+    transform: translateY(1px);
+  }
   &:hover:not(:disabled) {
     background: ${(p) => (p.$primary ? 'var(--brand-soft)' : 'var(--fill-hover)')};
     border-color: ${(p) => (p.$primary ? 'var(--brand-soft)' : 'oklch(1 0 0 / 24%)')};
@@ -280,6 +287,81 @@ const SwitchThumb = styled.span<{ $on: boolean }>`
   /* Exponential ease-out from an already-visible default. */
   transition: left 0.22s cubic-bezier(0.16, 1, 0.3, 1);
   transform: translateY(-50%);
+`
+
+// ── waiting ───────────────────────────────────────────────────────────────
+
+const orbit = keyframes`
+  to { transform: rotate(360deg); }
+`
+const counter = keyframes`
+  to { transform: rotate(-360deg); }
+`
+const charge = keyframes`
+  0%, 100% { opacity: 0.35; }
+  50%      { opacity: 1; }
+`
+
+/**
+ * The app's waiting state, drawn as its own mark rather than a borrowed ring.
+ *
+ * Reliquary is a relic orb; when it is fetching something it spins up — outer
+ * facet one way, inner the other, core pulsing — and settles when it isn't.
+ * Using the identity as the indicator means one motion idea covers every
+ * network wait in the app instead of a spinner that could belong to anything.
+ *
+ * Rotation only, so it composites on one layer and costs nothing to loop.
+ */
+export function Spinner({ size = 15 }: { size?: number }): JSX.Element {
+  return (
+    <SpinnerSvg viewBox="0 0 24 24" $size={size} role="presentation" aria-hidden>
+      <g className="outer">
+        <path d="M12 2.5 L20 7 L20 17 L12 21.5 L4 17 L4 7 Z" />
+      </g>
+      <g className="inner">
+        <path d="M12 7 L16.2 9.6 L16.2 14.4 L12 17 L7.8 14.4 L7.8 9.6 Z" />
+      </g>
+      <circle className="core" cx="12" cy="12" r="2.4" />
+    </SpinnerSvg>
+  )
+}
+
+const SpinnerSvg = styled.svg<{ $size: number }>`
+  width: ${(p) => p.$size}px;
+  height: ${(p) => p.$size}px;
+  flex: 0 0 auto;
+  overflow: visible;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.6;
+  stroke-linejoin: round;
+
+  g {
+    transform-origin: 50% 50%;
+  }
+  .outer {
+    animation: ${orbit} 2.4s linear infinite;
+  }
+  .inner {
+    opacity: 0.55;
+    stroke-width: 1.2;
+    animation: ${counter} 1.6s linear infinite;
+  }
+  .core {
+    fill: currentColor;
+    stroke: none;
+    animation: ${charge} 1.4s ease-in-out infinite;
+  }
+
+  /* A loop is the one thing that must stop when motion is unwelcome; the shape
+     alone still reads as "busy" beside its label. */
+  @media (prefers-reduced-motion: reduce) {
+    .outer,
+    .inner,
+    .core {
+      animation: none;
+    }
+  }
 `
 
 // ── disclosure ────────────────────────────────────────────────────────────

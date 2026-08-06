@@ -331,7 +331,17 @@ export class ScryGodotObject extends ScryObject {
  * the MonoObjectHelpers sibling bundle (only the surface we use).
  */
 export function getValid(classObj: any, key: string, type?: string): any {
-  const value = classObj.get(key)
+  // Static reads bypass ScryObject, so they were the last path still raising
+  // bare native messages with no indication of what was being read — four such
+  // reports arrived from patched builds while every instance read was named.
+  let value: any
+  try {
+    value = classObj.get(key)
+  } catch (err) {
+    throw new ScryError(
+      `reading static '${key}': ${err instanceof Error ? err.message : String(err)}`
+    )
+  }
   if (value === null || value === undefined) throw new ScryError(`${key} is null`)
   if (type && typeof value !== type) {
     throw new ScryError(`${key} is not a ${type}`)

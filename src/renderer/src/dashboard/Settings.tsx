@@ -19,6 +19,7 @@ import {
   SectionHead,
   SectionNote,
   SectionTitle,
+  Spinner,
   Switch
 } from './ui'
 import { JsonView } from './JsonView'
@@ -115,6 +116,8 @@ export function Settings(): JSX.Element {
   const tele = diag?.telemetry as TelemetryStatus | undefined
   const issues = tele?.aggregatedIssues ?? []
   const checking = upd?.status === 'checking'
+  const downloading = upd?.status === 'downloading'
+  const busy = checking || downloading
 
   const copyReport = async (): Promise<void> => {
     const report = [
@@ -261,6 +264,16 @@ export function Settings(): JSX.Element {
             <RowMain>
               <RowLabel>Version {diag?.appVersion ?? '—'}</RowLabel>
               <RowDesc>{updateLabel(upd)}</RowDesc>
+              {downloading ? (
+                <Track
+                  role="progressbar"
+                  aria-valuenow={upd?.percent ?? 0}
+                  aria-valuemin={0}
+                  aria-valuemax={100}
+                >
+                  <Fill style={{ transform: `scaleX(${Math.max(0.02, (upd?.percent ?? 0) / 100)})` }} />
+                </Track>
+              ) : null}
               {upd?.error ? <Mono className="err">{upd.error}</Mono> : null}
             </RowMain>
             <RowAside>
@@ -269,8 +282,13 @@ export function Settings(): JSX.Element {
                   Restart &amp; install
                 </Button>
               ) : (
-                <Button disabled={checking} onClick={() => window.spectra?.updateAction('check')}>
-                  {checking ? 'Checking…' : 'Check for updates'}
+                <Button
+                  disabled={busy}
+                  onClick={() => window.spectra?.updateAction('check')}
+                  aria-busy={busy}
+                >
+                  {busy ? <Spinner /> : null}
+                  {checking ? 'Checking…' : downloading ? 'Downloading…' : 'Check for updates'}
                 </Button>
               )}
             </RowAside>
@@ -448,6 +466,34 @@ const Wrap = styled.div`
   padding: 28px 24px 56px;
   @media (max-width: 520px) {
     padding: 20px 14px 40px;
+  }
+`
+
+/**
+ * Download progress as length rather than a number. A percentage has to be read
+ * and compared against the last one you read; a bar is understood at a glance,
+ * which is all this needs since nothing is blocked on it finishing.
+ */
+const Track = styled.div`
+  margin-top: 8px;
+  height: 4px;
+  border-radius: 2px;
+  background: oklch(1 0 0 / 8%);
+  overflow: hidden;
+`
+
+const Fill = styled.div`
+  width: 100%;
+  height: 100%;
+  border-radius: 2px;
+  background: var(--brand);
+  /* scaleX rather than width: a width transition relayouts the row on every
+     frame, while a transform composites on its own layer. The bar holds no
+     content, so there is nothing for the scale to distort. */
+  transform-origin: left center;
+  transition: transform 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+  @media (prefers-reduced-motion: reduce) {
+    transition: none;
   }
 `
 
