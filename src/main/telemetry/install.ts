@@ -1,4 +1,4 @@
-import { app, powerMonitor, screen, type BrowserWindow } from 'electron'
+import { app, powerMonitor, screen } from 'electron'
 import { telemetry } from './Telemetry'
 
 /**
@@ -9,6 +9,15 @@ import { telemetry } from './Telemetry'
  * mid-poll, a display being unplugged out from under an overlay that is pinned
  * to its coordinates. Those are the reports that otherwise arrive as "it just
  * stopped working".
+ *
+ * There is deliberately no periodic heartbeat. One was tried and grew to 52% of
+ * all ingested events while answering nothing the rest could not:
+ *   - died vs quit  -> an `app_ready` with no matching `app_exit`
+ *   - a denominator -> `app_ready`, one per session rather than one per 5 min
+ *   - session length at the moment of a crash -> every event already carries
+ *     `uptime_ms`, so the crash report itself says how long it had been running
+ * Signal per event matters more than event count; add periodic reporting back
+ * only for a question none of the above can answer.
  */
 
 /** Install before `app.whenReady()` so early failures are still captured. */
@@ -50,7 +59,7 @@ export function installProcessTelemetry(): void {
 }
 
 /** Install after `app.whenReady()`. */
-export function installAppTelemetry(getWindows: () => Array<BrowserWindow | null>): void {
+export function installAppTelemetry(): void {
   telemetry.capture('app_ready', {
     gpu_feature_status: telemetry.guard('gpu_status', () => app.getGPUFeatureStatus(), null),
     display_count: telemetry.guard('display_count', () => screen.getAllDisplays().length, 0),
@@ -124,16 +133,4 @@ export function installAppTelemetry(getWindows: () => Array<BrowserWindow | null
       })
     })
   })
-
-  // Periodic heartbeat: distinguishes "app died" from "user quit" and gives a
-  // denominator for how often each degraded state actually occurs.
-  const HEARTBEAT_MS = 300_000
-  const hb = setInterval(() => {
-    const wins = getWindows()
-    telemetry.capture('heartbeat', {
-      windows_alive: wins.filter((w) => w && !w.isDestroyed()).length,
-      windows_visible: wins.filter((w) => w && !w.isDestroyed() && w.isVisible()).length
-    })
-  }, HEARTBEAT_MS)
-  hb.unref?.()
 }

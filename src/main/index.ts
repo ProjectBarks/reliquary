@@ -334,7 +334,7 @@ if (hasLock)
   // Telemetry first: everything below it is worth reporting if it fails.
   telemetry.init()
   telemetry.setContext({ hwa_disabled: gpuAccelerationDisabled() })
-  installAppTelemetry(() => [overlay.browserWindow, dashboard.browserWindow])
+  installAppTelemetry()
 
   // No default Electron application menu on a frameless companion app.
   Menu.setApplicationMenu(null)
