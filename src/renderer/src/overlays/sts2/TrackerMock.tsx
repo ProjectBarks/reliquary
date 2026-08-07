@@ -69,7 +69,9 @@ export function TrackerMock(): JSX.Element {
             isPeekButtonVisible={false}
           />
         ))}
-        <Toolbar>
+        {/* The stage reuses the overlay's click-through CSS, so anything that
+            wants real mouse input must opt back in via .interactive. */}
+        <Toolbar className="interactive">
           <ModeRow>
             {MODES.map((m) => (
               <ModeButton key={m.key} $on={m.key === mode} onClick={() => pickMode(m.key)}>
