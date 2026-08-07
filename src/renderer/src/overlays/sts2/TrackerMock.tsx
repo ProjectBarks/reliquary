@@ -1,50 +1,32 @@
-import { useState } from 'react'
+import { useMemo, useState } from 'react'
 import styled from 'styled-components'
-import { DeckTracker } from './DeckTracker'
-import type { LayoutMode } from './trackerLayout'
-import { FIXTURE_PILE, FIXTURE_PILE_SMALL, FIXTURE_CARD_DATA } from './trackerFixture'
+import { FreeDeckTracker } from './FreeDeckTracker'
+import { buildPile, FIXTURE_CARD_DATA } from './trackerFixture'
 
 /**
- * Design harness for the deck tracker (#/mock/tracker).
+ * Design harness for the movable deck tracker (#/mock/tracker, dev builds
+ * only — the route is fenced out of production in App.tsx).
  *
  * The real overlay is transparent, click-through, and driven by IPC from a
- * running game, which makes it a slow surface to iterate a layout on. This
- * renders the same component over a game-like backdrop with fixture data, so
- * placement, snapping, resizing and column wrapping can be exercised directly.
- *
- * Development only — not routed in the shipped app.
- */
-/**
- * Preset placements shown side by side, so the effect of width on column count
- * — and whether groups survive wrapping — is visible in one look rather than by
- * dragging four times.
+ * running game, which makes it a slow surface to iterate on. This renders the
+ * same component over a game-like backdrop with fixture data, so placement,
+ * snapping, area-resizing and column packing can be exercised directly, at
+ * any pile size.
  */
 const PRESETS = [
-  { key: 'mock.a', label: '1 column · left edge', p: { ax: 'left', ay: 'top', dx: 0, dy: 4, w: 210, h: 620, free: false } },
-  { key: 'mock.b', label: '2 columns · top right', p: { ax: 'right', ay: 'top', dx: 0, dy: 4, w: 400, h: 340, free: false } },
-  { key: 'mock.c', label: '4 columns · bottom centre', p: { ax: 'center', ay: 'bottom', dx: 4, dy: 9, w: 790, h: 330, free: false } }
+  { key: 'mock.a', label: 'tall · left edge', p: { ax: 'left', ay: 'top', dx: 0, dy: 4, w: 210, h: 620, free: false } },
+  { key: 'mock.b', label: 'wide · top right', p: { ax: 'right', ay: 'top', dx: 0, dy: 4, w: 400, h: 340, free: false } },
+  { key: 'mock.c', label: 'wide · bottom centre', p: { ax: 'center', ay: 'bottom', dx: 4, dy: 9, w: 790, h: 330, free: false } }
 ] as const
 
-/** The five layout strategies under test; see trackerLayout.ts. */
-const MODES: Array<{ key: LayoutMode; label: string }> = [
-  { key: 'flow', label: 'A · flow (scroll)' },
-  { key: 'packer', label: 'B · packer (fit height)' },
-  { key: 'balance', label: 'C · balance (fill box)' },
-  { key: 'scale', label: 'D · scale (shrink)' },
-  { key: 'squeeze', label: 'E · squeeze (collapse)' }
-]
+/** Pile sizes the stepper walks through; 27 is the realistic mid-run deck. */
+const SIZES = [3, 12, 27, 40, 60] as const
 
 export function TrackerMock(): JSX.Element {
-  const [small, setSmall] = useState(false)
+  const [sizeIdx, setSizeIdx] = useState(2)
   const [peek, setPeek] = useState(false)
   const [gallery, setGallery] = useState(true)
-  const [mode, setMode] = useState<LayoutMode>(
-    () => (localStorage.getItem('mock.mode') as LayoutMode) || 'balance'
-  )
-  const pickMode = (m: LayoutMode): void => {
-    localStorage.setItem('mock.mode', m)
-    setMode(m)
-  }
+  const pile = useMemo(() => buildPile(SIZES[sizeIdx]), [sizeIdx])
 
   // Seed each preset once so the panels open at the size they are meant to show.
   if (typeof localStorage !== 'undefined') {
@@ -55,16 +37,27 @@ export function TrackerMock(): JSX.Element {
     }
   }
 
+  const stepper = (
+    <>
+      <button disabled={sizeIdx === 0} onClick={() => setSizeIdx((i) => i - 1)}>
+        − cards
+      </button>
+      <SizeLabel>{SIZES[sizeIdx]} cards</SizeLabel>
+      <button disabled={sizeIdx === SIZES.length - 1} onClick={() => setSizeIdx((i) => i + 1)}>
+        + cards
+      </button>
+    </>
+  )
+
   if (gallery) {
     return (
       <Stage className="sts2-overlay">
         <Backdrop />
         {PRESETS.map((preset) => (
-          <DeckTracker
-            key={`${preset.key}:${mode}`}
+          <FreeDeckTracker
+            key={preset.key}
             storageKey={preset.key}
-            mode={mode}
-            pileState={small ? FIXTURE_PILE_SMALL : FIXTURE_PILE}
+            pileState={pile}
             cardData={FIXTURE_CARD_DATA}
             isPeekButtonVisible={false}
           />
@@ -72,28 +65,17 @@ export function TrackerMock(): JSX.Element {
         {/* The stage reuses the overlay's click-through CSS, so anything that
             wants real mouse input must opt back in via .interactive. */}
         <Toolbar className="interactive">
-          <ModeRow>
-            {MODES.map((m) => (
-              <ModeButton key={m.key} $on={m.key === mode} onClick={() => pickMode(m.key)}>
-                {m.label}
-              </ModeButton>
-            ))}
-          </ModeRow>
-          <Row>
-            <button onClick={() => setGallery(false)}>Single panel</button>
-            <button onClick={() => setSmall((s) => !s)}>
-              {small ? 'Full pile' : 'Nearly empty'}
-            </button>
-            <button
-              onClick={() => {
-                for (const preset of PRESETS) localStorage.removeItem(preset.key)
-                location.reload()
-              }}
-            >
-              Reset
-            </button>
-            <Note>every panel is the same component at a different dragged size</Note>
-          </Row>
+          <button onClick={() => setGallery(false)}>Single panel</button>
+          {stepper}
+          <button
+            onClick={() => {
+              for (const preset of PRESETS) localStorage.removeItem(preset.key)
+              location.reload()
+            }}
+          >
+            Reset
+          </button>
+          <Note>drag a corner to set the area — content fits itself inside</Note>
         </Toolbar>
       </Stage>
     )
@@ -102,35 +84,23 @@ export function TrackerMock(): JSX.Element {
   return (
     <Stage className="sts2-overlay">
       <Backdrop />
-      <Toolbar>
-        <ModeRow>
-          {MODES.map((m) => (
-            <ModeButton key={m.key} $on={m.key === mode} onClick={() => pickMode(m.key)}>
-              {m.label}
-            </ModeButton>
-          ))}
-        </ModeRow>
-        <Row>
-          <button onClick={() => setSmall((s) => !s)}>
-            {small ? 'Full pile' : 'Nearly empty'}
-          </button>
-          <button onClick={() => setPeek((p) => !p)}>{peek ? 'Peek off' : 'Peek on'}</button>
-          <button onClick={() => setGallery(true)}>Gallery</button>
-          <button
-            onClick={() => {
-              localStorage.removeItem('sts2.deckTracker.placement')
-              location.reload()
-            }}
-          >
-            Reset placement
-          </button>
-          <Note>drag the title bar · drag the corner to resize</Note>
-        </Row>
+      <Toolbar className="interactive">
+        {stepper}
+        <button onClick={() => setPeek((p) => !p)}>{peek ? 'Peek off' : 'Peek on'}</button>
+        <button onClick={() => setGallery(true)}>Gallery</button>
+        <button
+          onClick={() => {
+            localStorage.removeItem('sts2.deckTracker.placement')
+            location.reload()
+          }}
+        >
+          Reset placement
+        </button>
+        <Note>drag the title bar · drag a corner to set the area</Note>
       </Toolbar>
 
-      <DeckTracker
-        mode={mode}
-        pileState={small ? FIXTURE_PILE_SMALL : FIXTURE_PILE}
+      <FreeDeckTracker
+        pileState={pile}
         cardData={FIXTURE_CARD_DATA}
         isPeekButtonVisible={peek}
       />
@@ -171,8 +141,8 @@ const Toolbar = styled.div`
   transform: translateX(-50%);
   z-index: 50;
   display: flex;
-  flex-direction: column;
-  gap: 7px;
+  align-items: center;
+  gap: 8px;
   padding: 8px 10px;
   border-radius: 10px;
   background: oklch(0 0 0 / 55%);
@@ -189,33 +159,20 @@ const Toolbar = styled.div`
     &:hover {
       background: oklch(1 0 0 / 14%);
     }
+    &:disabled {
+      opacity: 0.4;
+      cursor: default;
+      background: oklch(1 0 0 / 8%);
+    }
   }
 `
 
-const Row = styled.div`
-  display: flex;
-  align-items: center;
-  gap: 8px;
-`
-
-const ModeRow = styled.div`
-  display: flex;
-  align-items: center;
-  gap: 5px;
-`
-
-const ModeButton = styled.button<{ $on: boolean }>`
-  cursor: pointer;
-  font-family: inherit;
+const SizeLabel = styled.span`
+  min-width: 64px;
+  text-align: center;
+  font-family: 'Cascadia Code', Consolas, monospace;
   font-size: 11px;
-  color: ${(p) => (p.$on ? '#1b1512' : 'var(--sts-color-cream)')};
-  background: ${(p) => (p.$on ? 'var(--sts-color-cream)' : 'oklch(1 0 0 / 8%)')};
-  border: 1px solid oklch(1 0 0 / 16%);
-  border-radius: 7px;
-  padding: 4px 9px;
-  &:hover {
-    background: ${(p) => (p.$on ? 'var(--sts-color-cream)' : 'oklch(1 0 0 / 14%)')};
-  }
+  color: var(--sts-color-cream);
 `
 
 const Note = styled.span`

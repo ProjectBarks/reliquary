@@ -43,6 +43,11 @@ const SETTINGS: { key: keyof Sts2Settings; label: string; desc: string }[] = [
     desc: 'What is left in your draw pile, hand and discard during a fight.'
   },
   {
+    key: 'enableFreeTrackerLayout',
+    label: 'Movable deck tracker',
+    desc: 'Place the tracker anywhere and drag its corner to set the space it may use — the cards arrange themselves to fit. Off keeps the classic left-edge strip.'
+  },
+  {
     key: 'enableAttackSummary',
     label: 'Incoming attacks',
     desc: 'Total damage the enemies are about to deal you next turn.'

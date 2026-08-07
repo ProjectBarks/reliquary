@@ -14,8 +14,8 @@ export function App(): JSX.Element {
     <Routes>
       <Route path="/" element={<Shell />} />
       <Route path="/overlay/sts2" element={<Sts2Overlay />} />
-      {/* Design harness for the deck tracker; not linked from the app. */}
-      <Route path="/mock/tracker" element={<TrackerMock />} />
+      {/* Design harness for the deck tracker: dev server only, never shipped. */}
+      {import.meta.env.DEV ? <Route path="/mock/tracker" element={<TrackerMock />} /> : null}
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>
   )

@@ -1,5 +1,6 @@
+import { useEffect, useState } from 'react'
 import styled, { keyframes } from 'styled-components'
-import type { DiagnosticsState } from '@shared/types'
+import type { DiagnosticsState, UpdateState } from '@shared/types'
 import { useDiagnostics, useTracker } from '../hooks/useIpc'
 
 /**
@@ -61,6 +62,8 @@ function readPhase(diag: DiagnosticsState | null, target: string): AppState {
 export function Home(): JSX.Element {
   const diag = useDiagnostics()
   const tracker = useTracker()
+  const [update, setUpdate] = useState<UpdateState | null>(null)
+  useEffect(() => window.spectra?.onUpdate(setUpdate), [])
   const target = tracker?.target ?? 'Slay the Spire 2'
   const state = readPhase(diag ?? null, target)
 
@@ -132,6 +135,28 @@ export function Home(): JSX.Element {
           <Headline $phase={state.phase}>{state.headline}</Headline>
           {state.action ? <Action $phase={state.phase}>{state.action}</Action> : null}
         </Hero>
+
+        {/* The titlebar pill announces an update from every tab; here on the
+            status screen it earns a full-width line, because "a new version
+            exists" IS status. Quiet while downloading, actionable when ready,
+            silent otherwise. */}
+        {update?.status === 'downloading' || update?.status === 'ready' ? (
+          <UpdateStrip $ready={update.status === 'ready'}>
+            {update.status === 'downloading' ? (
+              <span>
+                Downloading {update.version ? `v${update.version}` : 'update'}
+                {update.percent > 0 ? ` — ${update.percent}%` : '…'}
+              </span>
+            ) : (
+              <>
+                <span>{update.version ? `Version ${update.version}` : 'An update'} is ready.</span>
+                <RestartButton onClick={() => window.spectra?.updateAction('install')}>
+                  Restart to install
+                </RestartButton>
+              </>
+            )}
+          </UpdateStrip>
+        ) : null}
 
         <Gems>
           {gems.map((g) => (
@@ -292,6 +317,44 @@ const Action = styled.p<{ $phase: Phase }>`
   font-size: 13.5px;
   line-height: 1.55;
   color: ${(p) => (p.$phase === 'broken' ? 'var(--ink)' : 'var(--ink-dim)')};
+`
+
+const UpdateStrip = styled.div<{ $ready: boolean }>`
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 14px;
+  width: 100%;
+  max-width: 660px;
+  padding: 10px 16px;
+  border-radius: 11px;
+  font-size: 13px;
+  color: ${(p) => (p.$ready ? 'var(--ink)' : 'var(--ink-dim)')};
+  background: ${(p) =>
+    p.$ready ? 'color-mix(in oklch, var(--brand) 14%, transparent)' : 'rgba(38, 35, 33, 0.55)'};
+  border: 1px solid
+    ${(p) => (p.$ready ? 'color-mix(in oklch, var(--brand) 45%, transparent)' : 'var(--line)')};
+  box-shadow: 5px 5px 0 oklch(0 0 0 / 22%);
+  animation: ${rise} 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+  @media (prefers-reduced-motion: reduce) {
+    animation: none;
+  }
+`
+
+const RestartButton = styled.button`
+  cursor: pointer;
+  font-family: inherit;
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--sts-color-cream);
+  background: color-mix(in oklch, var(--brand) 30%, transparent);
+  border: 1px solid color-mix(in oklch, var(--brand) 55%, transparent);
+  border-radius: 8px;
+  padding: 5px 13px;
+  transition: background 120ms ease;
+  &:hover {
+    background: color-mix(in oklch, var(--brand) 42%, transparent);
+  }
 `
 
 const Gems = styled.div`

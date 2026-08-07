@@ -1,65 +1,36 @@
-import { useMemo, useState } from 'react'
-import styled, { css } from 'styled-components'
+﻿import { Fragment, useMemo, useState } from 'react'
+import styled from 'styled-components'
 import type { Sts2Card, Sts2CardData, Sts2PileState } from '@shared/types'
 import { CardTile } from './CardTile'
-import { useFloatingPanel } from '../../hooks/useFloatingPanel'
+import { useDraggableNav } from '../../hooks/useDraggableNav'
 import { BG, resolveCost } from './theme'
-import {
-  COL_GAP,
-  DENSITIES,
-  layoutBalance,
-  layoutPacker,
-  layoutScale,
-  layoutSqueeze,
-  type LayoutGroup,
-  type LayoutMode,
-  type TrackerLayout
-} from './trackerLayout'
 
 /**
- * Draw-pile odds tracker: what is left to draw, grouped by card type, with
- * count/total and draw-% per group. Placeable anywhere, resizable.
- *
- * The visual language is the original strip's: bare type headers over tight
- * rows on one translucent surface. The earlier boxed-well treatment made
- * groups obvious but spent ~28px of chrome per group; what actually carries
- * grouping across columns is cheaper — a type-hued header with a matching
- * hairline, atomic (or explicitly "continued") column breaks, and a ruled
- * gutter between columns.
- *
- * Where the content goes is trackerLayout's job. All modes except 'flow'
- * guarantee NO scrollbar: content is computed to fit the box, the shell
- * shrinks to hug whatever is actually used, and anything that truly cannot
- * fit is declared in a "+N hidden" chip.
+ * Draw-pile odds tracker, grouped by card type (Attack/Skill/Power/Other) with
+ * count/total and draw-% per group. Collapsible. Ported 1:1 from the original
+ * (decomp/renderer DeckTracker) — this is the flagship "cards" overlay.
  */
 
 type GroupRow = Sts2Card & { count: number; total: number }
-
-const TITLEBAR_H = 30
-const PAD = 7
-/** Shell border, both sides. */
-const EDGE = 2
-/** Line reserved for the "+N hidden" chip when content overflows. */
-const CHIP_H = 22
+interface TypeGroup {
+  type: string
+  cards: GroupRow[]
+  count: number
+  total: number
+}
 
 export function DeckTracker({
   pileState,
   cardData,
-  isPeekButtonVisible,
-  mode = 'balance',
-  storageKey = 'sts2.deckTracker.placement'
+  isPeekButtonVisible
 }: {
   pileState: Sts2PileState
   cardData: Sts2CardData | null
   isPeekButtonVisible: boolean
-  /** Layout strategy; see trackerLayout.ts. */
-  mode?: LayoutMode
-  /** Where placement persists. Distinct keys allow more than one panel. */
-  storageKey?: string
 }): JSX.Element {
   const [hidden, setHidden] = useState(false)
   const [hovered, setHovered] = useState(false)
-  const panel = useFloatingPanel(storageKey)
+  const nav = useDraggableNav('sts2.deckTracker.topPct', 15)
 
   const cardsNotInDraw = useMemo(
     () => [
@@ -70,191 +41,65 @@ export function DeckTracker({
   )
 
   const groupedCards = useMemo(
-    () =>
-      groupByType(
-        sortGroups(groupCards(pileState.draw, cardsNotInDraw, cardData), cardData),
-        cardData
-      ),
+    () => groupByType(sortGroups(groupCards(pileState.draw, cardsNotInDraw, cardData), cardData), cardData),
     [pileState.draw, cardsNotInDraw, cardData]
   )
 
-  const active = hovered || panel.dragging || panel.resizing
-  const drawLeft = pileState.draw.length
-  const p = panel.placement
-
-  const availW = p.w - PAD * 2 - EDGE
-  const availH = p.h - TITLEBAR_H - PAD * 2 - EDGE
-
-  const layout: TrackerLayout<GroupRow> | null = useMemo(() => {
-    if (mode === 'flow') return null
-    const run = (h: number): TrackerLayout<GroupRow> => {
-      switch (mode) {
-        case 'packer':
-          return layoutPacker(groupedCards, h)
-        case 'scale':
-          return layoutScale(groupedCards, availW, h)
-        case 'squeeze':
-          return layoutSqueeze(groupedCards, availW, h, (row) => row.count === 0)
-        default:
-          return layoutBalance(groupedCards, availW, h)
-      }
-    }
-    const first = run(availH)
-    // Overflow costs a line: the "+N hidden" chip gets its own row, so it
-    // never sits on top of a card.
-    return first.hiddenRows > 0 ? run(availH - CHIP_H) : first
-  }, [mode, groupedCards, availW, availH])
-
-  // The shell hugs its content: the dragged rectangle is a maximum, not a
-  // hole to keep open. Because anchored edges are expressed as inset from
-  // that edge, shrinking always pulls the far edge inward — a panel pinned
-  // bottom-right stays flush bottom-right and gives space back top-left.
-  const style: React.CSSProperties = { ...panel.style }
-  if (layout) {
-    const cols = layout.columns.length
-    const contentW = cols > 0 ? cols * layout.colW + (cols - 1) * COL_GAP : 120
-    const shellW = Math.min(
-      Math.max(p.w, mode === 'packer' ? contentW + PAD * 2 + EDGE : 0),
-      contentW + PAD * 2 + EDGE
-    )
-    const chipH = layout.hiddenRows > 0 ? CHIP_H : 0
-    const shellH = Math.min(p.h, layout.usedH + chipH + TITLEBAR_H + PAD * 2 + EDGE)
-    style.width = shellW
-    style.height = shellH
-    if (p.ax === 'center') style.marginLeft = `calc(${p.dx}% - ${shellW / 2}px)`
-    if (p.ay === 'middle') style.marginTop = `calc(${p.dy}% - ${shellH / 2}px)`
-  }
-
-  if (hidden) {
-    return (
-      <Collapsed
-        className="interactive"
-        style={{ ...panel.style, width: 40, height: 40 }}
-        onMouseEnter={panel.onEnter}
-        onMouseLeave={panel.onLeave}
-        onClick={() => setHidden(false)}
-        title="Show deck tracker"
-      >
-        {'›'}
-      </Collapsed>
-    )
-  }
-
   return (
-    <>
-      {/* Snap feedback is drawn behind the panel, not on it: the point is to
-          show where it will land, which you cannot see if the panel covers it. */}
-      {panel.snapHint ? <SnapGuide $ax={panel.snapHint.ax} $ay={panel.snapHint.ay} /> : null}
-
-      <Shell
-        className="interactive"
-        style={style}
-        $active={active}
-        $peek={!!isPeekButtonVisible}
-        onMouseEnter={() => {
-          setHovered(true)
-          panel.onEnter()
-        }}
-        onMouseLeave={() => {
-          setHovered(false)
-          panel.onLeave()
-        }}
-      >
-        <TitleBar $active={active} {...panel.gripHandlers}>
-          <Grip aria-hidden>
-            <span />
-            <span />
-            <span />
-          </Grip>
-          <Title>Draw pile</Title>
-          <Remaining>{drawLeft}</Remaining>
-          <Close
-            onPointerDown={(e) => e.stopPropagation()}
-            onClick={() => setHidden(true)}
-            title="Hide"
+    <Container
+      className="interactive"
+      $hidden={hidden}
+      style={{ top: `${nav.topPct}%` }}
+      onMouseEnter={() => {
+        setHovered(true)
+        nav.onEnter()
+      }}
+      onMouseLeave={() => {
+        setHovered(false)
+        nav.onLeave()
+      }}
+    >
+      <Panel $peek={!!isPeekButtonVisible} $hidden={hidden}>
+        <Section>
+          {groupedCards.map((group) => (
+            <Fragment key={group.type}>
+              <GroupHeader>
+                <span>{typeLabel(group.type)}</span>
+                <GroupStats>
+                  <span>{`${group.count}/${group.total}`}</span>
+                  <DrawChance>{formatChance(group.count, pileState.draw.length)}</DrawChance>
+                </GroupStats>
+              </GroupHeader>
+              {group.cards.map((row) => (
+                <CardTile card={row} jsonCard={cardData?.[row.id]} key={getCardGroupKey(row, cardData)} />
+              ))}
+            </Fragment>
+          ))}
+        </Section>
+      </Panel>
+      <Buttons $hidden={hidden}>
+        {!hidden && (
+          <GripButton
+            $show={hovered || nav.dragging}
+            title="Drag to move vertically"
+            {...nav.gripHandlers}
           >
-            {'×'}
-          </Close>
-        </TitleBar>
-
-        {layout ? (
-          <Body>
-            {layout.columns.map((column, i) => (
-              <Col key={i} style={{ width: layout.colW, gap: layout.density.groupGap }}>
-                {column.map((seg) => (
-                  <Seg key={`${seg.group.type}·${seg.part}`} style={{ gap: layout.density.rowGap }}>
-                    <GroupHeader
-                      $type={seg.group.type}
-                      style={{ height: layout.density.headerH - layout.density.rowGap }}
-                    >
-                      <GroupName $type={seg.group.type}>
-                        {typeLabel(seg.group.type)}
-                        {seg.part > 1 ? <Cont> · cont</Cont> : null}
-                      </GroupName>
-                      {seg.part === 1 ? (
-                        <GroupStats>
-                          <span>{`${seg.group.count}/${seg.group.total}`}</span>
-                          <DrawChance>{formatChance(seg.group.count, drawLeft)}</DrawChance>
-                        </GroupStats>
-                      ) : null}
-                    </GroupHeader>
-                    {seg.rows.map((row) => (
-                      <CardTile
-                        card={row}
-                        jsonCard={cardData?.[row.id]}
-                        rowH={layout.density.rowH}
-                        fontSize={layout.density.font}
-                        countSize={layout.density.countFont}
-                        key={getCardGroupKey(row, cardData)}
-                      />
-                    ))}
-                    {seg.showSummary ? (
-                      <Summary style={{ height: layout.density.rowH }}>
-                        {`+${seg.group.collapsed} ${seg.group.collapsedLabel}`}
-                      </Summary>
-                    ) : null}
-                  </Seg>
-                ))}
-              </Col>
-            ))}
-            {layout.hiddenRows > 0 ? <HiddenChip>{`+${layout.hiddenRows} hidden`}</HiddenChip> : null}
-          </Body>
-        ) : (
-          <FlowColumns>
-            {groupedCards.map((group) => (
-              <FlowGroup key={group.type}>
-                <GroupHeader $type={group.type} style={{ height: 17 }}>
-                  <GroupName $type={group.type}>{typeLabel(group.type)}</GroupName>
-                  <GroupStats>
-                    <span>{`${group.count}/${group.total}`}</span>
-                    <DrawChance>{formatChance(group.count, drawLeft)}</DrawChance>
-                  </GroupStats>
-                </GroupHeader>
-                {group.rows.map((row) => (
-                  <CardTile
-                    card={row}
-                    jsonCard={cardData?.[row.id]}
-                    key={getCardGroupKey(row, cardData)}
-                  />
-                ))}
-              </FlowGroup>
-            ))}
-          </FlowColumns>
+            {'\u2807'}
+          </GripButton>
         )}
-
-        <ResizeHandle
-          $active={active}
-          $ax={p.ax}
-          $ay={p.ay}
-          title="Drag to resize"
-          {...panel.resizeHandlers}
-        />
-      </Shell>
-    </>
+        <IconButton
+          $show={hovered || hidden}
+          $attached={hidden}
+          onClick={() => setHidden((h) => !h)}
+        >
+          {hidden ? '\u203A' : '\u00D7'}
+        </IconButton>
+      </Buttons>
+    </Container>
   )
 }
 
-// ── grouping helpers ──
+// ── grouping helpers (pure, ported) ──
 
 function getCardGroupKey(card: Sts2Card, cardData: Sts2CardData | null): string {
   return `${resolveCost(card, cardData?.[card.id]) ?? ''}|${card.id}|${card.upgradeLevel}|${
@@ -281,8 +126,11 @@ function groupCards(
   for (const card of notInDraw) {
     const key = getCardGroupKey(card, cardData)
     const existing = groups.get(key)
-    if (existing) existing.total++
-    else groups.set(key, { ...card, count: 0, total: 1 })
+    if (existing) {
+      existing.total++
+    } else {
+      groups.set(key, { ...card, count: 0, total: 1 })
+    }
   }
   return [...groups.values()]
 }
@@ -296,7 +144,7 @@ const TYPE_ORDER: Record<string, number> = {
   quest: 5
 }
 
-function groupByType(cards: GroupRow[], cardData: Sts2CardData | null): LayoutGroup<GroupRow>[] {
+function groupByType(cards: GroupRow[], cardData: Sts2CardData | null): TypeGroup[] {
   const byType = new Map<string, GroupRow[]>()
   for (const row of cards) {
     let type = cardData?.[row.id]?.type?.toLowerCase() ?? ''
@@ -306,13 +154,11 @@ function groupByType(cards: GroupRow[], cardData: Sts2CardData | null): LayoutGr
     else byType.set(type, [row])
   }
   return [...byType.entries()]
-    .map(([type, rows]) => ({
+    .map(([type, groupCardsArr]) => ({
       type,
-      rows,
-      count: rows.reduce((sum, card) => sum + card.count, 0),
-      total: rows.reduce((sum, card) => sum + card.total, 0),
-      collapsed: 0,
-      collapsedLabel: ''
+      cards: groupCardsArr,
+      count: groupCardsArr.reduce((sum, card) => sum + card.count, 0),
+      total: groupCardsArr.reduce((sum, card) => sum + card.total, 0)
     }))
     .sort((a, b) => (TYPE_ORDER[a.type] ?? 99) - (TYPE_ORDER[b.type] ?? 99))
 }
@@ -348,299 +194,168 @@ function sortGroups(groups: GroupRow[], cardData: Sts2CardData | null): GroupRow
   })
 }
 
-// ── styling ──
+// ── styled (ported) ──
 
-/** One hue per card type — what keeps a group identifiable once wrapped. */
-const TYPE_HUE: Record<string, string> = {
-  attack: 'var(--sts-color-red)',
-  skill: 'var(--sts-color-blue)',
-  power: 'var(--sts-color-purple)',
-  other: '#9c9384'
-}
-const hueOf = (t: string): string => TYPE_HUE[t] ?? TYPE_HUE.other
+const PANEL_WIDTH = 180
+const PANEL_LEFT_OFFSET = 7
+const BUTTON_SIZE = 40
+const BUTTON_GAP = 10
 
-const Shell = styled.div<{ $active: boolean; $peek: boolean }>`
+const Container = styled.div<{ $hidden: boolean }>`
   position: absolute;
-  display: flex;
-  flex-direction: column;
-  overflow: hidden;
-  border-radius: 10px;
-  background: ${BG}e0;
-  border: 1px solid ${(p) => (p.$active ? 'oklch(1 0 0 / 26%)' : 'oklch(1 0 0 / 12%)')};
-  box-shadow: 7px 7px 0 oklch(0 0 0 / 30%);
-  transition:
-    border-color 0.18s ease,
-    opacity 0.18s ease;
-  opacity: ${(p) => (p.$peek ? 0.35 : 1)};
+  top: 15%;
+  left: 0;
+  width: ${(p) => (p.$hidden ? '0' : 'auto')};
+  height: ${(p) => (p.$hidden ? '0' : 'auto')};
 `
 
-const TitleBar = styled.div<{ $active: boolean }>`
-  flex: 0 0 auto;
-  height: ${TITLEBAR_H}px;
+const Panel = styled.div<{ $peek: boolean; $hidden: boolean }>`
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  width: ${PANEL_WIDTH}px;
+  max-height: 58vh;
+  overflow-y: auto;
+  margin-left: -${PANEL_LEFT_OFFSET}px;
+  padding: 10px 10px 10px 17px;
+
+  transform: translateX(
+    ${(p) => (p.$hidden ? 'calc(-100% - 20px)' : p.$peek ? '-60%' : '0')}
+  );
+  transform-origin: left top;
+  opacity: ${(p) => (p.$hidden ? 0 : 1)};
+  pointer-events: ${(p) => (p.$hidden ? 'none' : 'auto')};
+  transition:
+    transform 0.2s ease,
+    opacity 0.2s ease;
+  &:hover {
+    transform: translateX(${(p) => (p.$hidden ? 'calc(-100% - 20px)' : '0')});
+  }
+
+  color: var(--sts-color-cream);
+  font-family: 'Kreon', sans-serif;
+  letter-spacing: 1px;
+
+  background: ${BG}88;
+  border-radius: 0 8px 8px 0;
+  border: 1px solid oklch(1 0 0 / 10%);
+  border-left: none;
+  box-shadow: 7px 7px 0 oklch(0 0 0 / 30%);
+
+  &::-webkit-scrollbar {
+    width: 6px;
+  }
+  &::-webkit-scrollbar-thumb {
+    background: oklch(1 0 0 / 20%);
+    border-radius: 3px;
+  }
+`
+
+const Buttons = styled.div<{ $hidden: boolean }>`
+  position: absolute;
+  top: 0;
+  left: ${(p) => (p.$hidden ? '0' : '100%')};
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 8px 12px 12px ${(p) => (p.$hidden ? '0' : `${BUTTON_GAP}px`)};
+  transition: left 0.2s ease;
+`
+
+const IconButton = styled.button<{ $show: boolean; $attached: boolean }>`
+  pointer-events: auto;
+  width: ${BUTTON_SIZE}px;
+  height: ${BUTTON_SIZE}px;
   display: flex;
   align-items: center;
-  gap: 7px;
-  padding: 0 6px 0 9px;
+  justify-content: center;
+  padding: 0;
+  cursor: pointer;
+  font-size: 20px;
+  line-height: 1;
+  color: var(--sts-color-cream);
+  background: ${BG}cc;
+  border: 1px solid oklch(1 0 0 / 20%);
+  ${(p) =>
+    p.$attached &&
+    `
+      border-left: none;
+      margin-left: -${PANEL_LEFT_OFFSET}px;
+      width: ${BUTTON_SIZE + PANEL_LEFT_OFFSET}px;
+    `}
+  border-radius: ${(p) => (p.$attached ? '0 8px 8px 0' : '8px')};
+  box-shadow: 7px 7px 0 oklch(0 0 0 / 30%);
+  opacity: ${(p) => (p.$show ? 1 : 0)};
+  transition:
+    opacity 0.15s ease,
+    background 0.15s ease;
+  &:hover {
+    background: ${BG};
+    color: white;
+  }
+`
+
+const GripButton = styled.button<{ $show: boolean }>`
+  pointer-events: auto;
+  width: ${BUTTON_SIZE}px;
+  height: ${BUTTON_SIZE}px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
   cursor: grab;
-  user-select: none;
-  border-bottom: 1px solid oklch(1 0 0 / 10%);
-  background: ${(p) => (p.$active ? 'oklch(1 0 0 / 6%)' : 'transparent')};
-  transition: background 0.18s ease;
+  font-size: 20px;
+  line-height: 1;
+  color: var(--sts-color-cream);
+  background: ${BG}cc;
+  border: 1px solid oklch(1 0 0 / 20%);
+  border-radius: 8px;
+  box-shadow: 7px 7px 0 oklch(0 0 0 / 30%);
+  opacity: ${(p) => (p.$show ? 1 : 0)};
+  transition:
+    opacity 0.15s ease,
+    background 0.15s ease;
+  touch-action: none;
+  &:hover {
+    background: ${BG};
+    color: white;
+  }
   &:active {
     cursor: grabbing;
   }
 `
 
-/** Six dots — the standard "this is a drag handle" mark, drawn not typed. */
-const Grip = styled.div`
-  display: grid;
-  grid-template-columns: repeat(2, 3px);
-  gap: 3px;
-  flex: 0 0 auto;
-  span {
-    width: 3px;
-    height: 3px;
-    border-radius: 50%;
-    background: oklch(1 0 0 / 45%);
-    box-shadow: 0 6px 0 oklch(1 0 0 / 45%);
-  }
-`
-
-const Title = styled.div`
-  flex: 1;
-  min-width: 0;
-  font-family: 'Kreon', serif;
-  font-size: 14px;
-  letter-spacing: 0.4px;
-  color: var(--sts-color-cream);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-`
-
-const Remaining = styled.div`
-  flex: 0 0 auto;
-  font-family: 'Cascadia Code', Consolas, monospace;
-  font-size: 11px;
-  color: var(--sts-color-cream);
-  background: oklch(1 0 0 / 9%);
-  border-radius: 9px;
-  padding: 1px 7px;
-`
-
-const Close = styled.button`
-  flex: 0 0 auto;
-  width: 20px;
-  height: 20px;
-  display: grid;
-  place-items: center;
-  padding: 0;
-  cursor: pointer;
-  font-size: 15px;
-  line-height: 1;
-  color: oklch(1 0 0 / 55%);
-  background: none;
-  border: 0;
-  border-radius: 5px;
-  &:hover {
-    color: var(--sts-color-cream);
-    background: oklch(1 0 0 / 10%);
-  }
-`
-
-/** Computed layout: explicit columns, no scrolling, hairline-ruled gutter. */
-const Body = styled.div`
-  flex: 1;
-  min-height: 0;
-  display: flex;
-  align-items: flex-start;
-  padding: ${PAD}px;
-  overflow: hidden;
-`
-
-const Col = styled.div`
-  flex: 0 0 auto;
+const Section = styled.div`
   display: flex;
   flex-direction: column;
-  position: relative;
-
-  & + & {
-    margin-left: ${COL_GAP}px;
-    &::before {
-      content: '';
-      position: absolute;
-      left: ${-(COL_GAP / 2) - 0.5}px;
-      top: 2px;
-      bottom: 2px;
-      width: 1px;
-      background: oklch(1 0 0 / 9%);
-    }
-  }
+  gap: 5px;
 `
 
-const Seg = styled.div`
-  display: flex;
-  flex-direction: column;
-`
-
-const GroupHeader = styled.div<{ $type: string }>`
+const GroupHeader = styled.div`
   display: flex;
   align-items: baseline;
+  justify-content: space-between;
   gap: 6px;
-  box-sizing: border-box;
-  border-bottom: 1px solid ${(p) => `color-mix(in oklch, ${hueOf(p.$type)} 45%, transparent)`};
-`
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.5px;
+  color: var(--brand);
+  margin-bottom: -2px;
+  text-shadow: 2px 2px 0 oklch(0 0 0 / 50%);
 
-const GroupName = styled.span<{ $type: string }>`
-  flex: 1;
-  min-width: 0;
-  font-size: 10px;
-  font-weight: 700;
-  letter-spacing: 0.12em;
-  text-transform: uppercase;
-  white-space: nowrap;
-  overflow: hidden;
-  color: ${(p) => hueOf(p.$type)};
-  text-shadow: 1px 1px 0 oklch(0 0 0 / 55%);
-`
-
-const Cont = styled.span`
-  font-weight: 400;
-  color: oklch(1 0 0 / 45%);
-  letter-spacing: 0.04em;
-  text-transform: none;
+  &:not(:first-child) {
+    margin-top: 2px;
+  }
 `
 
 const GroupStats = styled.div`
-  flex: 0 0 auto;
   display: flex;
   align-items: baseline;
   gap: 6px;
-  font-family: 'Cascadia Code', Consolas, monospace;
-  font-size: 10px;
-  color: oklch(1 0 0 / 68%);
+  color: var(--sts-color-cream);
 `
 
 const DrawChance = styled.span`
-  color: var(--sts-color-aqua);
-`
-
-/** One-line stand-in for rows folded away by the squeeze strategy. */
-const Summary = styled.div`
-  display: flex;
-  align-items: center;
-  padding-left: 4px;
-  font-family: 'Cascadia Code', Consolas, monospace;
-  font-size: 10px;
-  color: oklch(1 0 0 / 45%);
-`
-
-/** Honest overflow: content that genuinely cannot fit is counted, not clipped. */
-const HiddenChip = styled.div`
-  position: absolute;
-  right: 6px;
-  bottom: 5px;
-  padding: 1px 7px;
-  border-radius: 8px;
-  font-family: 'Cascadia Code', Consolas, monospace;
-  font-size: 10px;
-  color: var(--sts-color-cream);
-  background: oklch(0 0 0 / 55%);
-  border: 1px solid oklch(1 0 0 / 18%);
-`
-
-/** 'flow' control: CSS multicol + scroll, scrollbar kept out of the layout. */
-const FlowColumns = styled.div`
-  flex: 1;
-  min-height: 0;
-  overflow-y: auto;
-  padding: ${PAD}px;
-  columns: 168px auto;
-  column-gap: ${COL_GAP}px;
-  column-rule: 1px solid oklch(1 0 0 / 9%);
-  mask-image: linear-gradient(to bottom, #000 calc(100% - 14px), transparent 100%);
-
-  &::-webkit-scrollbar {
-    width: 4px;
-  }
-  &::-webkit-scrollbar-thumb {
-    background: transparent;
-    border-radius: 2px;
-  }
-  &:hover::-webkit-scrollbar-thumb {
-    background: oklch(1 0 0 / 22%);
-  }
-`
-
-const FlowGroup = styled.div`
-  break-inside: avoid;
-  page-break-inside: avoid;
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-  margin-bottom: 10px;
-`
-
-/**
- * Sits at whichever corner points into open screen, so dragging it always grows
- * the panel away from the edge it is anchored to rather than fighting it.
- */
-const ResizeHandle = styled.div<{ $active: boolean; $ax: string; $ay: string }>`
-  position: absolute;
-  width: 16px;
-  height: 16px;
-  cursor: ${(p) =>
-    (p.$ax === 'right') === (p.$ay === 'bottom') ? 'nwse-resize' : 'nesw-resize'};
-  opacity: ${(p) => (p.$active ? 1 : 0)};
-  transition: opacity 0.18s ease;
-  ${(p) => (p.$ax === 'right' ? css`left: 2px;` : css`right: 2px;`)}
-  ${(p) => (p.$ay === 'bottom' ? css`top: 2px;` : css`bottom: 2px;`)}
-
-  &::after {
-    content: '';
-    position: absolute;
-    inset: 4px;
-    border-right: 2px solid oklch(1 0 0 / 40%);
-    border-bottom: 2px solid oklch(1 0 0 / 40%);
-    border-radius: 0 0 3px 0;
-    transform: rotate(
-      ${(p) => (p.$ax === 'right' ? (p.$ay === 'bottom' ? 180 : 90) : p.$ay === 'bottom' ? 270 : 0)}deg
-    );
-  }
-`
-
-/** Where the panel will land, drawn behind it while dragging. */
-const SnapGuide = styled.div<{ $ax: string; $ay: string }>`
-  position: absolute;
-  pointer-events: none;
-  border-radius: 12px;
-  border: 1px dashed color-mix(in oklch, var(--brand) 70%, transparent);
-  background: color-mix(in oklch, var(--brand) 8%, transparent);
-  inset: 6px;
-  ${(p) =>
-    p.$ax === 'left'
-      ? css`right: 60%;`
-      : p.$ax === 'right'
-        ? css`left: 60%;`
-        : css`left: 28%; right: 28%;`}
-  ${(p) =>
-    p.$ay === 'top'
-      ? css`bottom: 60%;`
-      : p.$ay === 'bottom'
-        ? css`top: 60%;`
-        : css`top: 28%; bottom: 28%;`}
-`
-
-const Collapsed = styled.button`
-  position: absolute;
-  display: grid;
-  place-items: center;
-  padding: 0;
-  cursor: pointer;
-  font-size: 20px;
-  color: var(--sts-color-cream);
-  background: ${BG}cc;
-  border: 1px solid oklch(1 0 0 / 20%);
-  border-radius: 8px;
-  box-shadow: 5px 5px 0 oklch(0 0 0 / 30%);
+  color: var(--brand);
 `

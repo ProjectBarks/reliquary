@@ -1,13 +1,12 @@
 import type { Sts2Card, Sts2CardData, Sts2PileState } from '@shared/types'
 
 /**
- * A realistic mid-run Ironclad draw pile, for designing the tracker layout
- * without needing the game running.
+ * Fixture piles for the tracker design harness (dev only).
  *
- * Sized deliberately: enough distinct cards that a wide panel has to wrap into
- * three or four columns, and uneven group sizes so column balancing has
- * something real to do. A fixture with four tidy cards would make any layout
- * look fine.
+ * The pool is a realistic Ironclad card mix — uneven group sizes so packing
+ * has something real to do. `buildPile` cycles it; each full pass raises the
+ * upgrade level, so every added card is a DISTINCT row (the tracker groups
+ * identical cards) and the row count genuinely grows with the requested size.
  */
 
 const card = (
@@ -63,52 +62,23 @@ export const FIXTURE_CARD_DATA: Sts2CardData = Object.fromEntries(
 
 const id = (name: string): string => name.replace(/[^A-Za-z]/g, '')
 
-/** Draw pile: what is still to come. */
-const DRAW: Sts2Card[] = [
-  card(id('Strike'), 1),
-  card(id('Strike'), 1),
-  card(id('Strike'), 1),
-  card(id('Strike'), 1, 1),
-  card(id('Defend'), 1),
-  card(id('Defend'), 1),
-  card(id('Defend'), 1),
-  card(id('Bash'), 2, 1),
-  card(id('Twin Strike'), 1),
-  card(id('Pommel Strike'), 1, 1),
-  card(id('Cleave'), 1),
-  card(id('Clothesline'), 2),
-  card(id('Heavy Blade'), 2),
-  card(id('Iron Wave'), 1),
-  card(id('Shrug It Off'), 1),
-  card(id('True Grit'), 1, 1),
-  card(id('Armaments'), 1),
-  card(id('Battle Trance'), 0),
-  card(id('Second Wind'), 1),
-  card(id('Disarm'), 1),
-  card(id('Inflame'), 1),
-  card(id('Metallicize'), 1),
-  card(id('Demon Form'), 3),
-  card(id('Feel No Pain'), 1, 1),
-  card(id('Burn'), null, 0, { isPermanent: false }),
-  card(id('Wound'), null, 0, { isPermanent: false }),
-  card(id('Regret'), null)
-]
-
-/** Already drawn or discarded — shown as count 0 of a non-zero total. */
-const DISCARD: Sts2Card[] = [
-  card(id('Strike'), 1),
-  card(id('Defend'), 1),
-  card(id('Cleave'), 1),
-  card(id('Shrug It Off'), 1)
-]
-
-const HAND: Sts2Card[] = [card(id('Strike'), 1), card(id('Inflame'), 1)]
-
-export const FIXTURE_PILE: Sts2PileState = { draw: DRAW, discard: DISCARD, hand: HAND }
-
-/** A near-empty pile, for checking the layout does not look broken late in a fight. */
-export const FIXTURE_PILE_SMALL: Sts2PileState = {
-  draw: [card(id('Strike'), 1), card(id('Defend'), 1), card(id('Bash'), 2)],
-  discard: [card(id('Cleave'), 1)],
-  hand: []
+/** A draw pile of arbitrary size, deterministic for a given `size`. */
+export function buildPile(size: number): Sts2PileState {
+  const draw: Sts2Card[] = []
+  for (let i = 0; i < size; i++) {
+    const [name, , , costStr] = DEFS[i % DEFS.length]
+    const isStatus = costStr === '—'
+    draw.push(
+      card(
+        id(name),
+        isStatus ? null : Number(costStr),
+        Math.floor(i / DEFS.length),
+        isStatus ? { isPermanent: false } : {}
+      )
+    )
+  }
+  // A few cards already seen, for count/total badges and dimmed drawn rows.
+  const discard = draw.filter((_, i) => i % 6 === 4).map((c) => ({ ...c }))
+  const hand = draw.slice(0, 2).map((c) => ({ ...c }))
+  return { draw, discard, hand }
 }

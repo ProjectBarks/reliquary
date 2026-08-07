@@ -1,34 +1,26 @@
 /**
- * Layout engine for the deck tracker.
+ * Layout engine for the free-placement deck tracker.
  *
  * Every row the tracker draws has a KNOWN height (card tiles are fixed-height
- * strips), which means the optimal layout for a given panel size is arithmetic,
- * not measurement: no ResizeObserver, no reflow loops, no CSS multicol
- * guessing. The engine takes the grouped pile and the space available and
- * returns explicit columns of segments, chosen so that
+ * strips), so the optimal layout for a given panel size is arithmetic, not
+ * measurement: no ResizeObserver, no reflow loops, no CSS multicol guessing.
  *
- *   - content FITS the box: no scrollbar, ever;
- *   - waste is minimized: the panel hugs its content, shrinking to what is
- *     actually used rather than holding the dragged rectangle open;
- *   - anything that cannot fit is declared honestly (a "+N hidden" chip),
- *     never silently clipped.
+ * The dragged rectangle is treated as a DESIRED AREA. The engine fills it
+ * with even columns of type-groups, and the panel then hugs whatever is
+ * actually used. Three guarantees, in order:
  *
- * Five strategies share this engine (the mock harness switches between them):
- *
- *   flow    – CSS multicol + scroll; the control. Not computed here.
- *   packer  – height is authoritative, width is derived: groups pack into as
- *             many fixed-width columns as the height demands.
- *   balance – the user's box is authoritative: pick the column count from the
- *             width, then split groups (with "continued" headers) so columns
- *             come out even and nothing overflows.
- *   scale   – the user's box is authoritative and groups stay atomic: step the
- *             row density down (24 → 21 → 18 px) until everything fits.
- *   squeeze – fixed density, atomic groups: reclaim space by collapsing the
- *             least valuable rows first (cards already drawn) into one summary
- *             line per group.
+ *   1. Content FITS the area — there is never a scrollbar. Groups split
+ *      across columns under a "· cont" header when that packs better, and
+ *      the row density steps down (24 → 21 → 18 px) before anything is
+ *      given up on.
+ *   2. Reading order is preserved. If the area is genuinely too small, what
+ *      is hidden is exactly the TAIL of the list, and it is declared by a
+ *      "+N hidden" chip — content is never silently clipped and never
+ *      reordered around a gap.
+ *   3. Columns come out even. The packer tries the balanced height first and
+ *      a few taller targets, keeping the most level result, so no column is
+ *      left as a two-row stub under a full neighbour.
  */
-
-export type LayoutMode = 'flow' | 'packer' | 'balance' | 'scale' | 'squeeze'
 
 export interface Density {
   /** Card tile height / gap between tiles. */
@@ -43,7 +35,7 @@ export interface Density {
   countFont: number
 }
 
-/** Step 0 is the original tracker's density; steps 1–2 are the shrink ladder. */
+/** Step 0 is the classic tracker's density; steps 1–2 are the shrink ladder. */
 export const DENSITIES: readonly Density[] = [
   { rowH: 24, rowGap: 2, headerH: 19, groupGap: 10, font: 13, countFont: 12 },
   { rowH: 21, rowGap: 2, headerH: 17, groupGap: 8, font: 12, countFont: 11 },
@@ -53,18 +45,12 @@ export const DENSITIES: readonly Density[] = [
 export const COL_GAP = 13
 export const MIN_COL_W = 150
 export const MAX_COL_W = 230
-/** Hard ceiling on columns the packer may open (keeps width on-screen). */
-export const MAX_PACK_COLS = 6
-export const PACK_COL_W = 176
 
 export interface LayoutGroup<R> {
   type: string
   count: number
   total: number
   rows: R[]
-  /** Rows folded into a one-line summary (squeeze mode). */
-  collapsed: number
-  collapsedLabel: string
 }
 
 export interface Segment<R> {
@@ -72,8 +58,6 @@ export interface Segment<R> {
   rows: R[]
   /** 1 renders the full header; >1 renders a "· cont" header. */
   part: number
-  /** The collapsed-rows summary line renders after the final part only. */
-  showSummary: boolean
 }
 
 export interface TrackerLayout<R> {
@@ -83,7 +67,7 @@ export interface TrackerLayout<R> {
   colW: number
   /** Rows that fit nowhere; rendered as a "+N hidden" chip when > 0. */
   hiddenRows: number
-  /** Height of the tallest column — what the shell shrinks to. */
+  /** Height of the tallest column — what the shell hugs down to. */
   usedH: number
 }
 
@@ -91,32 +75,31 @@ interface PackResult<R> {
   columns: Segment<R>[][]
   hiddenRows: number
   usedH: number
+  colHeights: number[]
 }
 
 const segHeight = (d: Density, lines: number): number =>
   d.headerH + lines * (d.rowH + d.rowGap) - (lines > 0 ? d.rowGap : 0)
 
-const groupLines = <R>(g: LayoutGroup<R>): number => g.rows.length + (g.collapsed > 0 ? 1 : 0)
-
-export const naturalHeight = <R>(groups: LayoutGroup<R>[], d: Density): number =>
+const naturalHeight = <R>(groups: LayoutGroup<R>[], d: Density): number =>
   groups.reduce(
-    (sum, g, i) => sum + (i > 0 ? d.groupGap : 0) + segHeight(d, groupLines(g)),
+    (sum, g, i) => sum + (i > 0 ? d.groupGap : 0) + segHeight(d, g.rows.length),
     0
   )
 
 /**
  * First-fit packing of groups (in type order) into columns of height targetH.
  *
- * When `allowSplit` is set, a group that will not fit in the remaining space
- * continues into the next column under a "· cont" header — but never leaves an
- * orphan of fewer than 2 tiles on either side of the break.
+ * A group that will not fit in the remaining space continues into the next
+ * column under a "· cont" header — but never leaves an orphan of fewer than
+ * 2 tiles on either side of the break. Once anything is hidden, everything
+ * after it is hidden too, so the chip always describes a clean tail.
  */
 function pack<R>(
   groups: LayoutGroup<R>[],
   d: Density,
   targetH: number,
-  maxCols: number,
-  allowSplit: boolean
+  maxCols: number
 ): PackResult<R> {
   const columns: Segment<R>[][] = [[]]
   const heights = [0]
@@ -129,46 +112,41 @@ function pack<R>(
     heights[heights.length - 1] += (current().length ? d.groupGap : 0) + h
     current().push(seg)
   }
-  /** Rows that fit in `room` alongside a header (and optional summary line). */
-  const rowsThatFit = (summaryToo: boolean): number =>
-    Math.floor((room() - d.headerH + d.rowGap) / (d.rowH + d.rowGap)) - (summaryToo ? 1 : 0)
+  const rowsThatFit = (): number =>
+    Math.floor((room() - d.headerH + d.rowGap) / (d.rowH + d.rowGap))
 
   for (const group of groups) {
-    const summary = group.collapsed > 0
-    let rows = group.rows
-    let part = 1
-    // Once anything is hidden, everything after it is hidden too: showing
-    // OTHER while POWER is missing would make the "+N hidden" chip a lie
-    // about WHERE the missing cards are.
     if (hidden > 0) {
-      hidden += rows.length + (summary ? 1 : 0)
+      hidden += group.rows.length
       continue
     }
-    for (;;) {
-      const lines = rows.length + (summary ? 1 : 0)
-      if (lines === 0) break
-      const wantH = segHeight(d, lines)
+    let rows = group.rows
+    let part = 1
+    while (rows.length > 0) {
+      const wantH = segHeight(d, rows.length)
       if (wantH <= room()) {
-        place({ group, rows, part, showSummary: summary }, wantH)
+        place({ group, rows, part }, wantH)
         break
       }
-      const fit = rowsThatFit(false)
-      // Split forward when allowed and both sides keep at least 2 tiles.
-      if (allowSplit && fit >= 2 && rows.length - fit >= 2) {
-        place({ group, rows: rows.slice(0, fit), part, showSummary: false }, segHeight(d, fit))
+      let fit = rowsThatFit()
+      // Splitting at `fit` would strand a single row; give one row back so
+      // both sides keep 2. Without this, a target that is one row too tight
+      // dead-ends and forces the packer to a much looser (less level) target.
+      if (fit >= 3 && rows.length - fit === 1) fit -= 1
+      if (fit >= 2 && rows.length - fit >= 2) {
+        place({ group, rows: rows.slice(0, fit), part }, segHeight(d, fit))
         rows = rows.slice(fit)
         part++
       } else if (current().length === 0) {
-        // An empty column still cannot hold it: the box is genuinely too
+        // Even an empty column cannot hold it: the area is genuinely too
         // small. Keep what fits, declare the rest.
-        const keep = Math.max(fit, 1)
-        const kept = rows.slice(0, keep)
-        hidden += rows.length - kept.length + (summary ? 1 : 0)
-        place({ group, rows: kept, part, showSummary: false }, segHeight(d, kept.length))
+        const kept = rows.slice(0, Math.max(fit, 1))
+        hidden += rows.length - kept.length
+        place({ group, rows: kept, part }, segHeight(d, kept.length))
         break
       }
       if (columns.length >= maxCols) {
-        hidden += rows.length + (summary ? 1 : 0)
+        hidden += rows.length
         break
       }
       columns.push([])
@@ -179,45 +157,56 @@ function pack<R>(
   return {
     columns: columns.filter((c) => c.length > 0),
     hiddenRows: hidden,
-    usedH: Math.max(0, ...heights)
+    usedH: Math.max(0, ...heights),
+    colHeights: heights.filter((h) => h > 0)
   }
 }
 
-const done = <R>(r: PackResult<R>, d: Density, step: number, colW: number): TrackerLayout<R> => ({
-  ...r,
-  density: d,
-  densityStep: step,
-  colW
-})
+/**
+ * Pack toward EVEN columns: try the balanced estimate and a few taller
+ * targets, and keep the most level fit. A single target can strand a 2-row
+ * stub (a group that cannot split into the leftover space forces everything
+ * after it onward); a slightly taller target absorbs the stub.
+ */
+function packEven<R>(
+  groups: LayoutGroup<R>[],
+  d: Density,
+  availH: number,
+  maxCols: number
+): PackResult<R> {
+  const even = Math.ceil(naturalHeight(groups, d) / maxCols) + d.headerH
+  // A reasonably fine ladder from "perfectly balanced" up to "the whole box":
+  // splitting adds header overhead the estimate cannot see, so the tightest
+  // target often misses by a row or two, and the next rung must be close or
+  // the final layout lurches from level to lopsided.
+  const targets = [
+    ...new Set(
+      [1, 1.06, 1.12, 1.2, 1.3, 1.45]
+        .map((f) => Math.round(even * f))
+        .concat(availH)
+        .map((t) => Math.min(t, availH))
+    )
+  ]
+  let best: PackResult<R> | null = null
+  const spread = (r: PackResult<R>): number =>
+    Math.max(...r.colHeights) - Math.min(...r.colHeights)
+  for (const target of targets) {
+    const r = pack(groups, d, target, maxCols)
+    if (r.hiddenRows > 0) continue
+    if (!best || spread(r) < spread(best)) best = r
+  }
+  return best ?? pack(groups, d, availH, maxCols)
+}
 
-/** Column count the dragged width affords, and the width each column gets. */
+/** Column count the desired width affords, and the width each column gets. */
 function colsForWidth(availW: number): { cols: number; colW: number } {
   const cols = Math.max(1, Math.floor((availW + COL_GAP) / (MIN_COL_W + COL_GAP)))
   const colW = Math.min(MAX_COL_W, Math.floor((availW - (cols - 1) * COL_GAP) / cols))
   return { cols, colW }
 }
 
-/** packer: height rules; columns (and therefore width) follow from it. */
-export function layoutPacker<R>(groups: LayoutGroup<R>[], availH: number): TrackerLayout<R> {
-  const d = DENSITIES[0]
-  // First pass finds how many columns the height demands; the second levels
-  // them, so the last column is not left half-empty under a full first one.
-  const first = pack(groups, d, availH, MAX_PACK_COLS, true)
-  const cols = first.columns.length
-  if (cols > 1 && first.hiddenRows === 0) {
-    const even = Math.ceil(naturalHeight(groups, d) / cols) + d.headerH
-    if (even < availH) {
-      const leveled = pack(groups, d, even, cols, true)
-      if (leveled.hiddenRows === 0 && leveled.columns.length === cols) {
-        return done(leveled, d, 0, PACK_COL_W)
-      }
-    }
-  }
-  return done(first, d, 0, PACK_COL_W)
-}
-
-/** balance: fill the user's box with even, split-allowed columns. */
-export function layoutBalance<R>(
+/** Fill the desired area: even split-allowed columns, density as a fallback. */
+export function layoutTracker<R>(
   groups: LayoutGroup<R>[],
   availW: number,
   availH: number
@@ -226,70 +215,8 @@ export function layoutBalance<R>(
   let last: TrackerLayout<R> | null = null
   for (let step = 0; step < DENSITIES.length; step++) {
     const d = DENSITIES[step]
-    // Aim for even columns: the balanced height, not the full box — but the
-    // extra "cont" headers splitting introduces can push a column past the
-    // estimate, so fall back to the full box before giving up on this density.
-    const even = Math.ceil(naturalHeight(groups, d) / cols) + d.headerH
-    let r = pack(groups, d, Math.min(availH, even), cols, true)
-    if (r.hiddenRows > 0) r = pack(groups, d, availH, cols, true)
-    last = done(r, d, step, colW)
-    if (r.hiddenRows === 0) return last
-  }
-  return last as TrackerLayout<R>
-}
-
-/** scale: keep groups atomic; shrink density until the box holds them. */
-export function layoutScale<R>(
-  groups: LayoutGroup<R>[],
-  availW: number,
-  availH: number
-): TrackerLayout<R> {
-  const { cols, colW } = colsForWidth(availW)
-  let last: TrackerLayout<R> | null = null
-  for (let step = 0; step < DENSITIES.length; step++) {
-    const d = DENSITIES[step]
-    const r = pack(groups, d, availH, cols, false)
-    last = done(r, d, step, colW)
-    if (r.hiddenRows === 0) return last
-  }
-  return last as TrackerLayout<R>
-}
-
-/**
- * squeeze: fixed density, atomic groups; make room by folding rows instead.
- * Stage 1 folds already-drawn cards (count 0) into "n drawn" per group; stage
- * 2 folds the Other group (statuses/curses) entirely. Only then the chip.
- */
-export function layoutSqueeze<R>(
-  groups: LayoutGroup<R>[],
-  availW: number,
-  availH: number,
-  isDrawn: (row: R) => boolean
-): TrackerLayout<R> {
-  const { cols, colW } = colsForWidth(availW)
-  const d = DENSITIES[0]
-
-  const stages: Array<LayoutGroup<R>[]> = [groups]
-  const drawnFolded = groups.map((g) => {
-    const kept = g.rows.filter((row) => !isDrawn(row))
-    const folded = g.rows.length - kept.length
-    return folded > 0
-      ? { ...g, rows: kept, collapsed: g.collapsed + folded, collapsedLabel: 'drawn' }
-      : g
-  })
-  stages.push(drawnFolded)
-  stages.push(
-    drawnFolded.map((g) =>
-      g.type === 'other' && g.rows.length > 0
-        ? { ...g, rows: [], collapsed: g.collapsed + g.rows.length, collapsedLabel: 'cards' }
-        : g
-    )
-  )
-
-  let last: TrackerLayout<R> | null = null
-  for (const stage of stages) {
-    const r = pack(stage, d, availH, cols, false)
-    last = done(r, d, 0, colW)
+    const r = packEven(groups, d, availH, cols)
+    last = { ...r, density: d, densityStep: step, colW }
     if (r.hiddenRows === 0) return last
   }
   return last as TrackerLayout<R>

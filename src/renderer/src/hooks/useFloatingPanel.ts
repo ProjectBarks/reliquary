@@ -60,6 +60,13 @@ export interface FloatingPanel {
   gripHandlers: { onPointerDown: (e: React.PointerEvent) => void }
   resizeHandlers: { onPointerDown: (e: React.PointerEvent) => void }
   reset: () => void
+  /**
+   * Overwrite the stored size, synchronously enough that a resize begun in the
+   * same event reads it. The tracker calls this with its VISIBLE (hugged) size
+   * on resize-start, so the drag grows from the edge under the cursor instead
+   * of popping out to a stale desired rectangle.
+   */
+  setSize: (w: number, h: number) => void
 }
 
 export function useFloatingPanel(storageKey: string): FloatingPanel {
@@ -195,7 +202,13 @@ export function useFloatingPanel(storageKey: string): FloatingPanel {
     }, [setInteractive]),
     gripHandlers: { onPointerDown: (e) => begin(e, 'drag') },
     resizeHandlers: { onPointerDown: (e) => begin(e, 'resize') },
-    reset: useCallback(() => setPlacement(DEFAULT), [])
+    reset: useCallback(() => setPlacement(DEFAULT), []),
+    setSize: useCallback((w: number, h: number) => {
+      // Mutate the ref too: begin() runs in the same tick and reads it before
+      // React commits the state update.
+      ref.current = { ...ref.current, w, h }
+      setPlacement(ref.current)
+    }, [])
   }
 }
 
