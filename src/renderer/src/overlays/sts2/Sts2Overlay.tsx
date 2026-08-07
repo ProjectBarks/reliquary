@@ -2,6 +2,7 @@ import type { Sts2StatPanel } from '@shared/types'
 import { ErrorBoundary } from '../../telemetry'
 import { useIpc, useSetting, useDiagnostics } from '../../hooks/useIpc'
 import { DeckTracker } from './DeckTracker'
+import { FreeDeckTracker } from './FreeDeckTracker'
 import { AttackSummary } from './AttackSummary'
 import { StatPanels } from './StatPanels'
 import { ModeBadge } from './ModeBadge'
@@ -23,6 +24,7 @@ export function Sts2Overlay(): JSX.Element {
   const diagnostics = useDiagnostics()
 
   const enableDeckTracker = useSetting('enableDeckTracker')
+  const enableFreeTrackerLayout = useSetting('enableFreeTrackerLayout')
   const enableAttackSummary = useSetting('enableAttackSummary')
   const enableCardRewardStats = useSetting('enableCardRewardStats')
   const enableShopStats = useSetting('enableShopStats')
@@ -100,11 +102,19 @@ export function Sts2Overlay(): JSX.Element {
       isCombat &&
       enemiesState?.isCombatInProgress ? (
         <ErrorBoundary name="DeckTracker">
-          <DeckTracker
-            pileState={pileState}
-            cardData={cardData}
-            isPeekButtonVisible={!!nGameState?.isPeekButtonVisible}
-          />
+          {enableFreeTrackerLayout ? (
+            <FreeDeckTracker
+              pileState={pileState}
+              cardData={cardData}
+              isPeekButtonVisible={!!nGameState?.isPeekButtonVisible}
+            />
+          ) : (
+            <DeckTracker
+              pileState={pileState}
+              cardData={cardData}
+              isPeekButtonVisible={!!nGameState?.isPeekButtonVisible}
+            />
+          )}
         </ErrorBoundary>
       ) : null}
 

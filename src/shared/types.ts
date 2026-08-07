@@ -169,6 +169,12 @@ export interface Sts2Settings {
    */
   enableTelemetry: boolean
   enableDeckTracker: boolean
+  /**
+   * The movable deck tracker: place it anywhere, drag a corner to set its
+   * area, and the cards pack themselves inside. Off = the classic left-edge
+   * strip. Ships default-off while the layout engine earns trust.
+   */
+  enableFreeTrackerLayout: boolean
   enableAttackSummary: boolean
   enableCardRewardStats: boolean
   enableShopStats: boolean
@@ -180,6 +186,7 @@ export interface Sts2Settings {
 export const DEFAULT_SETTINGS: Sts2Settings = {
   enableTelemetry: true,
   enableDeckTracker: true,
+  enableFreeTrackerLayout: false,
   enableAttackSummary: true,
   enableCardRewardStats: true,
   enableShopStats: true,

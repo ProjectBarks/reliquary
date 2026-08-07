@@ -18,40 +18,54 @@ import {
 /**
  * A single deck-tracker row: cost pill, card art bleed, name, optional
  * enchantment icon, and a count/total badge. Ported 1:1 from the original.
+ *
+ * Height and type scale are driven by the layout engine's density step, so the
+ * tile must render exactly `rowH` pixels tall — the engine's arithmetic
+ * depends on it.
  */
 export function CardTile({
   card,
-  jsonCard
+  jsonCard,
+  rowH = 24,
+  fontSize = 13,
+  countSize = 12
 }: {
   card: Sts2Card
   jsonCard?: Sts2CardInfo
+  rowH?: number
+  fontSize?: number
+  countSize?: number
 }): JSX.Element {
   const isUpgraded = card.upgradeLevel > 0
+  const iconSize = Math.min(20, rowH - 4)
   return (
     <Row
       $color={frameColor(jsonCard?.color)}
       $rarityColor={rarityColors(jsonCard?.rarity)}
       $type={jsonCard?.type?.toLowerCase() ?? ''}
-      style={card.count === 0 ? { filter: 'brightness(0.45)' } : undefined}
+      style={{
+        height: rowH,
+        ...(card.count === 0 ? { filter: 'brightness(0.45)' } : undefined)
+      }}
     >
       {jsonCard ? (
         <RowArt style={{ backgroundImage: `url(${getCardArtUrl(jsonCard.color, card.id)})` }} />
       ) : null}
-      <Cost $icon={getEnergyIcon(jsonCard?.color ?? 'colorless')}>
+      <Cost $icon={getEnergyIcon(jsonCard?.color ?? 'colorless')} style={{ width: iconSize, height: iconSize }}>
         <OutlinedText
           text={resolveCost(card, jsonCard) ?? '?'}
           fill={costColor(card.cost, card.defaultCost)}
           stroke={costStroke(jsonCard?.color ?? 'colorless')}
-          fontSize={13}
+          fontSize={fontSize}
         />
       </Cost>
       {jsonCard?.starCost ? (
-        <Cost $icon={getEnergyIcon('star')} style={{ marginLeft: -4 }}>
+        <Cost $icon={getEnergyIcon('star')} style={{ marginLeft: -4, width: iconSize, height: iconSize }}>
           <OutlinedText
             text={jsonCard.starCost}
             fill="var(--sts-color-cream)"
             stroke={STAR_STROKE}
-            fontSize={13}
+            fontSize={fontSize}
           />
         </Cost>
       ) : null}
@@ -60,7 +74,7 @@ export function CardTile({
           text={jsonCard?.name ?? card.id + (isUpgraded ? '+' : '')}
           fill={isUpgraded ? 'var(--sts-color-green)' : 'var(--sts-color-cream)'}
           stroke={isUpgraded ? '#1c5f2e' : '#4f4547'}
-          fontSize={13}
+          fontSize={fontSize}
           fontWeight={400}
         />
         {card.enchantment ? (
@@ -75,12 +89,15 @@ export function CardTile({
         ) : null}
       </Name>
       {(card.total ?? 0) > 1 ? (
-        <Count $color={frameColor(jsonCard?.color)}>
+        <Count
+          $color={frameColor(jsonCard?.color)}
+          style={{ height: rowH, width: rowH >= 22 ? 30 : 26 }}
+        >
           <OutlinedText
             text={`${card.count}/${card.total}`}
             fill="var(--sts-color-cream)"
             stroke="#4f4547"
-            fontSize={12}
+            fontSize={countSize}
           />
         </Count>
       ) : null}
