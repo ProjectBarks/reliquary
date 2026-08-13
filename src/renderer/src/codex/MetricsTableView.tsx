@@ -124,6 +124,11 @@ export function MetricsTableView({
   // rows at bracket level and null for every row once a character is chosen.
   // Rather than three columns of dots, the columns simply are not there.
   const showActs = kind === 'cards' && sorted.some((r) => r.acts.some((v) => v != null))
+  // The same honesty rule, two more times. Pick% is null for every relic and
+  // potion row; "Seen" (times offered) is recorded only for card rewards, so
+  // relics and potions carry an all-zero column that reads as data but isn't.
+  const showPick = sorted.some((r) => r.pick != null)
+  const showSeen = sorted.some((r) => r.seen != null && r.seen > 0)
 
   const summary = [
     bracketLabel(bracket),
@@ -190,8 +195,8 @@ export function MetricsTableView({
                 {header('score', 'Score', true)}
                 {showElo ? header('elo', 'Elo', true) : null}
                 {header('win', 'Win%', true)}
-                {header('pick', 'Pick%', true)}
-                {header('seen', 'Seen', true)}
+                {showPick ? header('pick', 'Pick%', true) : null}
+                {showSeen ? header('seen', 'Seen', true) : null}
                 {header('runs', 'Runs', true)}
                 {showActs ? header('a1', 'Act 1', true) : null}
                 {showActs ? header('a2', 'Act 2', true) : null}
@@ -231,8 +236,8 @@ export function MetricsTableView({
                   <Num value={fmtScore(row.score)} />
                   {showElo ? <Num value={fmtElo(row.elo)} /> : null}
                   <Num value={fmtPct(row.win)} />
-                  <Num value={fmtPct(row.pick)} />
-                  <Num value={fmtInt(row.seen)} />
+                  {showPick ? <Num value={fmtPct(row.pick)} /> : null}
+                  {showSeen ? <Num value={fmtInt(row.seen)} /> : null}
                   <Num value={fmtInt(row.runs)} />
                   {showActs ? <Num value={fmtPct(row.acts[0], 0)} /> : null}
                   {showActs ? <Num value={fmtPct(row.acts[1], 0)} /> : null}
@@ -269,10 +274,13 @@ export function MetricsTableView({
           Runs containing the entry that ended in a win. Only meaningful against the baseline win
           rate in the line above the table — half of all cards sit near it by construction.
         </dd>
-        <dt>Pick%, Seen, Runs</dt>
+        <dt>{[showPick ? 'Pick%' : null, showSeen ? 'Seen' : null, 'Runs'].filter(Boolean).join(', ')}</dt>
         <dd>
           How often it was offered, and how often it was taken. `·` means the snapshot does not
           record that number for this slice; it never means zero.
+          {showPick && showSeen
+            ? null
+            : ' Offer counts exist only for card rewards, so the columns without them are hidden here.'}
         </dd>
         {kind === 'cards' ? (
           <>
