@@ -5,9 +5,10 @@ import type { UpdateState } from '@shared/types'
 /**
  * Update status, shown in the titlebar so it is visible from every tab.
  *
- * Deliberately quiet: while an update downloads this is a thin progress pill,
- * and it only becomes a button once there is something to act on. Nothing here
- * ever interrupts — the update installs on quit whether or not it is clicked.
+ * Deliberately quiet, and strictly an announcer: it never triggers a download
+ * or an install itself. Clicking it does the mildest useful thing — nothing
+ * while announcing (the Home banner and Settings carry the actions), install
+ * only once the user has already downloaded a version and it is waiting.
  */
 export function UpdateBanner(): JSX.Element | null {
   const [state, setState] = useState<UpdateState | null>(null)
@@ -15,27 +16,38 @@ export function UpdateBanner(): JSX.Element | null {
   useEffect(() => window.spectra?.onUpdate(setState), [])
 
   if (!state) return null
-  // Nothing worth saying: up to date, idle, or an unpackaged dev run.
-  if (state.status !== 'downloading' && state.status !== 'ready') return null
 
-  if (state.status === 'downloading') {
+  if (state.status === 'available') {
     return (
-      <Pill title={`Downloading ${state.version ?? 'update'}…`}>
+      <Pill title={`Version ${state.latest} is available — see Home or Settings`}>
         <Dot />
-        <span>Updating {state.percent > 0 ? `${state.percent}%` : ''}</span>
+        <span>{state.latest} available</span>
       </Pill>
     )
   }
 
-  return (
-    <Ready
-      onClick={() => window.spectra?.updateAction('install')}
-      title={`Restart to install ${state.version}`}
-    >
-      <span>Update ready</span>
-      <em>Restart</em>
-    </Ready>
-  )
+  if (state.status === 'downloading') {
+    return (
+      <Pill title={`Downloading ${state.target ?? 'update'}…`}>
+        <Dot />
+        <span>Downloading {state.percent > 0 ? `${state.percent}%` : ''}</span>
+      </Pill>
+    )
+  }
+
+  if (state.status === 'ready') {
+    return (
+      <Ready
+        onClick={() => window.spectra?.updateAction({ action: 'install' })}
+        title={`Restart to install ${state.target}`}
+      >
+        <span>{state.target} ready</span>
+        <em>Restart</em>
+      </Ready>
+    )
+  }
+
+  return null
 }
 
 const pulse = keyframes`

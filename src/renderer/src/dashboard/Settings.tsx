@@ -115,6 +115,8 @@ export function Settings(): JSX.Element {
   const [upd, setUpd] = useState<UpdateState | null>(null)
   const [open, setOpen] = useState(false)
   const [copied, setCopied] = useState(false)
+  /** A version picked in the dropdown but not yet acted on; null = current. */
+  const [selected, setSelected] = useState<string | null>(null)
   useEffect(() => window.spectra?.onUpdate(setUpd), [])
 
   const devMode = diag?.mode === 'stub'
@@ -123,6 +125,19 @@ export function Settings(): JSX.Element {
   const checking = upd?.status === 'checking'
   const downloading = upd?.status === 'downloading'
   const busy = checking || downloading
+
+  const current = upd?.current ?? diag?.appVersion ?? '—'
+  // The running version belongs in the picker even when it is no longer on
+  // the release list (a dev build, a pulled release).
+  const versions =
+    upd?.versions.some((v) => v.version === current) || !upd
+      ? (upd?.versions ?? [])
+      : [
+          { version: current, publishedAt: '', installerUrl: '', manifestUrl: null, size: null },
+          ...upd.versions
+        ]
+  const picked = selected ?? current
+  const isUpgrade = upd?.latest != null && picked === upd.latest
 
   const copyReport = async (): Promise<void> => {
     const report = [
@@ -263,12 +278,37 @@ export function Settings(): JSX.Element {
       <Section>
         <SectionHead>
           <SectionTitle>Updates</SectionTitle>
+          <SectionNote>Nothing installs unless you ask</SectionNote>
         </SectionHead>
         <Panel>
           <Row>
             <RowMain>
-              <RowLabel>Version {diag?.appVersion ?? '—'}</RowLabel>
-              <RowDesc>{updateLabel(upd)}</RowDesc>
+              <RowLabel>
+                Version{' '}
+                {versions.length > 1 ? (
+                  <VersionSelect
+                    aria-label="Choose a version"
+                    value={picked}
+                    disabled={busy || upd?.status === 'ready'}
+                    onChange={(e) => setSelected(e.target.value)}
+                  >
+                    {versions.map((v) => (
+                      <option key={v.version} value={v.version}>
+                        {v.version}
+                        {v.version === current ? ' — current' : ''}
+                        {v.version === upd?.latest && v.version !== current ? ' — newest' : ''}
+                      </option>
+                    ))}
+                  </VersionSelect>
+                ) : (
+                  (diag?.appVersion ?? '—')
+                )}
+              </RowLabel>
+              <RowDesc>
+                {picked !== current && !busy && upd?.status !== 'ready'
+                  ? `Switches this install to ${picked}. Nothing happens until you confirm.`
+                  : updateLabel(upd)}
+              </RowDesc>
               {downloading ? (
                 <Track
                   role="progressbar"
@@ -283,17 +323,36 @@ export function Settings(): JSX.Element {
             </RowMain>
             <RowAside>
               {upd?.status === 'ready' ? (
-                <Button $primary onClick={() => window.spectra?.updateAction('install')}>
-                  Restart &amp; install
+                <>
+                  <Button $primary onClick={() => window.spectra?.updateAction({ action: 'install' })}>
+                    Restart &amp; install {upd.target}
+                  </Button>
+                  <Button onClick={() => window.spectra?.updateAction({ action: 'cancel' })}>
+                    Cancel
+                  </Button>
+                </>
+              ) : downloading ? (
+                <Button onClick={() => window.spectra?.updateAction({ action: 'cancel' })}>
+                  Cancel
                 </Button>
+              ) : picked !== current ? (
+                <>
+                  <Button
+                    $primary
+                    onClick={() => window.spectra?.updateAction({ action: 'download', version: picked })}
+                  >
+                    {isUpgrade ? 'Update to' : 'Switch to'} {picked}
+                  </Button>
+                  <Button onClick={() => setSelected(null)}>Cancel</Button>
+                </>
               ) : (
                 <Button
-                  disabled={busy}
-                  onClick={() => window.spectra?.updateAction('check')}
-                  aria-busy={busy}
+                  disabled={checking}
+                  onClick={() => window.spectra?.updateAction({ action: 'check' })}
+                  aria-busy={checking}
                 >
-                  {busy ? <Spinner /> : null}
-                  {checking ? 'Checking…' : downloading ? 'Downloading…' : 'Check for updates'}
+                  {checking ? <Spinner /> : null}
+                  {checking ? 'Checking…' : 'Check for updates'}
                 </Button>
               )}
             </RowAside>
@@ -455,12 +514,14 @@ function updateLabel(u: UpdateState | null): string {
   switch (u?.status) {
     case 'checking':
       return 'Checking for updates…'
+    case 'available':
+      return `${u.latest} is available. Nothing downloads or installs until you choose to.`
     case 'downloading':
-      return `Downloading ${u.version ?? 'update'}${u.percent ? ` — ${u.percent}%` : ''}`
+      return `Downloading ${u.target ?? 'update'}${u.percent ? ` — ${u.percent}%` : ''}`
     case 'ready':
-      return `${u.version} is ready and installs when you quit.`
+      return `${u.target} is downloaded and verified. It installs only when you say so.`
     case 'current':
-      return 'You are on the latest version.'
+      return 'You are on the newest version.'
     case 'error':
       return 'Could not check for updates. It will try again later.'
     case 'dev-disabled':
@@ -468,7 +529,7 @@ function updateLabel(u: UpdateState | null): string {
     case 'disabled':
       return 'Updates are switched off.'
     default:
-      return 'Updates install automatically when you quit.'
+      return 'Reliquary checks for new versions but never installs anything on its own.'
   }
 }
 
@@ -486,6 +547,26 @@ const Wrap = styled.div`
  * and compared against the last one you read; a bar is understood at a glance,
  * which is all this needs since nothing is blocked on it finishing.
  */
+/** The version picker: quiet until opened, reads as part of the label. */
+const VersionSelect = styled.select`
+  margin-left: 2px;
+  font: inherit;
+  color: var(--ink);
+  background: oklch(1 0 0 / 7%);
+  border: 1px solid var(--line-strong);
+  border-radius: 7px;
+  padding: 3px 8px;
+  cursor: pointer;
+  &:disabled {
+    opacity: 0.55;
+    cursor: default;
+  }
+  option {
+    background: #262321;
+    color: var(--ink);
+  }
+`
+
 const Track = styled.div`
   margin-top: 8px;
   height: 4px;

@@ -12,13 +12,13 @@ import {
   installGpuCrashGuard
 } from './gpuCrashGuard'
 import { SettingsStore } from './settings/SettingsStore'
-import { AutoUpdater } from './updater/AutoUpdater'
+import { UpdateManager } from './updater/UpdateManager'
 import { APP_VERSION, telemetry } from './telemetry/Telemetry'
 import { installAppTelemetry, installProcessTelemetry } from './telemetry/install'
 import {
   IPC,
   type RendererTelemetryEvent,
-  type UpdateAction,
+  type UpdateCommand,
   type DiagnosticsState,
   type KeyedSnapshot,
   type Sts2Key,
@@ -82,7 +82,7 @@ let overlayHidden = false
 let scryProvider: Sts2ScryProvider | null = null
 let stub: Sts2Stub | null = null
 let settingsStore: SettingsStore | null = null
-let updater: AutoUpdater | null = null
+let updater: UpdateManager | null = null
 let usingScry = false
 
 let scryLoaded = false
@@ -293,9 +293,20 @@ function wireIpc(): void {
     telemetry.setOptOut(!next.enableTelemetry)
     emitSnapshot({ key: 'sts2.settings', value: next })
   })
-  on(IPC.UpdateAction, (_e, action: UpdateAction) => {
-    if (action === 'install') updater?.installNow()
-    else updater?.check()
+  on(IPC.UpdateAction, (_e, cmd: UpdateCommand) => {
+    switch (cmd?.action) {
+      case 'download':
+        void updater?.download(cmd.version)
+        break
+      case 'install':
+        updater?.install()
+        break
+      case 'cancel':
+        updater?.cancel()
+        break
+      default:
+        void updater?.check()
+    }
   })
 
   on(IPC.WindowControl, (_e, action: WindowAction) => {
@@ -435,9 +446,10 @@ if (hasLock)
   // Seed the renderer with persisted settings (single owner; both modes).
   emitSnapshot({ key: 'sts2.settings', value: settingsStore.get() })
 
-  // Over-the-air updates from GitHub Releases. Downloads in the background and
-  // installs on quit, so a new build never interrupts a run in progress.
-  updater = new AutoUpdater((state) => broadcast(IPC.Update, state))
+  // Updates from GitHub Releases, strictly user-driven: this only CHECKS on
+  // its own, so the UI can announce a new version. Downloading and installing
+  // happen exclusively on click, and any listed version can be chosen.
+  updater = new UpdateManager((state) => broadcast(IPC.Update, state))
   updater.start()
 
   const tried: string[] = []

@@ -64,6 +64,12 @@ export function Home(): JSX.Element {
   const tracker = useTracker()
   const [update, setUpdate] = useState<UpdateState | null>(null)
   useEffect(() => window.spectra?.onUpdate(setUpdate), [])
+  // "Not now" is remembered per version: quiet until something new exists.
+  const [dismissed, setDismissed] = useState(() => localStorage.getItem('update.dismissed'))
+  const dismiss = (version: string | null): void => {
+    if (version) localStorage.setItem('update.dismissed', version)
+    setDismissed(version)
+  }
   const target = tracker?.target ?? 'Slay the Spire 2'
   const state = readPhase(diag ?? null, target)
 
@@ -138,23 +144,37 @@ export function Home(): JSX.Element {
 
         {/* The titlebar pill announces an update from every tab; here on the
             status screen it earns a full-width line, because "a new version
-            exists" IS status. Quiet while downloading, actionable when ready,
-            silent otherwise. */}
-        {update?.status === 'downloading' || update?.status === 'ready' ? (
-          <UpdateStrip $ready={update.status === 'ready'}>
-            {update.status === 'downloading' ? (
-              <span>
-                Downloading {update.version ? `v${update.version}` : 'update'}
-                {update.percent > 0 ? ` — ${update.percent}%` : '…'}
-              </span>
-            ) : (
-              <>
-                <span>{update.version ? `Version ${update.version}` : 'An update'} is ready.</span>
-                <RestartButton onClick={() => window.spectra?.updateAction('install')}>
-                  Restart to install
-                </RestartButton>
-              </>
-            )}
+            exists" IS status. It only ever announces and offers — nothing
+            downloads or installs unless one of these buttons is pressed. */}
+        {update?.status === 'available' && dismissed !== update.latest ? (
+          <UpdateStrip $ready={false}>
+            <span>Version {update.latest} is available.</span>
+            <RestartButton
+              onClick={() => window.spectra?.updateAction({ action: 'download' })}
+            >
+              Update
+            </RestartButton>
+            <QuietButton onClick={() => dismiss(update.latest)}>Not now</QuietButton>
+          </UpdateStrip>
+        ) : update?.status === 'downloading' ? (
+          <UpdateStrip $ready={false}>
+            <span>
+              Downloading {update.target ?? 'update'}
+              {update.percent > 0 ? ` — ${update.percent}%` : '…'}
+            </span>
+            <QuietButton onClick={() => window.spectra?.updateAction({ action: 'cancel' })}>
+              Cancel
+            </QuietButton>
+          </UpdateStrip>
+        ) : update?.status === 'ready' ? (
+          <UpdateStrip $ready>
+            <span>Version {update.target} is downloaded.</span>
+            <RestartButton onClick={() => window.spectra?.updateAction({ action: 'install' })}>
+              Restart to install
+            </RestartButton>
+            <QuietButton onClick={() => window.spectra?.updateAction({ action: 'cancel' })}>
+              Cancel
+            </QuietButton>
           </UpdateStrip>
         ) : null}
 
@@ -338,6 +358,22 @@ const UpdateStrip = styled.div<{ $ready: boolean }>`
   animation: ${rise} 0.4s cubic-bezier(0.16, 1, 0.3, 1);
   @media (prefers-reduced-motion: reduce) {
     animation: none;
+  }
+`
+
+const QuietButton = styled.button`
+  cursor: pointer;
+  font-family: inherit;
+  font-size: 12.5px;
+  color: var(--ink-dim);
+  background: none;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 5px 13px;
+  transition: border-color 120ms ease, color 120ms ease;
+  &:hover {
+    color: var(--ink);
+    border-color: var(--line-strong);
   }
 `
 

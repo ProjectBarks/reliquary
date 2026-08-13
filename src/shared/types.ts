@@ -305,27 +305,56 @@ export const IPC = {
   UpdateAction: 'spectra:update-action'
 } as const
 
-/** What the auto-updater is currently doing. */
+/** One installable release, as listed on GitHub. */
+export interface ReleaseInfo {
+  version: string
+  publishedAt: string
+  /** Direct download URL of the NSIS installer asset. */
+  installerUrl: string
+  /** URL of this release's latest.yml, which carries the installer's sha512. */
+  manifestUrl: string | null
+  size: number | null
+}
+
+/**
+ * What the updater is doing. The updater only ever CHECKS on its own;
+ * downloading and installing happen exclusively on user request, and any
+ * listed version — older or newer — can be chosen.
+ */
 export interface UpdateState {
   status:
     | 'idle'
     | 'checking'
-    | 'downloading'
-    | 'ready'
+    /** A different version than the running one is available to pick. */
+    | 'available'
+    /** Running the newest listed version. */
     | 'current'
+    | 'downloading'
+    /** An installer is downloaded, verified, and waiting for the user. */
+    | 'ready'
     | 'error'
-    /** Unpackaged run — there is no installer to replace. */
+    /** Unpackaged run — there is no installed copy to replace. */
     | 'dev-disabled'
     /** Turned off via SPECTRA_NO_UPDATE. */
     | 'disabled'
-  /** The version being downloaded or ready to install. */
-  version: string | null
+  /** The running version. */
+  current: string
+  /** Newest listed version, when known. */
+  latest: string | null
+  /** Installable releases, newest first. */
+  versions: ReleaseInfo[]
+  /** The version being downloaded / ready to install. */
+  target: string | null
   /** Download progress 0-100. */
   percent: number
   error: string | null
 }
 
-export type UpdateAction = 'check' | 'install'
+export interface UpdateCommand {
+  action: 'check' | 'download' | 'install' | 'cancel'
+  /** For 'download': which version to fetch. Defaults to the newest. */
+  version?: string
+}
 
 /**
  * A diagnostic event raised in a renderer and forwarded to the main process,
@@ -349,7 +378,7 @@ export interface SpectraApi {
   report(event: RendererTelemetryEvent): void
 
   onUpdate(cb: (state: UpdateState) => void): () => void
-  updateAction(action: UpdateAction): void
+  updateAction(command: UpdateCommand): void
   onData(cb: (snapshot: KeyedSnapshot) => void): () => void
   onTracker(cb: (state: TrackerState) => void): () => void
   onDiagnostics(cb: (state: DiagnosticsState) => void): () => void

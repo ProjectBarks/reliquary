@@ -6,7 +6,7 @@ import {
   type LogLine,
   type RendererTelemetryEvent,
   type SpectraApi,
-  type UpdateAction,
+  type UpdateCommand,
   type UpdateState,
   type Sts2Settings,
   type StubScenario,
@@ -75,8 +75,8 @@ const api: SpectraApi = {
     return () => ipcRenderer.removeListener(IPC.Update, listener)
   },
 
-  updateAction(action: UpdateAction): void {
-    ipcRenderer.send(IPC.UpdateAction, action)
+  updateAction(command: UpdateCommand): void {
+    ipcRenderer.send(IPC.UpdateAction, command)
   },
 
   report(event: RendererTelemetryEvent): void {
