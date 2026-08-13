@@ -1,6 +1,9 @@
 import type { CSSProperties } from 'react'
 import styled, { keyframes } from 'styled-components'
 import type { Sts2StatPanel } from '@shared/types'
+// The A–F palette is shared with the Codex tab, which grades the same cards —
+// two copies would eventually disagree about what a "B" looks like.
+import { TIER_COLORS } from '../../codex/tiers'
 
 /**
  * Reward / merchant / event / ancient stat panels.
@@ -73,17 +76,6 @@ export function StatPanels({ panels }: { panels: Sts2StatPanel[] }): JSX.Element
  * it on their left, so tips never run off-screen. The 12px gap scales with the
  * overlay's zoom factor, so it tracks the game's UI scale.
  */
-// Letter-grade palette: A best (green) → F worst (red). Handles "A", "A+", "S", etc.
-const TIER_COLORS: Record<string, string> = {
-  S: '#7fff00',
-  A: '#7fff00',
-  B: '#2aebbe',
-  C: '#efc851',
-  D: '#ffa518',
-  E: '#ff5555',
-  F: '#ff5555'
-}
-
 function tierColor(value: string): string | undefined {
   return TIER_COLORS[value.trim().charAt(0).toUpperCase()]
 }

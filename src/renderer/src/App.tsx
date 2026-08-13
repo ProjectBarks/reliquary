@@ -9,7 +9,7 @@ import {
 import { Shell } from './dashboard/Shell'
 import { Home } from './dashboard/Home'
 import { Settings } from './dashboard/Settings'
-import { CodexHome, CodexLayout } from './codex/CodexLayout'
+import { codexRouteTree } from './codex/routes'
 import { Sts2Overlay } from './overlays/sts2/Sts2Overlay'
 import { TrackerMock } from './overlays/sts2/TrackerMock'
 import { HomeMock } from './dashboard/HomeMock'
@@ -58,17 +58,12 @@ const settingsRoute = createRoute({
   component: Settings
 })
 
-const codexRoute = createRoute({
-  getParentRoute: () => shellRoute,
-  path: '/codex',
-  component: CodexLayout
-})
-
-const codexIndexRoute = createRoute({
-  getParentRoute: () => codexRoute,
-  path: '/',
-  component: CodexHome
-})
+/**
+ * The compendium's whole subtree, built by the feature that owns it. Everything
+ * under `/codex` — browse, detail, tier list, metrics table — hangs off this
+ * one line; see `codex/routes.tsx` for the shape.
+ */
+const codexRoute = codexRouteTree(shellRoute)
 
 const overlayRoute = createRoute({
   getParentRoute: () => rootRoute,
@@ -102,7 +97,7 @@ const devRoutes = import.meta.env.DEV
   : []
 
 const routeTree = rootRoute.addChildren([
-  shellRoute.addChildren([indexRoute, settingsRoute, codexRoute.addChildren([codexIndexRoute])]),
+  shellRoute.addChildren([indexRoute, settingsRoute, codexRoute]),
   overlayRoute,
   ...devRoutes
 ])
