@@ -30,19 +30,30 @@
 a HUD over the game — no log files, no manual input. It's modeled on the Untapped.gg Companion,
 rebuilt from scratch on Electron + React.
 
-![Reliquary dashboard](docs/screenshots/dashboard.png)
+<p align="center">
+  <img src="docs/media/home.gif" alt="The Living Spire home screen — relic gems orbiting the spire's crown, each one a live health indicator" />
+  <br/>
+  <sub>The <b>Living Spire</b> home — the four orbiting relic gems <i>are</i> the status display:
+  Game / Overlay / Advisor / Live data, green when healthy, with an aurora over the crown while
+  a run is being watched.</sub>
+</p>
 
 ## Features
 
 - **Deck tracker** — draw-pile odds grouped by type (Attack / Skill / Power / Other), with
-  per-group draw-% and card counts. Collapsible, and draggable to reposition.
+  per-group draw-% and card counts. Collapsible, and draggable to reposition — and with the
+  **Movable deck tracker** setting on, you can place it anywhere and drag its corner to set the
+  space it may use; the cards arrange themselves to fit.
 - **Draft advice** — deck-conditioned *"for your deck"* letter grades on card rewards,
   choose-a-card, and shop cards, alongside global tier, win-rate, pick-rate, and the owned
   cards driving each pick. An animated placeholder shows while a grade is still loading.
 - **Attack forecast** — total incoming damage and hit count from enemy intents, in combat.
-- **Branded dashboard** — a frameless companion window with **Home / Debug / Logs** tabs:
-  live status, overlay toggles, a syntax-highlighted game-state inspector, and a streaming
-  in-app log viewer.
+- **Living Spire home** — the companion window opens on a living title scene: four relic gems
+  orbit the spire's crown carrying Game / Overlay / Advisor / Live-data health, and one line
+  under the title names what is happening (and what to do next, when something is needed).
+- **Settings that stay out of the way** — overlay toggles, a plain-words health readout, a
+  version picker for updates, and — folded under *Technical details* — a game-state inspector
+  and a streaming log viewer for when something breaks.
 
 <table>
   <tr>
@@ -56,6 +67,25 @@ rebuilt from scratch on Electron + React.
 </table>
 
 > The overlay shots use the built-in demo data (`SPECTRA_STUB`), hence the "stub data" badge.
+
+## Screenshots
+
+<table>
+  <tr>
+    <td width="50%"><img src="docs/media/home.png" alt="Home — connected, watching a run" /></td>
+    <td width="50%"><img src="docs/media/settings.png" alt="Settings — overlay toggles" /></td>
+  </tr>
+  <tr>
+    <td align="center"><sub>Home, connected — all four gems green, aurora over the crown</sub></td>
+    <td align="center"><sub>Settings — per-overlay toggles, including the movable deck tracker</sub></td>
+  </tr>
+  <tr>
+    <td colspan="2"><img src="docs/media/settings-updates.png" alt="Settings — status readout and the version picker" /></td>
+  </tr>
+  <tr>
+    <td colspan="2" align="center"><sub>Status in plain words, and the version picker — updates only ever happen when you ask</sub></td>
+  </tr>
+</table>
 
 ## How it works
 
@@ -84,8 +114,8 @@ and no elevation, which is also what lets updates apply silently later. Everythi
 bundled; there are no extra steps. Launch Reliquary, then start Slay the Spire 2 (either order works).
 
 Windows SmartScreen will warn on first run because the installer is unsigned: choose
-**More info → Run anyway**. From then on Reliquary
-[keeps itself up to date](#updates) automatically.
+**More info → Run anyway**. When a new version ships, Reliquary
+[offers it to you](#updates) — nothing installs unless you ask.
 
 ### Build from source (development)
 
@@ -134,18 +164,18 @@ PostHog (diagnostics).
 
 ## Updates
 
-Reliquary updates itself over the air from GitHub Releases via
-[`electron-updater`](https://www.electron.build/docs/features/auto-update/). It checks shortly
-after launch and every few hours, downloads new versions in the background, and installs them
-**on quit** — never mid-session, because the overlay sits on top of a running game and relaunching
-underneath a run in progress would be worse than shipping the fix a session later.
+Updates are **user-driven**: Reliquary checks GitHub Releases on its own, but it only ever
+*announces* — nothing downloads and nothing installs unless you ask. When a new version exists,
+Home says so and offers an **Update** button ("Not now" is remembered per version, so it won't
+nag until something newer ships).
 
-Updates install **silently** — no wizard, no elevation prompt, no reinstall flow. A pill in the
-titlebar shows download progress and turns into a **Restart** button once an update is staged. Ignoring it is fine; the update still installs the next time you close the app. The
-**Debug** tab shows the running version and has a **Check for updates** button for checking on
-demand.
+**Settings → Updates** has a version picker listing every published release — pick any of them,
+newer *or older*, and Reliquary fetches that exact installer, so rolling back from a bad release
+is the same one click as updating. Downloads are verified against the release's sha512 before
+anything runs, and installing is silent — no wizard, no elevation prompt — kicked off only by
+the **Restart to install** button once a download is staged.
 
-Set `SPECTRA_NO_UPDATE=1` to disable update checks.
+Set `SPECTRA_NO_UPDATE=1` to disable update checks entirely.
 
 ## Diagnostics
 
@@ -161,8 +191,9 @@ counters for which subsystems are failing.
 **What is never sent:** your name, account, Steam id, file paths (they are scrubbed), or anything
 about the run you are playing — no deck, cards, or game content.
 
-Turn it off entirely by setting `SPECTRA_TELEMETRY=0`. The **Debug** tab shows exactly what the
-reporter is doing, including every issue recorded in the current session.
+Turn it off entirely by setting `SPECTRA_TELEMETRY=0`, or with the **Anonymous crash reports**
+switch in Settings. **Settings → Technical details** shows exactly what the reporter is doing,
+including every issue recorded in the current session.
 
 Builds ship with a PostHog *project* key baked in, so reporting works out of the box. That key is
 write-only — it can send events and nothing else, grants no read access, and is extractable from

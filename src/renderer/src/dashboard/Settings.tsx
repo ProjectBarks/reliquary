@@ -168,6 +168,31 @@ export function Settings(): JSX.Element {
 
   return (
     <Wrap>
+      {/* One quiet ask, above the machinery. The button goes through a
+          main-process allow-list, not a generic URL opener. */}
+      <Section>
+        <Panel>
+          <Row>
+            <RowMain>
+              <RowLabel>Enjoying Reliquary?</RowLabel>
+              <RowDesc>A star on GitHub helps other players find it.</RowDesc>
+            </RowMain>
+            <RowAside>
+              <Button
+                onClick={() =>
+                  window.spectra.openExternal('https://github.com/ProjectBarks/reliquary')
+                }
+              >
+                <StarMark viewBox="0 0 14 14" aria-hidden>
+                  <path d="M7 1.2 L8.6 5.1 L12.8 5.4 L9.6 8.1 L10.6 12.2 L7 10 L3.4 12.2 L4.4 8.1 L1.2 5.4 L5.4 5.1 Z" />
+                </StarMark>
+                Star on GitHub
+              </Button>
+            </RowAside>
+          </Row>
+        </Panel>
+      </Section>
+
       <Section>
         <SectionHead>
           <SectionTitle>Overlays</SectionTitle>
@@ -514,6 +539,17 @@ const Wrap = styled.div`
   @media (max-width: 520px) {
     padding: 20px 14px 40px;
   }
+`
+
+/** A small drawn star for the GitHub ask — the button's only ornament. */
+const StarMark = styled.svg`
+  flex: 0 0 auto;
+  width: 13px;
+  height: 13px;
+  fill: none;
+  stroke: var(--brand);
+  stroke-width: 1.2;
+  stroke-linejoin: round;
 `
 
 /**

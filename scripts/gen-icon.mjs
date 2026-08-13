@@ -1,6 +1,6 @@
-// Generates the Reliquary app icon (faceted purple relic-orb on a dark rounded
-// panel) with no image libraries: renders at 1024px, box-downsamples for AA,
-// and encodes PNGs + a multi-size ICO by hand (zlib only).
+// Generates the Reliquary app icon (faceted purple relic-orb on a transparent
+// background) with no image libraries: renders at 1024px, box-downsamples for
+// AA, and encodes PNGs + a multi-size ICO by hand (zlib only).
 // Usage: node scripts/gen-icon.mjs [buildDir] [resourcesDir]
 import { deflateSync } from 'node:zlib'
 import { mkdirSync, writeFileSync } from 'node:fs'
@@ -37,14 +37,10 @@ const grad = (stops, t) => {
 }
 
 // ── palette (Reliquary violet) ──
-const BORDER = [70, 64, 58]
-const BG_TOP = [44, 40, 36]
-const BG_BOT = [20, 17, 15]
 const FACET_L = [158, 118, 232] // #9E76E8
 const FACET_D = [76, 51, 130] // #4C3382
 const TABLE = [46, 30, 78] // #2E1E4E
 const OUTLINE = [27, 16, 48] // #1B1030
-const HALO = [180, 123, 255] // #B47BFF
 const HILITE = [243, 233, 255]
 const CORE = [
   [0.0, [235, 217, 255]],
@@ -53,39 +49,11 @@ const CORE = [
   [1.0, [42, 27, 71]]
 ]
 
-// ── rounded-panel background ──
-const margin = S * 0.055
-const rad = S * 0.2
-const border = S * 0.014
-const inRR = (x, y, l, t, r, b, rr) => {
-  const cx = Math.min(Math.max(x, l + rr), r - rr)
-  const cy = Math.min(Math.max(y, t + rr), b - rr)
-  return (x - cx) ** 2 + (y - cy) ** 2 <= rr * rr
-}
-for (let y = 0; y < S; y++) {
-  for (let x = 0; x < S; x++) {
-    if (!inRR(x, y, margin, margin, S - margin, S - margin, rad)) continue
-    if (inRR(x, y, margin + border, margin + border, S - margin - border, S - margin - border, rad - border)) {
-      const t = (y - margin) / (S - 2 * margin)
-      // purple radial glow behind the gem
-      const d = Math.hypot((x - S / 2) / S, (y - S * 0.5) / S)
-      const glow = Math.max(0, 0.34 - d) * 1.15
-      const base = mix(BG_TOP, BG_BOT, t)
-      set(
-        x,
-        y,
-        base[0] + glow * (HALO[0] - base[0]),
-        base[1] + glow * (HALO[1] - base[1]),
-        base[2] + glow * (HALO[2] - base[2])
-      )
-    } else {
-      set(x, y, BORDER[0], BORDER[1], BORDER[2])
-    }
-  }
-}
-
 // ── geometry (256-space × 4) ──
-const p = (x, y) => [x * 4, y * 4]
+// No panel behind the mark any more: the background stays fully transparent,
+// and the gem scales up slightly to use the space the panel used to take.
+const SCALE = 1.15
+const p = (x, y) => [(128 + (x - 128) * SCALE) * 4, (128 + (y - 128) * SCALE) * 4]
 const HEX = [p(128, 32), p(211, 80), p(211, 176), p(128, 224), p(45, 176), p(45, 80)]
 const fillTri = (a, b, c, colFn) => {
   const minX = Math.max(0, Math.floor(Math.min(a[0], b[0], c[0])))
@@ -125,7 +93,7 @@ fillPoly([p(128, 76), p(173, 102), p(173, 154), p(128, 180), p(83, 154), p(83, 1
 
 // glowing core (radial)
 const core = p(128, 124)
-const coreR = 34 * 4
+const coreR = 34 * 4 * SCALE
 for (let y = core[1] - coreR; y <= core[1] + coreR; y++) {
   for (let x = core[0] - coreR; x <= core[0] + coreR; x++) {
     const d = Math.hypot(x - core[0], y - core[1])
@@ -137,9 +105,11 @@ for (let y = core[1] - coreR; y <= core[1] + coreR; y++) {
 }
 // specular highlight
 const hi = p(119, 113)
-for (let y = hi[1] - 40; y <= hi[1] + 40; y++) {
-  for (let x = hi[0] - 52; x <= hi[0] + 52; x++) {
-    const d = ((x - hi[0]) / 46) ** 2 + ((y - hi[1]) / 30) ** 2
+const hiY = Math.ceil(40 * SCALE)
+const hiX = Math.ceil(52 * SCALE)
+for (let y = hi[1] - hiY; y <= hi[1] + hiY; y++) {
+  for (let x = hi[0] - hiX; x <= hi[0] + hiX; x++) {
+    const d = ((x - hi[0]) / (46 * SCALE)) ** 2 + ((y - hi[1]) / (30 * SCALE)) ** 2
     if (d <= 1) {
       const a = (1 - d) * 0.8
       const i = (y * S + x) * 4

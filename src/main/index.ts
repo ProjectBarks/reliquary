@@ -1,4 +1,4 @@
-import { app, ipcMain, globalShortcut, Menu, type BrowserWindow } from 'electron'
+import { app, ipcMain, globalShortcut, Menu, shell, type BrowserWindow } from 'electron'
 import { mkdirSync, writeFileSync } from 'fs'
 import { join } from 'path'
 import { OverlayWindow } from './overlay/OverlayWindow'
@@ -311,6 +311,13 @@ function wireIpc(): void {
 
   on(IPC.WindowControl, (_e, action: WindowAction) => {
     dashboard.control(action)
+  })
+
+  // Deliberately an allow-list, not a generic opener: a compromised renderer
+  // must not be able to launch arbitrary URLs (or file paths) via the shell.
+  const EXTERNAL_LINKS = new Set(['https://github.com/ProjectBarks/reliquary'])
+  on(IPC.OpenExternal, (_e, url: string) => {
+    if (EXTERNAL_LINKS.has(url)) void shell.openExternal(url)
   })
 }
 

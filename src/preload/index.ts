@@ -69,6 +69,10 @@ const api: SpectraApi = {
     ipcRenderer.send(IPC.WindowControl, action)
   },
 
+  openExternal(url: string): void {
+    ipcRenderer.send(IPC.OpenExternal, url)
+  },
+
   onUpdate(cb: (state: UpdateState) => void): () => void {
     const listener = (_e: unknown, state: UpdateState): void => cb(state)
     ipcRenderer.on(IPC.Update, listener)

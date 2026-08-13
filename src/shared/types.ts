@@ -302,7 +302,9 @@ export const IPC = {
   /** main -> renderer: over-the-air update status changed */
   Update: 'spectra:update',
   /** renderer -> main: check for an update now, or install a downloaded one */
-  UpdateAction: 'spectra:update-action'
+  UpdateAction: 'spectra:update-action',
+  /** renderer -> main: open an allow-listed external link in the default browser */
+  OpenExternal: 'spectra:open-external'
 } as const
 
 /** One installable release, as listed on GitHub. */
@@ -394,4 +396,6 @@ export interface SpectraApi {
   onWindowMaximized(cb: (maximized: boolean) => void): () => void
   /** renderer -> main: minimize / maximize-toggle / close the dashboard window */
   windowControl(action: WindowAction): void
+  /** Open an external link in the default browser. Main only honours allow-listed URLs. */
+  openExternal(url: string): void
 }
