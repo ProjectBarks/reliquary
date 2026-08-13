@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate } from '@tanstack/react-router'
 import styled from 'styled-components'
 import { codexImageUrl, type CodexCard, type CodexKind, type CodexRelic } from '@shared/codex'
@@ -33,6 +33,7 @@ import {
 import { RichText } from './RichText'
 import { Compare } from './Compare'
 import { isPinned, pushRecent, togglePin, usePins } from './prefs'
+import { reportEvent } from '../telemetry'
 
 /**
  * One entity, in full — the same component whether it is a pane beside a list
@@ -91,6 +92,8 @@ export function Detail({
     if (!entry) return
     pushRecent({ kind, id: entry.id, name: entry.name, art: entry.thumb })
   }, [entry, kind])
+
+  useDetailViewed(kind, id, Boolean(entry))
 
   if (error && !entry) {
     return (
@@ -236,6 +239,27 @@ export function Detail({
   )
 }
 
+/**
+ * `codex_detail`, once per entity actually read.
+ *
+ * Two things it deliberately does not count. A re-render — the entry object is
+ * rebuilt every time metrics land, so the guard is the `kind:id` pair rather
+ * than the object — and an id that resolved to nothing, because a stale link
+ * to a card that no longer exists is a 404, not a reading. In the list's
+ * reading pane one mounted `Detail` walks through a whole column of entries
+ * under ↓, and each of those is a genuine open.
+ */
+function useDetailViewed(kind: CodexKind, id: string, resolved: boolean): void {
+  const seen = useRef<string | null>(null)
+  useEffect(() => {
+    if (!resolved) return
+    const token = `${kind}:${id}`
+    if (seen.current === token) return
+    seen.current = token
+    reportEvent('codex_detail', { kind })
+  }, [kind, id, resolved])
+}
+
 // ── art ─────────────────────────────────────────────────────────────────────
 
 /**
@@ -272,11 +296,10 @@ function EntryArt({ entry }: { entry: LibraryEntry }): JSX.Element {
     )
   }
 
-  return (
-    <SpritePlate>
-      {entry.art ? <Art src={entry.art} alt={entry.name} /> : <Spinner size={18} />}
-    </SpritePlate>
-  )
+  // An empty plate rather than a spinner when there is no `image_url`: the
+  // plate already reserves the square, and a spinner that can never resolve is
+  // a promise the compendium has no way of keeping.
+  return <SpritePlate>{entry.art ? <Art src={entry.art} alt={entry.name} /> : null}</SpritePlate>
 }
 
 // ── blocks ──────────────────────────────────────────────────────────────────

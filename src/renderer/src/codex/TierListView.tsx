@@ -48,7 +48,11 @@ export function TierListView(): JSX.Element {
   useEffect(() => {
     if (!highlight || !entries.length) return
     const node = scroller.current?.querySelector(`[data-entry="${CSS.escape(highlight)}"]`)
-    node?.scrollIntoView({ block: 'center', behavior: 'smooth' })
+    // Smooth is the point of the gesture — you see where you were sent from —
+    // but a long animated scroll is precisely what reduced-motion asks not to
+    // be given, so that reader gets taken straight there instead.
+    const calm = window.matchMedia('(prefers-reduced-motion: reduce)').matches
+    node?.scrollIntoView({ block: 'center', behavior: calm ? 'auto' : 'smooth' })
   }, [highlight, entries.length])
 
   if (error && !entries.length) return <ErrorState message={error} onRetry={retry} />
@@ -167,7 +171,9 @@ function Entry({
       data-entry={entry.id}
       $cards={cards}
       $ringed={ringed}
-      title={`${entry.name} — score ${fmtScore(entry.score)}, ${fmtCount(entry.picks)} samples`}
+      title={`${entry.name} — score ${fmtScore(entry.score)}, ${fmtCount(entry.picks)} samples${
+        thin ? ' · thin sample, treat with caution' : ''
+      }`}
       onClick={() => onOpen(entry.id)}
       {...bind(entry.art, entry.name)}
     >
@@ -179,7 +185,10 @@ function Entry({
           <EntryName style={tone ? { color: tone } : undefined}>{entry.name}</EntryName>
         </>
       )}
-      {thin ? <Thin title={`Only ${fmtCount(entry.picks)} samples — treat with caution`}>◦</Thin> : null}
+      {/* The marker is a footnote to the button's own title, which already
+          reads the sample out; announcing a bare "◦" after it would only be
+          noise on a screen reader. */}
+      {thin ? <Thin aria-hidden>◦</Thin> : null}
       {cards ? <SrOnly>{entry.name}</SrOnly> : null}
     </EntryButton>
   )

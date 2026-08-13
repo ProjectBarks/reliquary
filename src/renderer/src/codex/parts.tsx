@@ -1,7 +1,7 @@
 import { useEffect, useRef, type ReactNode } from 'react'
 import { createPortal } from 'react-dom'
-import styled, { keyframes } from 'styled-components'
-import { Button, Spinner } from '../dashboard/ui'
+import styled, { css, keyframes } from 'styled-components'
+import { Button, Panel, Spinner } from '../dashboard/ui'
 
 /**
  * The Codex's own small set of primitives, built on top of the dashboard's.
@@ -17,6 +17,28 @@ import { Button, Spinner } from '../dashboard/ui'
  * that will one day be down. Designing those three moments is not polish here;
  * it is most of the screen's life.
  */
+
+// ── scrollbars ──────────────────────────────────────────────────────────────
+
+/**
+ * The app's scrollbar, for every box in the Codex that scrolls.
+ *
+ * The tab has five of them — the page body, the list column, the reading pane,
+ * the metrics table, the pinned rail — and they were drifting apart by a pixel
+ * each. One rule, matching `Shell`'s: 9px, an oklch thumb at 16%, 4px radius.
+ * Two visibly different scrollbars on one screen is the kind of detail nobody
+ * reports and everybody feels.
+ */
+export const scrollbar = css`
+  &::-webkit-scrollbar {
+    width: 9px;
+    height: 9px;
+  }
+  &::-webkit-scrollbar-thumb {
+    background: oklch(1 0 0 / 16%);
+    border-radius: 4px;
+  }
+`
 
 // ── toolbar ─────────────────────────────────────────────────────────────────
 
@@ -310,15 +332,13 @@ export function ErrorState({
   )
 }
 
-const ErrorPanel = styled.div`
+/** The dashboard's `Panel`, laid out as a message with its button beside it. */
+const ErrorPanel = styled(Panel)`
   display: flex;
   align-items: center;
   gap: 16px;
   margin: 18px 0;
   padding: 14px 16px;
-  border-radius: 12px;
-  border: 1px solid var(--line);
-  background: rgba(38, 35, 33, 0.55);
 
   @media (max-width: 480px) {
     flex-direction: column;
@@ -576,13 +596,7 @@ export const ScrollArea = styled.div`
   flex: 1;
   min-height: 0;
   overflow-y: auto;
-  &::-webkit-scrollbar {
-    width: 9px;
-  }
-  &::-webkit-scrollbar-thumb {
-    background: oklch(1 0 0 / 16%);
-    border-radius: 4px;
-  }
+  ${scrollbar}
 `
 
 // ── link surfaces ───────────────────────────────────────────────────────────

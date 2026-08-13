@@ -1,11 +1,11 @@
-import { useMemo, useState } from 'react'
+﻿import { useMemo, useState } from 'react'
 import styled from 'styled-components'
 import { FreeDeckTracker } from './FreeDeckTracker'
-import { buildPile, FIXTURE_CARD_DATA } from './trackerFixture'
+import { buildPile, fixtureCardData } from './trackerFixture'
 
 /**
  * Design harness for the movable deck tracker (#/mock/tracker, dev builds
- * only — the route is fenced out of production in App.tsx).
+ * only â€” the route is fenced out of production in App.tsx).
  *
  * The real overlay is transparent, click-through, and driven by IPC from a
  * running game, which makes it a slow surface to iterate on. This renders the
@@ -14,9 +14,9 @@ import { buildPile, FIXTURE_CARD_DATA } from './trackerFixture'
  * any pile size.
  */
 const PRESETS = [
-  { key: 'mock.a', label: 'tall · left edge', p: { ax: 'left', ay: 'top', dx: 0, dy: 4, w: 210, h: 620, free: false } },
-  { key: 'mock.b', label: 'wide · top right', p: { ax: 'right', ay: 'top', dx: 0, dy: 4, w: 400, h: 340, free: false } },
-  { key: 'mock.c', label: 'wide · bottom centre', p: { ax: 'center', ay: 'bottom', dx: 4, dy: 9, w: 790, h: 330, free: false } }
+  { key: 'mock.a', label: 'tall Â· left edge', p: { ax: 'left', ay: 'top', dx: 0, dy: 4, w: 210, h: 620, free: false } },
+  { key: 'mock.b', label: 'wide Â· top right', p: { ax: 'right', ay: 'top', dx: 0, dy: 4, w: 400, h: 340, free: false } },
+  { key: 'mock.c', label: 'wide Â· bottom centre', p: { ax: 'center', ay: 'bottom', dx: 4, dy: 9, w: 790, h: 330, free: false } }
 ] as const
 
 /** Pile sizes the stepper walks through; 27 is the realistic mid-run deck. */
@@ -40,7 +40,7 @@ export function TrackerMock(): JSX.Element {
   const stepper = (
     <>
       <button disabled={sizeIdx === 0} onClick={() => setSizeIdx((i) => i - 1)}>
-        − cards
+        âˆ’ cards
       </button>
       <SizeLabel>{SIZES[sizeIdx]} cards</SizeLabel>
       <button disabled={sizeIdx === SIZES.length - 1} onClick={() => setSizeIdx((i) => i + 1)}>
@@ -58,7 +58,7 @@ export function TrackerMock(): JSX.Element {
             key={preset.key}
             storageKey={preset.key}
             pileState={pile}
-            cardData={FIXTURE_CARD_DATA}
+            cardData={fixtureCardData()}
             isPeekButtonVisible={false}
           />
         ))}
@@ -75,7 +75,7 @@ export function TrackerMock(): JSX.Element {
           >
             Reset
           </button>
-          <Note>drag a corner to set the area — content fits itself inside</Note>
+          <Note>drag a corner to set the area â€” content fits itself inside</Note>
         </Toolbar>
       </Stage>
     )
@@ -96,12 +96,12 @@ export function TrackerMock(): JSX.Element {
         >
           Reset placement
         </button>
-        <Note>drag the title bar · drag a corner to set the area</Note>
+        <Note>drag the title bar Â· drag a corner to set the area</Note>
       </Toolbar>
 
       <FreeDeckTracker
         pileState={pile}
-        cardData={FIXTURE_CARD_DATA}
+        cardData={fixtureCardData()}
         isPeekButtonVisible={peek}
       />
     </Stage>

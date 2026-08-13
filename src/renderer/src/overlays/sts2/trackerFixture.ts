@@ -56,9 +56,17 @@ const DEFS: Array<[string, string, string, string]> = [
   ['Regret', 'curse', 'curse', '—']
 ]
 
-export const FIXTURE_CARD_DATA: Sts2CardData = Object.fromEntries(
-  DEFS.map(([name, type, rarity, cost]) => info(name, type, rarity, cost))
-) as Sts2CardData
+// A function rather than a module-level const: a top-level Object.fromEntries
+// call can't be proven side-effect free, so the built table (and the DEFS it
+// references) survived tree-shaking into production bundles. Dev-only callers
+// paying the build cost at call time is the version that actually drops.
+let cardData: Sts2CardData | null = null
+export function fixtureCardData(): Sts2CardData {
+  cardData ??= Object.fromEntries(
+    DEFS.map(([name, type, rarity, cost]) => info(name, type, rarity, cost))
+  ) as Sts2CardData
+  return cardData
+}
 
 const id = (name: string): string => name.replace(/[^A-Za-z]/g, '')
 

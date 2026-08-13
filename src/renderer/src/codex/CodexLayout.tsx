@@ -1,4 +1,4 @@
-import { useCallback } from 'react'
+import { useCallback, useEffect, useRef } from 'react'
 import { Outlet, createLink, useNavigate, useRouterState } from '@tanstack/react-router'
 import styled from 'styled-components'
 import { CODEX_BRACKETS, bracketLabel, isCodexBracket, type CodexKind } from '@shared/codex'
@@ -17,9 +17,10 @@ import {
   useTableSearch,
   type CodexSearch
 } from './params'
-import { NavAnchor, Whisper } from './parts'
+import { NavAnchor, Whisper, scrollbar } from './parts'
 import { setBracketPref, setCharacterPref } from './prefs'
 import { PinnedRail } from './PinnedRail'
+import { reportEvent } from '../telemetry'
 
 /**
  * The Codex's frame: a spine down the left of the sub-nav, the cohort controls
@@ -53,6 +54,7 @@ export function CodexLayout(): JSX.Element {
   const inBrowse = segments[1] === 'browse'
   const inMeta = segments[1] === 'meta'
   const browseKind: CodexKind = inBrowse && isCodexKind(segments[2]) ? segments[2] : 'cards'
+  useCodexViewed(inBrowse ? 'browse' : segments[2] === 'table' ? 'table' : 'tiers')
 
   return (
     <Frame>
@@ -99,7 +101,7 @@ export function CodexLayout(): JSX.Element {
                 </option>
               ))}
             </Select>
-            <Select
+            <CharacterSelect
               aria-label="Character"
               title="Restrict the numbers to runs of one character"
               value={scope.character ?? 'all'}
@@ -115,7 +117,7 @@ export function CodexLayout(): JSX.Element {
                   {c.name}
                 </option>
               ))}
-            </Select>
+            </CharacterSelect>
           </Controls>
         </HeadInner>
       </Head>
@@ -129,6 +131,25 @@ export function CodexLayout(): JSX.Element {
       <PinnedRail />
     </Frame>
   )
+}
+
+/**
+ * `codex_view`, once per arrival at one of the tab's three screens.
+ *
+ * Shaped after `Shell`'s `tab_viewed` and guarded the same way — a ref, so
+ * StrictMode's double effect and every unrelated re-render of the layout (a
+ * cohort change, a metrics push landing) count as nothing. The one difference
+ * is that the *first* view is reported: the shell's opening tab is where the
+ * window happened to start, but this layout only ever mounts because somebody
+ * navigated into the Codex, so the arrival is real.
+ */
+function useCodexViewed(view: 'browse' | 'tiers' | 'table'): void {
+  const seen = useRef<string | null>(null)
+  useEffect(() => {
+    if (seen.current === view) return
+    seen.current = view
+    reportEvent('codex_view', { view })
+  }, [view])
 }
 
 /**
@@ -147,10 +168,10 @@ function FreshnessWhisper({ kind }: { kind: CodexKind }): JSX.Element | null {
 
   if (metrics.error && !table) {
     return (
-      <Whisper title={metrics.error}>
+      <HeadWhisper title={metrics.error}>
         <Dot $bad />
         community data unavailable
-      </Whisper>
+      </HeadWhisper>
     )
   }
 
@@ -160,10 +181,10 @@ function FreshnessWhisper({ kind }: { kind: CodexKind }): JSX.Element | null {
   if (metrics.fetchedAt) parts.push(`updated ${relativeTime(metrics.fetchedAt)}`)
 
   return (
-    <Whisper title={`${bracketLabel(scope.bracket)} · spire-codex.com`}>
+    <HeadWhisper title={`${bracketLabel(scope.bracket)} · spire-codex.com`}>
       {waiting ? <Spinner size={12} /> : null}
       <Truncate>{parts.join(' · ')}</Truncate>
-    </Whisper>
+    </HeadWhisper>
   )
 }
 
@@ -271,6 +292,25 @@ const Controls = styled.div`
   min-width: 0;
 `
 
+/**
+ * The whisper eats all the slack in the head row, so the two selects stay
+ * pinned to the right edge instead of sliding left as "1,183,705 runs ·
+ * baseline 43.4% · updated just now" arrives a word at a time.
+ */
+const HeadWhisper = styled(Whisper)`
+  flex: 1 1 auto;
+  justify-content: flex-end;
+`
+
+/**
+ * A `<select>` is as wide as its widest option, and this one's options arrive
+ * with the characters catalog — without a floor it starts at the width of "All
+ * characters" and jumps once five names land.
+ */
+const CharacterSelect = styled(Select)`
+  min-width: 128px;
+`
+
 const Truncate = styled.span`
   overflow: hidden;
   text-overflow: ellipsis;
@@ -290,13 +330,7 @@ const Body = styled.div`
   flex: 1;
   min-height: 0;
   overflow-y: auto;
-  &::-webkit-scrollbar {
-    width: 9px;
-  }
-  &::-webkit-scrollbar-thumb {
-    background: oklch(1 0 0 / 16%);
-    border-radius: 4px;
-  }
+  ${scrollbar}
 `
 
 const BodyInner = styled(Measure)`

@@ -36,7 +36,8 @@ import {
   Segmented,
   Skeleton,
   Spacer,
-  Toolbar
+  Toolbar,
+  scrollbar
 } from './parts'
 import { getViewPref, setViewPref, useRecents, type CodexView } from './prefs'
 import { rankItems } from './search'
@@ -734,13 +735,9 @@ const ListColumn = styled.div`
   max-height: calc(100vh - 190px);
   overflow-y: auto;
   padding-right: 4px;
-  &::-webkit-scrollbar {
-    width: 8px;
-  }
-  &::-webkit-scrollbar-thumb {
-    background: oklch(1 0 0 / 16%);
-    border-radius: 4px;
-  }
+  ${scrollbar}
+  /* The column is a listbox with roving focus on its rows; a ring around the
+     whole 400px of it would say the container was selected. */
   &:focus {
     outline: none;
   }

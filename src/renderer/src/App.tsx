@@ -13,6 +13,7 @@ import { codexRouteTree } from './codex/routes'
 import { Sts2Overlay } from './overlays/sts2/Sts2Overlay'
 import { TrackerMock } from './overlays/sts2/TrackerMock'
 import { HomeMock } from './dashboard/HomeMock'
+import { CodexMock } from './codex/CodexMock'
 
 /**
  * One React bundle, several screens, selected by the window's hash route
@@ -72,8 +73,9 @@ const overlayRoute = createRoute({
 })
 
 /**
- * The design harnesses: the deck tracker's (#/mock/tracker) and the Home
- * scene's (#/mock/home/d). Dev server only, never shipped.
+ * The design harnesses: the deck tracker's (#/mock/tracker), the Home scene's
+ * (#/mock/home/d) and the Codex's (#/mock/codex/browse-grid). Dev server only,
+ * never shipped.
  *
  * The router has no conditional route registration, so these are gated the way
  * the old element tree gated them — by not being in the tree at all in a
@@ -92,6 +94,11 @@ const devRoutes = import.meta.env.DEV
         getParentRoute: () => rootRoute,
         path: '/mock/home/$variant',
         component: HomeMock
+      }),
+      createRoute({
+        getParentRoute: () => rootRoute,
+        path: '/mock/codex/$view',
+        component: CodexMock
       })
     ]
   : []

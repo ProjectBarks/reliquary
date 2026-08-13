@@ -1,7 +1,7 @@
 import type { MouseEvent } from 'react'
 import { createLink } from '@tanstack/react-router'
 import styled from 'styled-components'
-import { ChipAnchor } from './parts'
+import { ChipAnchor, scrollbar } from './parts'
 import { useCodexSearch } from './params'
 import { unpin, usePins, PIN_MAX } from './prefs'
 
@@ -77,14 +77,7 @@ const Track = styled.div`
   margin: 0 auto;
   padding: 8px 22px;
   overflow-x: auto;
-  scrollbar-width: thin;
-  &::-webkit-scrollbar {
-    height: 6px;
-  }
-  &::-webkit-scrollbar-thumb {
-    background: oklch(1 0 0 / 16%);
-    border-radius: 3px;
-  }
+  ${scrollbar}
   @media (max-width: 560px) {
     padding: 8px 12px;
   }

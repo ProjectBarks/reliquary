@@ -11,7 +11,7 @@ import {
   type TableColumn,
   type Variant
 } from './params'
-import { Empty, ErrorState, Loading, Segmented, Skeleton } from './parts'
+import { Empty, ErrorState, Loading, Segmented, Skeleton, scrollbar } from './parts'
 import { TierBadge } from './tiers'
 import { useArtPreview } from './ArtPreview'
 
@@ -445,14 +445,7 @@ const TableWrap = styled.div`
   border-radius: 12px;
   border: 1px solid var(--line);
   background: rgba(38, 35, 33, 0.55);
-  &::-webkit-scrollbar {
-    width: 9px;
-    height: 8px;
-  }
-  &::-webkit-scrollbar-thumb {
-    background: oklch(1 0 0 / 16%);
-    border-radius: 4px;
-  }
+  ${scrollbar}
 `
 
 const Table = styled.table`

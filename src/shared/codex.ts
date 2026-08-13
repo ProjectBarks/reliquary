@@ -109,8 +109,12 @@ export interface CodexCard {
   spawns_cards: string[] | null
   /** Substitution table behind `description_raw`; values are numbers today. */
   vars: Record<string, number> | null
-  /** Upgrade deltas keyed by lower-cased var name, e.g. `{thornspower: "+2"}`. */
-  upgrade: Record<string, string> | null
+  /**
+   * Upgrade deltas keyed by lower-cased var name, e.g. `{thornspower: "+2"}`.
+   * Flag-ish deltas arrive as bare numbers (`{remove_ethereal: 1}`,
+   * `{description_changed: 1}`), so values are string | number.
+   */
+  upgrade: Record<string, string | number> | null
   upgrade_description: string | null
   /** Sprite; site-relative (`/static/images/…`) — run it through `codexImageUrl`. */
   image_url: string | null

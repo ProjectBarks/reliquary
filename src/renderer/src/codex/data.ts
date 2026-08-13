@@ -134,6 +134,30 @@ function fail(key: string, message: string): void {
  */
 const NO_BRIDGE = 'Compendium bridge unavailable in this window.'
 
+/**
+ * The design harness's back door.
+ *
+ * `#/mock/codex/:view` installs a resolver here before it hands over to the
+ * real routes, and from that moment every catalog and metrics request in the
+ * tab is answered from canned data instead of the bridge. The whole feature
+ * then renders — same components, same store, same joins — with no Electron,
+ * no network, and no snapshot that changes under a screenshot.
+ *
+ * It is a setter rather than a parameter because the alternative is a fixture
+ * prop threaded through `LibraryView`, `Detail`, `TierListView` and everything
+ * they mount, which would put a test seam in the public shape of every
+ * component in the tab. This costs one nullable module-level variable, and the
+ * only thing that can write it lives in a route that a production bundle does
+ * not contain.
+ */
+type FixtureSource = (key: string) => CodexPayload<unknown> | null
+
+let fixtures: FixtureSource | null = null
+
+export function installCodexFixtures(source: FixtureSource): void {
+  fixtures = source
+}
+
 let pushWired = false
 function wirePush(): void {
   if (pushWired) return
@@ -148,6 +172,14 @@ function wirePush(): void {
 
 function load(key: string, request: () => Promise<CodexPayload<unknown>>): void {
   if (inflight.has(key)) return
+  // The harness answers first, and answers synchronously: a canned catalog that
+  // arrived a tick later would give every mock screenshot one frame of skeleton
+  // to race against.
+  const canned = fixtures?.(key)
+  if (canned) {
+    apply(key, canned)
+    return
+  }
   wirePush()
   if (typeof window === 'undefined' || !window.spectra) {
     if (!store.has(key)) fail(key, NO_BRIDGE)
@@ -198,6 +230,9 @@ function markRefreshing(key: string): void {
 
 function refreshCatalog(kind: CodexCatalogKind): void {
   const key = catalogCacheKey(kind)
+  // Canned data cannot get any fresher, and in the harness there may be no
+  // bridge to ask.
+  if (fixtures) return
   if (typeof window === 'undefined' || !window.spectra) {
     fail(key, NO_BRIDGE)
     return
@@ -212,6 +247,7 @@ function refreshCatalog(kind: CodexCatalogKind): void {
 
 function refreshMetrics(kind: CodexKind, bracket: CodexBracket, character: string | null): void {
   const key = metricsCacheKey({ kind, bracket, character })
+  if (fixtures) return
   markRefreshing(key)
   load(key, () =>
     window.spectra.codexMetrics({
