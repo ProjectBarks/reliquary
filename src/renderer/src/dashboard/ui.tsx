@@ -209,7 +209,8 @@ export const Pip = styled.span<{ $tone: 'ok' | 'warn' | 'bad' | 'idle' }>`
 
 export const Button = styled.button<{ $primary?: boolean }>`
   cursor: pointer;
-  padding: 7px 13px;
+  height: 34px;
+  padding: 0 13px;
   border-radius: 8px;
   font-size: 13px;
   font-weight: 600;

@@ -180,7 +180,6 @@ export function Settings(): JSX.Element {
       <Section>
         <SectionHead>
           <SectionTitle>Overlays</SectionTitle>
-          <SectionNote>What Reliquary draws over the game</SectionNote>
         </SectionHead>
         <Panel>
           {SETTINGS.map(({ key, label, desc }) => (
@@ -204,7 +203,6 @@ export function Settings(): JSX.Element {
       <Section>
         <SectionHead>
           <SectionTitle>Status</SectionTitle>
-          <SectionNote>Why the overlay is or isn&rsquo;t showing</SectionNote>
         </SectionHead>
         <Panel>
           <Row>
@@ -288,7 +286,6 @@ export function Settings(): JSX.Element {
       <Section>
         <SectionHead>
           <SectionTitle>Updates</SectionTitle>
-          <SectionNote>Nothing installs unless you ask</SectionNote>
         </SectionHead>
         <Panel>
           <Row>
@@ -331,11 +328,6 @@ export function Settings(): JSX.Element {
                   ) : null}
                 </VersionRail>
               ) : null}
-              <RowDesc>
-                {picked !== current && !busy && upd?.status !== 'ready'
-                  ? `Switches this install to ${picked}. Nothing happens until you confirm.`
-                  : updateLabel(upd)}
-              </RowDesc>
               {downloading ? (
                 <Track
                   role="progressbar"
@@ -536,29 +528,6 @@ function Dump({ label, value }: { label: string; value: unknown }): JSX.Element 
   )
 }
 
-/** One plain sentence for whatever the updater is doing. */
-function updateLabel(u: UpdateState | null): string {
-  switch (u?.status) {
-    case 'checking':
-      return 'Checking for updates…'
-    case 'available':
-      return `${u.latest} is available. Nothing downloads or installs until you choose to.`
-    case 'downloading':
-      return `Downloading ${u.target ?? 'update'}${u.percent ? ` — ${u.percent}%` : ''}`
-    case 'ready':
-      return `${u.target} is downloaded and verified. It installs only when you say so.`
-    case 'current':
-      return 'You are on the newest version.'
-    case 'error':
-      return 'Could not check for updates. It will try again later.'
-    case 'dev-disabled':
-      return 'Updates are off in a development build.'
-    case 'disabled':
-      return 'Updates are switched off.'
-    default:
-      return 'Reliquary checks for new versions but never installs anything on its own.'
-  }
-}
 
 const Wrap = styled.div`
   max-width: 680px;
@@ -585,13 +554,16 @@ const VersionRail = styled.div`
 
 const VersionChip = styled.button<{ $current: boolean; $armed: boolean }>`
   display: inline-flex;
-  align-items: baseline;
+  align-items: center;
   gap: 6px;
+  /* Every control in this row — chip, older-token, action button — is
+     exactly 34px tall, so the rail and its buttons read as one system. */
+  height: 34px;
   cursor: ${(p) => (p.$current ? 'default' : 'pointer')};
   font-family: var(--font-display);
   font-size: 13.5px;
   letter-spacing: 0.02em;
-  padding: 4px 11px 5px;
+  padding: 0 13px;
   border-radius: 8px;
   color: ${(p) => (p.$armed ? '#1b1512' : p.$current ? 'var(--ink)' : 'var(--ink-dim)')};
   background: ${(p) =>
@@ -647,6 +619,9 @@ const ChipTag = styled.span<{ $new?: boolean }>`
 `
 
 const MoreChip = styled.button`
+  display: inline-flex;
+  align-items: center;
+  height: 34px;
   cursor: pointer;
   font-family: var(--font-body);
   font-size: 11.5px;
@@ -654,7 +629,7 @@ const MoreChip = styled.button`
   background: none;
   border: 1px dashed var(--line-strong);
   border-radius: 8px;
-  padding: 4px 11px 5px;
+  padding: 0 13px;
   transition: color 130ms ease, border-color 130ms ease;
   &:hover {
     color: var(--ink);

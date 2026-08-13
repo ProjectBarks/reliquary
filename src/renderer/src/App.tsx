@@ -2,6 +2,7 @@ import { Routes, Route, Navigate } from 'react-router-dom'
 import { Shell } from './dashboard/Shell'
 import { Sts2Overlay } from './overlays/sts2/Sts2Overlay'
 import { TrackerMock } from './overlays/sts2/TrackerMock'
+import { HomeMock } from './dashboard/HomeMock'
 
 /**
  * One React bundle, two screens, selected by the window's hash route
@@ -16,6 +17,8 @@ export function App(): JSX.Element {
       <Route path="/overlay/sts2" element={<Sts2Overlay />} />
       {/* Design harness for the deck tracker: dev server only, never shipped. */}
       {import.meta.env.DEV ? <Route path="/mock/tracker" element={<TrackerMock />} /> : null}
+      {/* TEMP: unfenced while Home variants are being chosen; fence with DEV after. */}
+      <Route path="/mock/home/:variant" element={<HomeMock />} />
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>
   )
