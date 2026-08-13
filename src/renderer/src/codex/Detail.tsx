@@ -575,6 +575,9 @@ const NoText = styled.p`
   color: var(--ink-faint);
 `
 
+/* The green lives in the heading and the delta chips, not the frame: the box
+   itself stays in the app's hairline-panel language, with only a whisper of
+   the upgrade green mixed into its fill to set it apart from plain prose. */
 const Upgrade = styled.div`
   display: flex;
   flex-direction: column;
@@ -582,8 +585,7 @@ const Upgrade = styled.div`
   padding: 10px 12px;
   border-radius: 10px;
   border: 1px solid var(--line);
-  border-left: 2px solid var(--sts-color-green);
-  background: var(--fill);
+  background: color-mix(in oklch, var(--sts-color-green) 4%, var(--fill));
 `
 
 const UpgradeHead = styled.div`
