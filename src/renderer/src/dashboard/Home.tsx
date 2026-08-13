@@ -148,6 +148,7 @@ export function Home(): JSX.Element {
             downloads or installs unless one of these buttons is pressed. */}
         {update?.status === 'available' && dismissed !== update.latest ? (
           <UpdateStrip $ready={false}>
+            <StripGem />
             <span>Version {update.latest} is available.</span>
             <RestartButton
               onClick={() => window.spectra?.updateAction({ action: 'download' })}
@@ -168,6 +169,7 @@ export function Home(): JSX.Element {
           </UpdateStrip>
         ) : update?.status === 'ready' ? (
           <UpdateStrip $ready>
+            <StripGem />
             <span>Version {update.target} is downloaded.</span>
             <RestartButton onClick={() => window.spectra?.updateAction({ action: 'install' })}>
               Restart to install
@@ -354,10 +356,36 @@ const UpdateStrip = styled.div<{ $ready: boolean }>`
     p.$ready ? 'color-mix(in oklch, var(--brand) 14%, transparent)' : 'rgba(38, 35, 33, 0.55)'};
   border: 1px solid
     ${(p) => (p.$ready ? 'color-mix(in oklch, var(--brand) 45%, transparent)' : 'var(--line)')};
-  box-shadow: 5px 5px 0 oklch(0 0 0 / 22%);
+  box-shadow:
+    inset 0 1px 0 oklch(1 0 0 / 6%),
+    5px 5px 0 oklch(0 0 0 / 22%);
   animation: ${rise} 0.4s cubic-bezier(0.16, 1, 0.3, 1);
   @media (prefers-reduced-motion: reduce) {
     animation: none;
+  }
+`
+
+/** A small faceted relic-gem, echoing the app mark — drawn, not typed. */
+function StripGem(): JSX.Element {
+  return (
+    <GemMark viewBox="0 0 14 14" aria-hidden>
+      <path d="M7 1.5 L12 4.25 L12 9.75 L7 12.5 L2 9.75 L2 4.25 Z" />
+      <circle cx="7" cy="7" r="1.6" />
+    </GemMark>
+  )
+}
+
+const GemMark = styled.svg`
+  flex: 0 0 auto;
+  width: 14px;
+  height: 14px;
+  fill: none;
+  stroke: var(--brand);
+  stroke-width: 1.1;
+  stroke-linejoin: round;
+  circle {
+    fill: var(--brand);
+    stroke: none;
   }
 `
 
@@ -413,7 +441,11 @@ const Gem = styled.div<{ $tone: Tone }>`
   border-radius: 13px;
   background: rgba(38, 35, 33, 0.55);
   border: 1px solid var(--line);
-  box-shadow: 5px 5px 0 oklch(0 0 0 / 22%);
+  /* A faint top bevel over the offset block shadow: the game's stone-tile
+     read — lit edge above, weight below — without literal texture. */
+  box-shadow:
+    inset 0 1px 0 oklch(1 0 0 / 7%),
+    5px 5px 0 oklch(0 0 0 / 22%);
   transition:
     transform 0.18s cubic-bezier(0.16, 1, 0.3, 1),
     border-color 0.2s ease;

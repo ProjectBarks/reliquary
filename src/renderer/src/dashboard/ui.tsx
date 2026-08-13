@@ -48,6 +48,18 @@ export const SectionHead = styled.div`
   gap: 4px 10px;
   margin: 0 0 10px;
   padding: 0 2px;
+
+  /* A rule running out from the head, fading like the game's parchment
+     dividers — it ties title and note into one line and gives each section
+     a beginning without adding chrome. */
+  &::after {
+    content: '';
+    flex: 1 1 24px;
+    align-self: center;
+    height: 1px;
+    margin-left: 4px;
+    background: linear-gradient(to right, var(--line-strong), transparent);
+  }
 `
 
 export const SectionTitle = styled.h2`
