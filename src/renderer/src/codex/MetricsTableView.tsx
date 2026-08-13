@@ -1,17 +1,10 @@
-import { useCallback, useMemo } from 'react'
-import { useNavigate } from '@tanstack/react-router'
+import { useMemo } from 'react'
 import styled from 'styled-components'
-import type { CodexKind, MetricsRow } from '@shared/codex'
-import { useLibraryEntries, type LibraryEntry } from './data'
+import { bracketLabel, type CodexBracket, type CodexKind, type MetricsRow, type MetricsTable } from '@shared/codex'
+import { type LibraryEntry } from './data'
 import { DASH, compareNullable, fmtElo, fmtInt, fmtPct, fmtScore, prettifyId } from './format'
-import {
-  useCodexScope,
-  useTableSearch,
-  type SortDir,
-  type TableColumn,
-  type Variant
-} from './params'
-import { Empty, ErrorState, Loading, Segmented, Skeleton, scrollbar } from './parts'
+import { defaultTableDir, type SortDir, type TableColumn, type Variant } from './params'
+import { Empty, Segmented, scrollbar } from './parts'
 import { TierBadge } from './tiers'
 import { useArtPreview } from './ArtPreview'
 
@@ -25,11 +18,15 @@ import { useArtPreview } from './ArtPreview'
  * an about box: a column called "Elo" that nobody explains is a column that
  * gets misread.
  *
- * The null columns are the honest part. In the current snapshot `elo` is
- * populated only for bracket-level card tables (and null for 26 rows even
- * there), `pick_rate` is null everywhere, and every `pick_rate_by_act` entry is
- * null. Those cells render `·`, the sorts sink them, and nothing anywhere
- * substitutes a zero.
+ * The null columns are the honest part. `elo` is populated only for
+ * bracket-level card tables, `pick_rate` is null everywhere, and the per-act
+ * pick rates vanish the moment a character filter is applied. Those cells
+ * render `·`, the sorts sink them, and nothing anywhere substitutes a zero.
+ *
+ * Where a *whole column* is null, though, the column goes. Twelve hundred
+ * middle dots in three columns is not honesty, it is a wall — so Elo and the
+ * three Act columns are drawn only when something in the visible rows has a
+ * number to put in them, and the footnotes say why they are missing.
  */
 
 interface Row {
@@ -60,34 +57,40 @@ const COLUMN_HELP: Record<TableColumn | 'rank' | 'wl', string> = {
   pick: 'Percentage of the times it was offered that it was taken',
   seen: 'How many times it was offered',
   runs: 'How many runs it appeared in — the sample behind every other number in the row',
-  a1: 'Pick rate in Act 1',
-  a2: 'Pick rate in Act 2',
-  a3: 'Pick rate in Act 3',
+  a1: 'Pick rate when offered in Act 1',
+  a2: 'Pick rate when offered in Act 2',
+  a3: 'Pick rate when offered in Act 3',
   wl: 'Wins and losses among runs containing this'
 }
 
-export function MetricsTableView(): JSX.Element {
-  const search = useTableSearch()
-  const kind: CodexKind = search.kind ?? 'cards'
-  const scope = useCodexScope()
-  const { entries, metrics, index, loading, error, retry } = useLibraryEntries(
-    kind,
-    scope.bracket,
-    scope.character
-  )
-  const navigate = useNavigate()
+export function MetricsTableView({
+  kind,
+  entries,
+  filtersActive,
+  table,
+  bracket,
+  character,
+  variant,
+  col,
+  dir,
+  onChange,
+  onOpen
+}: {
+  kind: CodexKind
+  /** The catalog rows the toolbar has left visible — search and filters applied. */
+  entries: LibraryEntry[]
+  /** Whether that set is narrowed at all; if it is not, metrics-only ids stay. */
+  filtersActive: boolean
+  table: MetricsTable | null
+  bracket: CodexBracket
+  character: string | null
+  variant: Variant
+  col: TableColumn
+  dir: SortDir
+  onChange: (patch: { col?: TableColumn; dir?: SortDir; variant?: Variant }) => void
+  onOpen: (id: string) => void
+}): JSX.Element {
   const preview = useArtPreview()
-
-  const variant: Variant = search.variant ?? 'base'
-  const sort: TableColumn = search.sort ?? 'score'
-  const dir: SortDir = search.dir ?? defaultDir(sort)
-
-  const go = useCallback(
-    (patch: Partial<typeof search>) => {
-      navigate({ to: '/codex/meta/table', search: { ...search, ...patch }, replace: true })
-    },
-    [navigate, search]
-  )
 
   const byId = useMemo(() => {
     const map = new Map<string, LibraryEntry>()
@@ -95,58 +98,61 @@ export function MetricsTableView(): JSX.Element {
     return map
   }, [entries])
 
-  const colors = useMemo(() => colorOptions(entries), [entries])
-
+  /**
+   * Metrics rows, narrowed by the variant pill and by whatever the toolbar has
+   * left standing.
+   *
+   * The filter comes from the catalog side rather than from the row: colour,
+   * type, rarity and keyword are all properties of the entity, and matching
+   * against the visible entries makes one filter mechanism serve every mode —
+   * which is what retired the table's own colour pills. A row with no catalog
+   * entry behind it survives only when nothing is filtering, because no filter
+   * can honestly be said to have excluded it.
+   */
   const rows = useMemo(() => {
-    const source = metrics.data?.rows ?? []
-    const wanted = source.filter((r) =>
-      variant === 'both' ? true : variant === 'upgraded' ? r.upgraded : !r.upgraded
-    )
-    return wanted.map((r) => toRow(r, byId.get(r.id) ?? null))
-  }, [metrics.data, variant, byId])
+    const source = table?.rows ?? []
+    return source
+      .filter((r) => (variant === 'both' ? true : variant === 'upgraded' ? r.upgraded : !r.upgraded))
+      .filter((r) => byId.has(r.id) || !filtersActive)
+      .map((r) => toRow(r, byId.get(r.id) ?? null))
+  }, [table, variant, byId, filtersActive])
 
-  const filtered = useMemo(() => {
-    if (!search.color) return rows
-    const wanted = search.color.toLowerCase()
-    return rows.filter((r) => (r.color ?? '').toLowerCase() === wanted)
-  }, [rows, search.color])
+  const sorted = useMemo(() => sortRows(rows, col, dir), [rows, col, dir])
 
-  const sorted = useMemo(() => sortRows(filtered, sort, dir), [filtered, sort, dir])
+  const showElo = kind === 'cards' && sorted.some((r) => r.elo != null)
+  // Verified against the live snapshot: the per-act rates are present on base
+  // rows at bracket level and null for every row once a character is chosen.
+  // Rather than three columns of dots, the columns simply are not there.
+  const showActs = kind === 'cards' && sorted.some((r) => r.acts.some((v) => v != null))
 
-  const showElo = kind === 'cards' && index.hasElo
-  const showActs = kind === 'cards'
-
-  if (error && !entries.length && !metrics.data) return <ErrorState message={error} onRetry={retry} />
-  if (metrics.error && !metrics.data) return <ErrorState message={metrics.error} onRetry={metrics.refresh} />
-  if (loading && !sorted.length) {
-    return (
-      <>
-        <Loading label="Fetching the metrics table…" />
-        <Skeleton style={{ height: 360 }} />
-      </>
-    )
-  }
+  const summary = [
+    bracketLabel(bracket),
+    ...(character ? [character] : []),
+    table?.total_runs != null ? `${fmtInt(table.total_runs)} runs` : null,
+    table?.baseline_win_rate != null ? `baseline ${fmtPct(table.baseline_win_rate)}` : null,
+    `${fmtInt(sorted.length)} shown`
+  ].filter(Boolean) as string[]
 
   const header = (column: TableColumn, label: string, numeric: boolean): JSX.Element => (
     <Th
       $numeric={numeric}
-      $on={sort === column}
-      aria-sort={sort === column ? (dir === 'asc' ? 'ascending' : 'descending') : 'none'}
+      $on={col === column}
+      aria-sort={col === column ? (dir === 'asc' ? 'ascending' : 'descending') : 'none'}
     >
       <ThButton
         type="button"
         $numeric={numeric}
         title={COLUMN_HELP[column]}
         onClick={() =>
-          go(
-            sort === column
+          onChange(
+            col === column
               ? { dir: dir === 'asc' ? 'desc' : 'asc' }
-              : { sort: column, dir: defaultDir(column) }
+              : { col: column, dir: defaultTableDir(column) }
           )
         }
       >
         {label}
-        <Arrow aria-hidden>{sort === column ? (dir === 'asc' ? '▴' : '▾') : ''}</Arrow>
+        <Arrow aria-hidden>{col === column ? (dir === 'asc' ? '▴' : '▾') : ''}</Arrow>
       </ThButton>
     </Th>
   )
@@ -158,7 +164,7 @@ export function MetricsTableView(): JSX.Element {
           <Segmented
             label="Card version"
             value={variant}
-            onChange={(v) => go({ variant: v })}
+            onChange={(v) => onChange({ variant: v })}
             options={[
               { value: 'base', label: 'Base' },
               { value: 'upgraded', label: 'Upgraded' },
@@ -166,24 +172,7 @@ export function MetricsTableView(): JSX.Element {
             ]}
           />
         ) : null}
-        {kind === 'cards' && colors.length > 1 ? (
-          <Pills role="group" aria-label="Colour">
-            <Pill type="button" $on={!search.color} onClick={() => go({ color: undefined })}>
-              All
-            </Pill>
-            {colors.map((c) => (
-              <Pill
-                key={c}
-                type="button"
-                $on={search.color === c}
-                $tone={`var(--sts-${c}-primary, var(--ink-dim))`}
-                onClick={() => go({ color: search.color === c ? undefined : c })}
-              >
-                {c}
-              </Pill>
-            ))}
-          </Pills>
-        ) : null}
+        <Summary>{summary.join(' · ')}</Summary>
       </Controls>
 
       {!sorted.length ? (
@@ -204,9 +193,9 @@ export function MetricsTableView(): JSX.Element {
                 {header('pick', 'Pick%', true)}
                 {header('seen', 'Seen', true)}
                 {header('runs', 'Runs', true)}
-                {showActs ? header('a1', 'A1', true) : null}
-                {showActs ? header('a2', 'A2', true) : null}
-                {showActs ? header('a3', 'A3', true) : null}
+                {showActs ? header('a1', 'Act 1', true) : null}
+                {showActs ? header('a2', 'Act 2', true) : null}
+                {showActs ? header('a3', 'Act 3', true) : null}
                 <Th $numeric title={COLUMN_HELP.wl}>
                   W–L
                 </Th>
@@ -219,27 +208,11 @@ export function MetricsTableView(): JSX.Element {
                   tabIndex={0}
                   role="link"
                   title={`Open ${row.name}`}
-                  onClick={() =>
-                    navigate({
-                      to: '/codex/browse/$kind/$id',
-                      params: { kind, id: row.id },
-                      search: {
-                        bracket: scope.bracket,
-                        ...(scope.character ? { character: scope.character } : {})
-                      }
-                    })
-                  }
+                  onClick={() => onOpen(row.id)}
                   onKeyDown={(e) => {
                     if (e.key !== 'Enter' && e.key !== ' ') return
                     e.preventDefault()
-                    navigate({
-                      to: '/codex/browse/$kind/$id',
-                      params: { kind, id: row.id },
-                      search: {
-                        bracket: scope.bracket,
-                        ...(scope.character ? { character: scope.character } : {})
-                      }
-                    })
+                    onOpen(row.id)
                   }}
                   {...preview.bind(row.art, row.name)}
                 >
@@ -301,6 +274,18 @@ export function MetricsTableView(): JSX.Element {
           How often it was offered, and how often it was taken. `·` means the snapshot does not
           record that number for this slice; it never means zero.
         </dd>
+        {kind === 'cards' ? (
+          <>
+            <dt>Act 1–3</dt>
+            <dd>
+              Pick rate when the card was offered in that act — the same question as Pick%, asked
+              three times as the run gets harder.
+              {showActs
+                ? null
+                : ' The snapshot records these for whole brackets only, so choosing a character removes them and the columns are hidden rather than left empty.'}
+            </dd>
+          </>
+        ) : null}
       </Footnotes>
 
       {preview.preview}
@@ -329,21 +314,6 @@ function toRow(row: MetricsRow, entry: LibraryEntry | null): Row {
     losses: row.losses,
     acts: row.pick_rate_by_act ?? [null, null, null]
   }
-}
-
-/** Which colours the loaded catalog actually contains, in a stable order. */
-function colorOptions(entries: LibraryEntry[]): string[] {
-  const set = new Set<string>()
-  for (const entry of entries) {
-    if (entry.kind !== 'cards') continue
-    if (entry.item.color) set.add(entry.item.color.toLowerCase())
-  }
-  return [...set].sort((a, b) => a.localeCompare(b))
-}
-
-/** Numbers want their biggest value first; a name wants its alphabet first. */
-function defaultDir(column: TableColumn): SortDir {
-  return column === 'name' || column === 'tier' ? 'asc' : 'desc'
 }
 
 function sortRows(rows: Row[], column: TableColumn, dir: SortDir): Row[] {
@@ -399,33 +369,22 @@ const Controls = styled.div`
   display: flex;
   align-items: center;
   flex-wrap: wrap;
-  gap: 10px 14px;
+  gap: 6px 14px;
   padding: 0 2px 12px;
 `
 
-const Pills = styled.div`
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
-`
-
-const Pill = styled.button<{ $on: boolean; $tone?: string }>`
-  cursor: pointer;
-  padding: 3px 10px;
-  border-radius: 999px;
-  font-family: inherit;
-  font-size: 11px;
-  text-transform: capitalize;
-  color: ${(p) => (p.$on ? '#1a1613' : (p.$tone ?? 'var(--ink-dim)'))};
-  background: ${(p) => (p.$on ? (p.$tone ?? 'var(--brand)') : 'var(--fill)')};
-  border: 1px solid ${(p) => (p.$on ? 'transparent' : 'var(--line)')};
-  &:hover {
-    background: ${(p) => (p.$on ? (p.$tone ?? 'var(--brand)') : 'var(--fill-hover)')};
-  }
-  &:focus-visible {
-    outline: 2px solid var(--brand);
-    outline-offset: 2px;
-  }
+/**
+ * "All runs · 1,183,705 runs · baseline 43.4% · 577 shown".
+ *
+ * A win rate is meaningless without the baseline it is being read against, and
+ * a table of 30,000 runs is a different document from a table of three million.
+ * It sits beside the variant pill rather than above the table so the sticky
+ * header has nothing between it and the top of its scroller.
+ */
+const Summary = styled.p`
+  margin: 0;
+  font-size: 12px;
+  color: var(--ink-faint);
 `
 
 /**

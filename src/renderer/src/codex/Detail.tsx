@@ -16,7 +16,7 @@ import {
   fmtScore
 } from './format'
 import { TierBadge, tierLabel } from './tiers'
-import { useCodexScope, useMetaSearch } from './params'
+import { useBrowseSearch, useCodexScope } from './params'
 import {
   Art,
   ArtPlate,
@@ -84,7 +84,7 @@ export function Detail({
   const pins = usePins()
   const [comparing, setComparing] = useState(false)
   const navigate = useNavigate()
-  const metaSearch = useMetaSearch()
+  const browseSearch = useBrowseSearch()
 
   // Remember what was looked at, not what was rendered: this fires when the
   // entity resolves, so a mistyped id never lands in the recents list.
@@ -206,27 +206,21 @@ export function Detail({
           </MetricsBlock>
 
           <Footer>
+            {/* The tier list is a mode of the screen this is already on, so the
+                link closes the entry rather than leaving for somewhere else:
+                same kind, same filters, mode swapped, and `highlight` telling
+                the band which entry to scroll to and ring. */}
             <QuietLink
               type="button"
               onClick={() =>
                 navigate({
-                  to: '/codex/meta/tiers',
-                  search: { ...metaSearch, kind, highlight: entry.id }
+                  to: '/codex/browse/$kind',
+                  params: { kind },
+                  search: { ...browseSearch, mode: 'tier', highlight: entry.id }
                 })
               }
             >
               View in tier list →
-            </QuietLink>
-            <QuietLink
-              type="button"
-              title="Opens this entity's page on spire-codex.com, the source of every number here"
-              onClick={() =>
-                window.spectra?.openExternal(
-                  `https://spire-codex.com/${kind}/${entry.id.toLowerCase()}`
-                )
-              }
-            >
-              View on spire-codex.com ↗
             </QuietLink>
           </Footer>
         </Body>
@@ -428,24 +422,26 @@ function Stat({ label, value, hint }: { label: string; value: string; hint: stri
 }
 
 /**
- * Per-act pick rates.
+ * Pick rate when offered in each act — which is what `pick_rate_by_act` has
+ * always been, however cryptically "A1" said it.
  *
- * Every entry of `pick_rate_by_act` is null in the current snapshot, so what
- * this renders today is three empty troughs and three dots. That is
- * deliberate: the shape is right, the space is reserved, and the day the
- * upstream aggregate starts filling the array the bars appear without a single
- * pixel moving. An absent stat drawn as a zero-height bar would read as "never
- * picked in act 1", which is a different and false claim.
+ * The array is populated for base rows at bracket level and null for every row
+ * once a character filter is on. Three empty troughs and three dots is not a
+ * measurement, it is a shape where one should be, so when there is nothing to
+ * plot the block is absent and the metrics panel simply ends at its stats. An
+ * absent stat drawn as a zero-height bar would be worse still: it would read as
+ * "never picked in act 1", which is a different and false claim.
  */
-function ActBars({ row }: { row: LibraryEntry }): JSX.Element {
+function ActBars({ row }: { row: LibraryEntry }): JSX.Element | null {
   const acts = row.metrics?.pick_rate_by_act ?? [null, null, null]
+  if (!acts.some((v) => v != null)) return null
   return (
     <Acts>
       {[0, 1, 2].map((i) => {
         const value = acts[i] ?? null
         return (
-          <ActCell key={i} title={`Act ${i + 1} pick rate`}>
-            <ActLabel>A{i + 1}</ActLabel>
+          <ActCell key={i} title={`Pick rate when offered in Act ${i + 1}`}>
+            <ActLabel>Act {i + 1}</ActLabel>
             <ActTrack>
               {value != null ? <ActFill style={{ width: `${Math.min(100, Math.max(0, value))}%` }} /> : null}
             </ActTrack>

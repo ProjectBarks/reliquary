@@ -1,14 +1,12 @@
 import { useEffect, useMemo, useRef } from 'react'
-import { useNavigate } from '@tanstack/react-router'
 import styled from 'styled-components'
 import type { CodexKind } from '@shared/codex'
 import { rarityColors } from '../overlays/sts2/theme'
 // `useArtPreview`'s bindings prefetch the art they are about to show, so a tier
 // entry needs no hover-prefetch of its own.
-import { useLibraryEntries, type LibraryEntry } from './data'
+import { type LibraryEntry } from './data'
 import { LOW_SAMPLE, fmtCount, fmtScore } from './format'
-import { useCodexScope, useMetaSearch } from './params'
-import { Art, ArtPlate, Empty, ErrorState, Loading, Skeleton } from './parts'
+import { Art, ArtPlate, Skeleton } from './parts'
 import { TIER_DEFS, TierBadge, tierForScore } from './tiers'
 import { useArtPreview } from './ArtPreview'
 
@@ -28,18 +26,26 @@ import { useArtPreview } from './ArtPreview'
  *   - Entries with no score at all are gathered at the bottom under "Unrated"
  *     rather than swept into F. "We have no data" and "the data says avoid it"
  *     are opposite claims.
+ *
+ * It takes its entries rather than fetching them: this is one of four modes on
+ * `browse/$kind` now, and the search box and filter popover above it apply here
+ * exactly as they do to the grid. Fetching its own copy would have meant a tier
+ * list that quietly ignored the filters the reader had just set.
  */
 
-export function TierListView(): JSX.Element {
-  const search = useMetaSearch()
-  const kind: CodexKind = search.kind ?? 'cards'
-  const scope = useCodexScope()
-  const { entries, loading, error, retry } = useLibraryEntries(kind, scope.bracket, scope.character)
-  const navigate = useNavigate()
+export function TierListView({
+  kind,
+  entries,
+  highlight,
+  onOpen
+}: {
+  kind: CodexKind
+  entries: LibraryEntry[]
+  highlight?: string
+  onOpen: (id: string) => void
+}): JSX.Element {
   const preview = useArtPreview()
-
   const groups = useMemo(() => groupByTier(entries), [entries])
-  const highlight = search.highlight
 
   // Arriving from a detail's "View in tier list →": put the entry on screen and
   // ring it, then leave the ring alone — it fades on its own via CSS, so there
@@ -54,23 +60,6 @@ export function TierListView(): JSX.Element {
     const calm = window.matchMedia('(prefers-reduced-motion: reduce)').matches
     node?.scrollIntoView({ block: 'center', behavior: calm ? 'auto' : 'smooth' })
   }, [highlight, entries.length])
-
-  if (error && !entries.length) return <ErrorState message={error} onRetry={retry} />
-  if (loading && !entries.length) {
-    return (
-      <>
-        <Loading label="Building the tier list…" />
-        {TIER_DEFS.slice(0, 3).map((t) => (
-          <Skeleton key={t.key} style={{ height: 120, marginBottom: 12 }} />
-        ))}
-      </>
-    )
-  }
-  if (!entries.length) return <Empty>No matches.</Empty>
-
-  const open = (id: string): void => {
-    navigate({ to: '/codex/browse/$kind/$id', params: { kind, id }, search: { bracket: scope.bracket, ...(scope.character ? { character: scope.character } : {}) } })
-  }
 
   return (
     <div ref={scroller}>
@@ -93,7 +82,7 @@ export function TierListView(): JSX.Element {
                   entry={entry}
                   cards={kind === 'cards'}
                   ringed={entry.id === highlight}
-                  onOpen={open}
+                  onOpen={onOpen}
                   bind={preview.bind}
                 />
               ))}
@@ -116,7 +105,7 @@ export function TierListView(): JSX.Element {
                 entry={entry}
                 cards={kind === 'cards'}
                 ringed={entry.id === highlight}
-                onOpen={open}
+                onOpen={onOpen}
                 bind={preview.bind}
               />
             ))}
@@ -130,6 +119,17 @@ export function TierListView(): JSX.Element {
       </Note>
 
       {preview.preview}
+    </div>
+  )
+}
+
+/** Three bands' worth of nothing, held open while the metrics land. */
+export function TierSkeleton(): JSX.Element {
+  return (
+    <div aria-hidden>
+      {TIER_DEFS.slice(0, 3).map((t) => (
+        <Skeleton key={t.key} style={{ height: 120, marginBottom: 12 }} />
+      ))}
     </div>
   )
 }

@@ -1,23 +1,21 @@
 import { useCallback, useEffect, useRef } from 'react'
 import { Outlet, createLink, useNavigate, useRouterState } from '@tanstack/react-router'
 import styled from 'styled-components'
-import { CODEX_BRACKETS, bracketLabel, isCodexBracket, type CodexKind } from '@shared/codex'
+import { CODEX_BRACKETS, isCodexBracket, type CodexKind } from '@shared/codex'
 import { Select, Spinner } from '../dashboard/ui'
 import { useCharacters, useMetrics } from './data'
-import { fmtInt, fmtPct, relativeTime } from './format'
 import {
   CODEX_KINDS,
   isCodexKind,
   kindLabel,
   useActiveKind,
+  useBrowseMode,
   useBrowseSearch,
   useCodexScope,
   useCodexSearch,
-  useMetaSearch,
-  useTableSearch,
   type CodexSearch
 } from './params'
-import { NavAnchor, Whisper, scrollbar } from './parts'
+import { NavAnchor, scrollbar } from './parts'
 import { setBracketPref, setCharacterPref } from './prefs'
 import { PinnedRail } from './PinnedRail'
 import { reportEvent } from '../telemetry'
@@ -33,6 +31,12 @@ import { reportEvent } from '../telemetry'
  * and the reader needs to be able to tell "which part of the app" from "which
  * part of the Codex" without thinking about it.
  *
+ * It names the three catalogs and nothing else. The tier list and the metrics
+ * table used to be a fourth destination called Meta, which put a second "which
+ * kind" control on screen and asked the reader to hold two mental models of the
+ * same data; they are view modes on the toolbar now, so this bar answers one
+ * question only — cards, relics, or potions.
+ *
  * The bracket and character selects live up here rather than inside each view
  * because they are not a view's setting — they decide which population every
  * number in the tab is describing. Moving them into the library and the tier
@@ -46,15 +50,15 @@ export function CodexLayout(): JSX.Element {
   const scope = useCodexScope()
   const codexSearch = useCodexSearch()
   const activeKind = useActiveKind()
+  const mode = useBrowseMode()
   const setScope = useScopeNavigate()
   const characters = useCharacters()
 
   const pathname = useRouterState({ select: (s) => s.location.pathname })
   const segments = pathname.split('/').filter(Boolean)
   const inBrowse = segments[1] === 'browse'
-  const inMeta = segments[1] === 'meta'
   const browseKind: CodexKind = inBrowse && isCodexKind(segments[2]) ? segments[2] : 'cards'
-  useCodexViewed(inBrowse ? 'browse' : segments[2] === 'table' ? 'table' : 'tiers')
+  useCodexViewed(mode)
 
   return (
     <Frame>
@@ -72,18 +76,10 @@ export function CodexLayout(): JSX.Element {
                 {kindLabel(kind)}
               </NavLink>
             ))}
-            <NavDivider aria-hidden />
-            <NavLink
-              to="/codex/meta/tiers"
-              search={{ ...codexSearch, kind: activeKind }}
-              $active={inMeta}
-            >
-              Meta
-            </NavLink>
           </Nav>
 
           <Controls>
-            <FreshnessWhisper kind={activeKind} />
+            <ScopeStatus kind={activeKind} />
             <Select
               aria-label="Run cohort"
               title="Which runs every score on this page is computed from"
@@ -134,7 +130,7 @@ export function CodexLayout(): JSX.Element {
 }
 
 /**
- * `codex_view`, once per arrival at one of the tab's three screens.
+ * `codex_view`, once per arrival at one of the tab's four modes.
  *
  * Shaped after `Shell`'s `tab_viewed` and guarded the same way — a ref, so
  * StrictMode's double effect and every unrelated re-render of the layout (a
@@ -143,7 +139,7 @@ export function CodexLayout(): JSX.Element {
  * window happened to start, but this layout only ever mounts because somebody
  * navigated into the Codex, so the arrival is real.
  */
-function useCodexViewed(view: 'browse' | 'tiers' | 'table'): void {
+function useCodexViewed(view: string): void {
   const seen = useRef<string | null>(null)
   useEffect(() => {
     if (seen.current === view) return
@@ -153,84 +149,54 @@ function useCodexViewed(view: 'browse' | 'tiers' | 'table'): void {
 }
 
 /**
- * "community data · 1,284,003 runs · baseline 41.6% · updated 4 min ago".
+ * Whether the cohort's numbers are still coming, said in one 14px slot beside
+ * the select that chose them.
  *
- * Attribution and freshness in one line, in the quietest type on the page. Every
- * number in this tab belongs to somebody else's dataset; saying so once, always
- * visible, is cheaper than a disclaimer nobody reads and more honest than
- * numbers that appear to be ours.
+ * There used to be a sentence here — "community data · 1,284,003 runs ·
+ * baseline 41.6% · updated 4 min ago" — running across the top of every screen
+ * in the tab, including the three that had no use for it. The table mode's
+ * summary line carries those numbers where they mean something, so what is left
+ * up here is the one thing a control needs to admit: that it is fetching. The
+ * slot is always the same width, so nothing on the row moves when it resolves.
  */
-function FreshnessWhisper({ kind }: { kind: CodexKind }): JSX.Element | null {
+function ScopeStatus({ kind }: { kind: CodexKind }): JSX.Element {
   const scope = useCodexScope()
   const metrics = useMetrics(kind, scope.bracket, scope.character)
-  const table = metrics.data
   const waiting = metrics.loading || metrics.stale
 
-  if (metrics.error && !table) {
-    return (
-      <HeadWhisper title={metrics.error}>
-        <Dot $bad />
-        community data unavailable
-      </HeadWhisper>
-    )
-  }
-
-  const parts = ['community data']
-  if (table?.total_runs != null) parts.push(`${fmtInt(table.total_runs)} runs`)
-  if (table?.baseline_win_rate != null) parts.push(`baseline ${fmtPct(table.baseline_win_rate)}`)
-  if (metrics.fetchedAt) parts.push(`updated ${relativeTime(metrics.fetchedAt)}`)
-
   return (
-    <HeadWhisper title={`${bracketLabel(scope.bracket)} · spire-codex.com`}>
-      {waiting ? <Spinner size={12} /> : null}
-      <Truncate>{parts.join(' · ')}</Truncate>
-    </HeadWhisper>
+    <StatusSlot
+      aria-hidden={!metrics.error}
+      title={metrics.error ?? (waiting ? 'Fetching community data…' : undefined)}
+    >
+      {metrics.error && !metrics.data ? <Dot $bad /> : waiting ? <Spinner size={13} /> : null}
+    </StatusSlot>
   )
 }
 
 /**
  * Change the cohort without leaving the page you are on.
  *
- * The router's `to` is typed against the real route tree, so this branches over
- * the four shapes a Codex URL can have rather than pasting the current pathname
- * back in. Verbose, but it means a scope change can never navigate somewhere
- * that doesn't exist — and `replace` keeps a session of bracket-fiddling out of
- * the back button.
+ * Every screen in the tab is now a `browse/$kind` URL, so this only has to
+ * decide whether an entry is open. `replace` keeps a session of bracket-fiddling
+ * out of the back button.
  */
 function useScopeNavigate(): (patch: CodexSearch) => void {
   const navigate = useNavigate()
   const pathname = useRouterState({ select: (s) => s.location.pathname })
   const browse = useBrowseSearch()
-  const meta = useMetaSearch()
-  const table = useTableSearch()
 
   return useCallback(
     (patch: CodexSearch) => {
       const segments = pathname.split('/').filter(Boolean)
-      if (segments[1] === 'browse') {
-        const kind: CodexKind = isCodexKind(segments[2]) ? segments[2] : 'cards'
-        const search = { ...browse, ...patch }
-        const id = segments[3]
-        if (id) navigate({ to: '/codex/browse/$kind/$id', params: { kind, id }, search, replace: true })
-        else navigate({ to: '/codex/browse/$kind', params: { kind }, search, replace: true })
-        return
-      }
-      if (segments[1] === 'meta' && segments[2] === 'table') {
-        navigate({ to: '/codex/meta/table', search: { ...table, ...patch }, replace: true })
-        return
-      }
-      if (segments[1] === 'meta') {
-        navigate({ to: '/codex/meta/tiers', search: { ...meta, ...patch }, replace: true })
-        return
-      }
-      navigate({
-        to: '/codex/browse/$kind',
-        params: { kind: 'cards' },
-        search: { ...browse, ...patch },
-        replace: true
-      })
+      const kind: CodexKind =
+        segments[1] === 'browse' && isCodexKind(segments[2]) ? segments[2] : 'cards'
+      const search = { ...browse, ...patch }
+      const id = segments[1] === 'browse' ? segments[3] : undefined
+      if (id) navigate({ to: '/codex/browse/$kind/$id', params: { kind, id }, search, replace: true })
+      else navigate({ to: '/codex/browse/$kind', params: { kind }, search, replace: true })
     },
-    [browse, meta, navigate, pathname, table]
+    [browse, navigate, pathname]
   )
 }
 
@@ -277,12 +243,6 @@ const Nav = styled.nav`
   flex: 0 0 auto;
 `
 
-const NavDivider = styled.span`
-  width: 1px;
-  height: 16px;
-  background: var(--line-strong);
-`
-
 const Controls = styled.div`
   display: flex;
   align-items: center;
@@ -292,14 +252,15 @@ const Controls = styled.div`
   min-width: 0;
 `
 
-/**
- * The whisper eats all the slack in the head row, so the two selects stay
- * pinned to the right edge instead of sliding left as "1,183,705 runs ·
- * baseline 43.4% · updated just now" arrives a word at a time.
- */
-const HeadWhisper = styled(Whisper)`
-  flex: 1 1 auto;
-  justify-content: flex-end;
+/** Always this wide, empty or not, so resolving a fetch moves nothing. */
+const StatusSlot = styled.div`
+  flex: 0 0 auto;
+  width: 14px;
+  height: 14px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--ink-faint);
 `
 
 /**
@@ -309,13 +270,6 @@ const HeadWhisper = styled(Whisper)`
  */
 const CharacterSelect = styled(Select)`
   min-width: 128px;
-`
-
-const Truncate = styled.span`
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  max-width: 42ch;
 `
 
 const Dot = styled.span<{ $bad?: boolean }>`

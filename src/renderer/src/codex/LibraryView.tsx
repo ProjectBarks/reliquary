@@ -8,72 +8,104 @@ import {
 } from 'react'
 import { useNavigate } from '@tanstack/react-router'
 import styled from 'styled-components'
-import type { CodexCard, CodexKind } from '@shared/codex'
-import { Select } from '../dashboard/ui'
+import type { CodexKind } from '@shared/codex'
 import { rarityColors } from '../overlays/sts2/theme'
 import { prefetchArt, useLibraryEntries, type LibraryEntry } from './data'
 import { DASH, compareNullable, fmtInt } from './format'
 import {
   DEFAULT_LIBRARY_SORT,
+  DEFAULT_TABLE_COLUMN,
+  defaultTableDir,
   kindNoun,
   useBrowseSearch,
   useCodexScope,
   type FullBrowseSearch,
-  type LibrarySort
+  type LibrarySort,
+  type SortDir,
+  type TableColumn,
+  type Variant
 } from './params'
 import {
   Art,
   ArtPlate,
   Empty,
   ErrorState,
-  Field,
+  FilterIcon,
+  GridIcon,
+  IconSegmented,
+  ListIcon,
   Loading,
+  OptionChip,
+  Popover,
+  PopoverGroup,
+  PopoverNote,
+  QuietLink,
   ResultCount,
   SearchAffordance,
   SearchIcon,
   SearchInput,
   SearchWrap,
-  Segmented,
   Skeleton,
+  SortIcon,
   Spacer,
+  TableIcon,
+  TierIcon,
   Toolbar,
   scrollbar
 } from './parts'
-import { getViewPref, setViewPref, useRecents, type CodexView } from './prefs'
+import { getModePref, setModePref, useRecents, type CodexMode } from './prefs'
 import { rankItems } from './search'
 import { TierBadge } from './tiers'
 import { Detail, DetailModal } from './Detail'
+import { TierListView, TierSkeleton } from './TierListView'
+import { MetricsTableView } from './MetricsTableView'
+import { useArtPreview } from './ArtPreview'
 
 /**
- * The compendium proper: 577 cards, 296 relics or 63 potions, filtered, sorted,
- * and shown either as art or as a list with a reading pane.
+ * One kind of thing, four ways of looking at it.
  *
- * Two modes rather than one because they answer different questions. The grid
- * is for recognising something — card art is how anyone who plays this game
- * actually identifies a card — and the list is for reading through a set with
- * the details open beside it. Which one you prefer is remembered; which one you
- * are *currently* using is in the URL, so a link says what it shows.
+ * Grid and list are for recognising and reading — card art is how anyone who
+ * plays this game actually identifies a card, and the list puts the details
+ * beside the set. Tier and table are the same catalog read as a population:
+ * what the community's runs say, at a glance and in full. They used to live in
+ * a separate "Meta" section with its own kind switcher, which meant two
+ * controls for "which kind am I looking at" and one mental model split across
+ * two places. They are modes now.
  *
- * Everything that narrows the view lives in the URL for the same reason. The
- * one exception is the text in the search box, which is mirrored locally and
- * debounced into the URL — typing "strike" should not put six entries in the
- * back button's history.
+ * That merge is what makes the toolbar work. One search box, one filter set and
+ * one cohort feed all four modes, so narrowing to Rare Powers and then flipping
+ * to the tier list narrows the tier list — instead of throwing the question
+ * away at the boundary between two screens.
+ *
+ * Everything that decides what is on screen lives in the URL. The one exception
+ * is the text in the search box, which is mirrored locally and debounced into
+ * the URL — typing "strike" should not put six entries in the back button.
  */
 
 const SEARCH_DEBOUNCE_MS = 175
+
+const MODE_OPTIONS = [
+  { value: 'grid' as const, icon: <GridIcon />, label: 'Art grid' },
+  { value: 'list' as const, icon: <ListIcon />, label: 'List with a reading pane' },
+  { value: 'tier' as const, icon: <TierIcon />, label: 'Tier list' },
+  { value: 'table' as const, icon: <TableIcon />, label: 'Metrics table' }
+]
 
 export function LibraryView({ kind, detailId }: { kind: CodexKind; detailId?: string }): JSX.Element {
   const scope = useCodexScope()
   const search = useBrowseSearch()
   const navigate = useNavigate()
-  const { entries, loading, error, retry, metrics } = useLibraryEntries(
+  const { entries, loading, error, retry, metrics, index, table } = useLibraryEntries(
     kind,
     scope.bracket,
     scope.character
   )
 
-  const view: CodexView = search.view ?? getViewPref()
+  const mode: CodexMode = search.mode ?? getModePref()
   const sort: LibrarySort = search.sort ?? DEFAULT_LIBRARY_SORT
+  const variant: Variant = search.variant ?? 'base'
+  const col: TableColumn = search.col ?? DEFAULT_TABLE_COLUMN
+  const dir: SortDir = search.dir ?? defaultTableDir(col)
 
   // ── URL writers ───────────────────────────────────────────────────────────
   const go = useCallback(
@@ -150,13 +182,41 @@ export function LibraryView({ kind, detailId }: { kind: CodexKind; detailId?: st
   }, [go])
 
   // ── filtering, ranking, sorting ───────────────────────────────────────────
-  const options = useMemo(() => filterOptions(entries), [entries])
-  const filtered = useMemo(() => applyFilters(entries, search), [entries, search])
-  const ranked = useMemo(() => rankItems(filtered, search.q ?? ''), [filtered, search.q])
-  const shown = useMemo(
-    () => sortEntries(ranked, sort, Boolean(search.q) && sort === DEFAULT_LIBRARY_SORT),
-    [ranked, sort, search.q]
+
+  /**
+   * Which rows the table could possibly show, for the purpose of counting
+   * filter options.
+   *
+   * This is the fix for the complaint that started it: Curse, Event, Quest,
+   * Status and Token were offered as colours on a table that has no metric
+   * rows for any of them, so choosing one emptied the screen. A filter option
+   * is only real if something would survive it, and in table mode "something"
+   * means a metrics row of the current variant.
+   */
+  const eligible = useMemo(() => {
+    if (mode !== 'table') return null
+    return (entry: LibraryEntry): boolean =>
+      variant === 'upgraded'
+        ? index.upgraded.has(entry.id)
+        : variant === 'base'
+          ? index.base.has(entry.id)
+          : index.base.has(entry.id) || index.upgraded.has(entry.id)
+  }, [mode, variant, index])
+
+  const searched = useMemo(() => rankItems(entries, search.q ?? ''), [entries, search.q])
+  const groups = useMemo(
+    () => facetGroups(eligible ? searched.filter(eligible) : searched, search, kind),
+    [searched, search, kind, eligible]
   )
+
+  const filtered = useMemo(() => searched.filter((e) => matches(e, search, kind)), [searched, search, kind])
+  const shown = useMemo(
+    () => sortEntries(filtered, sort, Boolean(search.q) && sort === DEFAULT_LIBRARY_SORT),
+    [filtered, sort, search.q]
+  )
+
+  const activeFilters = useMemo(() => filterKeys(kind).filter((k) => search[k]), [kind, search])
+  const filtersActive = activeFilters.length > 0 || Boolean(search.q)
 
   const sortOptions = useMemo(
     () =>
@@ -173,6 +233,13 @@ export function LibraryView({ kind, detailId }: { kind: CodexKind; detailId?: st
       ] satisfies Array<{ value: LibrarySort; label: string }>,
     [kind]
   )
+
+  // Tier and table read the metrics, not the catalog: showing an "Unrated"
+  // list of 577 entries while the table is still in flight would be a screen
+  // that is wrong rather than one that is waiting.
+  const metaMode = mode === 'tier' || mode === 'table'
+  const waiting = loading || (metaMode && !table && metrics.loading)
+  const blank = !entries.length || (metaMode && !table)
 
   return (
     <>
@@ -207,48 +274,71 @@ export function LibraryView({ kind, detailId }: { kind: CodexKind; detailId?: st
           )}
         </SearchWrap>
 
-        <Segmented
-          label="Layout"
-          value={view}
+        <Spacer />
+
+        <IconSegmented
+          label="View mode"
+          value={mode}
           onChange={(next) => {
-            setViewPref(next)
-            go({ view: next })
+            setModePref(next)
+            // The ring belongs to the arrival, not to the kind: carrying a
+            // highlight from the tier list into the grid would leave a mark
+            // nobody asked for on a screen that has no way to explain it.
+            go({ mode: next, highlight: undefined })
           }}
-          options={[
-            { value: 'grid', label: '⧉ Grid', title: 'Art grid' },
-            { value: 'list', label: '☰ List', title: 'List with a reading pane' }
-          ]}
+          options={MODE_OPTIONS}
         />
 
-        <Field>
-          Sort
-          <Select
-            aria-label="Sort"
-            value={sort}
-            onChange={(e) => go({ sort: e.target.value as LibrarySort })}
+        {/* Tier order is fixed by score and the table sorts from its own
+            headers, so a sort control in those modes would be a second, quieter
+            authority over an order it does not own. */}
+        {mode === 'grid' || mode === 'list' ? (
+          <Popover
+            label="Sort"
+            title={`Sort — ${sortOptions.find((o) => o.value === sort)?.label ?? 'Compendium order'}`}
+            icon={<SortIcon />}
+            badge={sort !== DEFAULT_LIBRARY_SORT}
+            width={236}
           >
-            {sortOptions.map((o) => (
-              <option key={o.value} value={o.value}>
-                {o.label}
-              </option>
-            ))}
-          </Select>
-        </Field>
+            {(close) => (
+              <PopoverGroup name="Sort by">
+                {sortOptions.map((o) => (
+                  <OptionChip
+                    key={o.value}
+                    on={sort === o.value}
+                    onSelect={() => {
+                      go({ sort: o.value === DEFAULT_LIBRARY_SORT ? undefined : o.value })
+                      close()
+                    }}
+                  >
+                    {o.label}
+                  </OptionChip>
+                ))}
+              </PopoverGroup>
+            )}
+          </Popover>
+        ) : null}
 
-        {kind === 'cards' ? (
-          <>
-            <FilterSelect name="Type" value={search.type} options={options.type} onChange={(v) => go({ type: v })} />
-            <FilterSelect name="Rarity" value={search.rarity} options={options.rarity} onChange={(v) => go({ rarity: v })} />
-            <FilterSelect name="Keyword" value={search.keyword} options={options.keyword} onChange={(v) => go({ keyword: v })} />
-            <FilterSelect name="Colour" value={search.color} options={options.color} onChange={(v) => go({ color: v })} />
-          </>
-        ) : (
-          <>
-            <FilterSelect name="Rarity" value={search.rarity} options={options.rarity} onChange={(v) => go({ rarity: v })} />
-            <FilterSelect name="Pool" value={search.pool} options={options.pool} onChange={(v) => go({ pool: v })} />
-          </>
-        )}
-        <Spacer />
+        <Popover
+          label="Filter"
+          title={activeFilters.length ? `Filter — ${activeFilters.length} applied` : 'Filter'}
+          icon={<FilterIcon />}
+          badge={activeFilters.length}
+          width={292}
+        >
+          {() => (
+            <FilterPanel
+              groups={groups}
+              search={search}
+              hasData={Boolean(entries.length) && (mode !== 'table' || Boolean(table))}
+              clearable={activeFilters.length > 0}
+              onPick={(key, value) => go({ [key]: value } as Partial<FullBrowseSearch>)}
+              onClear={() =>
+                go({ type: undefined, rarity: undefined, keyword: undefined, color: undefined, pool: undefined })
+              }
+            />
+          )}
+        </Popover>
       </Toolbar>
 
       {error ? <ErrorState message={error} onRetry={retry} /> : null}
@@ -260,44 +350,83 @@ export function LibraryView({ kind, detailId }: { kind: CodexKind; detailId?: st
         />
       ) : null}
 
-      {loading && !entries.length ? (
+      {waiting && blank ? (
         <>
-          <Loading label={`Fetching the ${kind} compendium…`} />
-          {view === 'grid' ? <GridSkeleton kind={kind} /> : <ListSkeleton />}
+          <Loading label={loadingLabel(mode, kind)} />
+          {mode === 'grid' ? (
+            <GridSkeleton kind={kind} />
+          ) : mode === 'list' ? (
+            <ListSkeleton />
+          ) : mode === 'tier' ? (
+            <TierSkeleton />
+          ) : (
+            <Skeleton style={{ height: 360 }} />
+          )}
         </>
       ) : null}
 
       {/* A count of nothing and an italic "No matches." under an error panel
           would be three ways of saying the same failure. */}
-      {!error && (!loading || entries.length) ? (
-        <>
-          <ResultCount aria-live="polite">
-            {shown.length === entries.length
-              ? `${fmtInt(entries.length)} ${kind}`
-              : `${fmtInt(shown.length)} of ${fmtInt(entries.length)} ${kind}`}
-          </ResultCount>
+      {!error && (!waiting || !blank) ? (
+        mode === 'table' ? (
+          <MetricsTableView
+            kind={kind}
+            entries={filtered}
+            filtersActive={filtersActive}
+            table={table}
+            bracket={scope.bracket}
+            character={scope.character}
+            variant={variant}
+            col={col}
+            dir={dir}
+            onChange={(patch) => go(patch)}
+            onOpen={openEntry}
+          />
+        ) : (
+          <>
+            <ResultCount aria-live="polite">
+              {shown.length === entries.length
+                ? `${fmtInt(entries.length)} ${kind}`
+                : `${fmtInt(shown.length)} of ${fmtInt(entries.length)} ${kind}`}
+            </ResultCount>
 
-          {!shown.length && !loading ? (
-            <Empty>No matches.</Empty>
-          ) : view === 'grid' ? (
-            <GridMode entries={shown} kind={kind} onOpen={openEntry} />
-          ) : (
-            <ListMode
-              entries={shown}
-              kind={kind}
-              detailId={detailId}
-              onOpen={openEntry}
-              onClose={closeDetail}
-            />
-          )}
-        </>
+            {!shown.length && !waiting ? (
+              <Empty>No matches.</Empty>
+            ) : mode === 'tier' ? (
+              <TierListView
+                kind={kind}
+                entries={shown}
+                highlight={search.highlight}
+                onOpen={openEntry}
+              />
+            ) : mode === 'grid' ? (
+              <GridMode entries={shown} kind={kind} onOpen={openEntry} />
+            ) : (
+              <ListMode
+                entries={shown}
+                kind={kind}
+                detailId={detailId}
+                onOpen={openEntry}
+                onClose={closeDetail}
+              />
+            )}
+          </>
+        )
       ) : null}
 
-      {view === 'grid' && detailId ? (
+      {/* The list gives the detail a column of its own; every other mode is a
+          full-width surface with nowhere to put one, so it arrives as a modal. */}
+      {mode !== 'list' && detailId ? (
         <DetailModal kind={kind} id={detailId} onClose={closeDetail} />
       ) : null}
     </>
   )
+}
+
+function loadingLabel(mode: CodexMode, kind: CodexKind): string {
+  if (mode === 'tier') return 'Building the tier list…'
+  if (mode === 'table') return 'Fetching the metrics table…'
+  return `Fetching the ${kind} compendium…`
 }
 
 // ── grid ────────────────────────────────────────────────────────────────────
@@ -364,6 +493,8 @@ function ListMode({
   onClose: () => void
 }): JSX.Element {
   const list = useRef<HTMLDivElement>(null)
+  const preview = useArtPreview()
+  const isCards = kind === 'cards'
 
   /**
    * Roving focus: ↓/↑ move between rows, Enter opens the focused one. Moving
@@ -398,9 +529,20 @@ function ListMode({
             aria-selected={entry.id === detailId}
             $on={entry.id === detailId}
             onClick={() => onOpen(entry.id)}
-            onMouseEnter={() => prefetchArt(entry.art)}
+            {...preview.bind(entry.art, entry.name)}
           >
-            <RowThumb>{entry.thumb ? <Art src={entry.thumb} alt="" /> : null}</RowThumb>
+            {/* Cards get the framed render the grid and the tier list use. A
+                square crop of the art is not how anyone recognises a card, and
+                44px of frame reads at a glance where 26px of crop does not. */}
+            <RowThumb $card={isCards}>
+              {isCards ? (
+                entry.art ? (
+                  <Art src={entry.art} alt="" />
+                ) : null
+              ) : entry.thumb ? (
+                <Art src={entry.thumb} alt="" />
+              ) : null}
+            </RowThumb>
             <RowText>
               <RowName>{entry.name}</RowName>
               <RowMeta>{metaLine(entry)}</RowMeta>
@@ -419,6 +561,8 @@ function ListMode({
           <PaneEmpty kind={kind} onOpen={onOpen} />
         )}
       </PaneColumn>
+
+      {preview.preview}
     </Split>
   )
 }
@@ -463,106 +607,161 @@ function metaLine(entry: LibraryEntry): string {
 
 // ── filters ─────────────────────────────────────────────────────────────────
 
-interface FilterOptions {
-  type: string[]
-  rarity: string[]
-  keyword: string[]
-  color: string[]
-  pool: string[]
+type FilterKey = 'type' | 'rarity' | 'keyword' | 'color' | 'pool'
+
+const FILTER_NAMES: Record<FilterKey, string> = {
+  type: 'Type',
+  rarity: 'Rarity',
+  keyword: 'Keyword',
+  color: 'Colour',
+  pool: 'Pool'
+}
+
+/** Which questions are worth asking about a kind. Cards have colours; relics have pools. */
+function filterKeys(kind: CodexKind): FilterKey[] {
+  return kind === 'cards' ? ['type', 'rarity', 'keyword', 'color'] : ['rarity', 'pool']
 }
 
 /**
- * Filter menus built from the data actually loaded, not from a hard-coded list.
- *
- * A menu that offers "Ancient" when the catalog has no ancients is a menu that
- * can produce an empty screen for no reason, and a hard-coded list silently
- * stops offering whatever the game adds next.
+ * What one entry answers for one filter — a list, because keywords are many
+ * and everything else is one or none.
  */
-function filterOptions(entries: LibraryEntry[]): FilterOptions {
-  const type = new Set<string>()
-  const rarity = new Set<string>()
-  const keyword = new Set<string>()
-  const color = new Set<string>()
-  const pool = new Set<string>()
-  for (const entry of entries) {
-    if (entry.kind === 'cards') {
-      const card = entry.item
-      if (card.type) type.add(card.type)
-      if (card.rarity) rarity.add(card.rarity)
-      if (card.color) color.add(card.color)
-      for (const k of card.keywords ?? []) if (k) keyword.add(k)
-    } else {
-      if (entry.item.rarity_key) rarity.add(entry.item.rarity_key)
-      if (entry.item.pool) pool.add(entry.item.pool)
+function valuesFor(entry: LibraryEntry, key: FilterKey): string[] {
+  if (entry.kind === 'cards') {
+    const card = entry.item
+    switch (key) {
+      case 'type':
+        return card.type ? [card.type] : []
+      case 'rarity':
+        return card.rarity ? [card.rarity] : []
+      case 'color':
+        return card.color ? [card.color] : []
+      case 'keyword':
+        return (card.keywords ?? []).filter((k): k is string => Boolean(k))
+      default:
+        return []
     }
   }
-  const sorted = (s: Set<string>): string[] => [...s].sort((a, b) => a.localeCompare(b))
-  return {
-    type: sorted(type),
-    rarity: sorted(rarity),
-    keyword: sorted(keyword),
-    color: sorted(color),
-    pool: sorted(pool)
+  if (key === 'rarity') return entry.item.rarity_key ? [entry.item.rarity_key] : []
+  if (key === 'pool') return entry.item.pool ? [entry.item.pool] : []
+  return []
+}
+
+function eq(a: string | null | undefined, b: string | null | undefined): boolean {
+  return Boolean(a) && Boolean(b) && a!.toLowerCase() === b!.toLowerCase()
+}
+
+/**
+ * Does this entry survive the filters — optionally ignoring one of them?
+ *
+ * The `skip` is what makes the option counts honest. Counting "Rare" against a
+ * set that already has the Rare filter applied would tell you that Rare has
+ * results and every other rarity has none, which is true and useless. Each
+ * group is counted against the others, so what you see is what choosing it
+ * would give you.
+ */
+function matches(
+  entry: LibraryEntry,
+  search: FullBrowseSearch,
+  kind: CodexKind,
+  skip?: FilterKey
+): boolean {
+  for (const key of filterKeys(kind)) {
+    if (key === skip) continue
+    const want = search[key]
+    if (!want) continue
+    if (!valuesFor(entry, key).some((v) => eq(v, want))) return false
   }
+  return true
 }
 
-function eq(a: string | null | undefined, b: string | undefined): boolean {
-  return Boolean(b) && Boolean(a) && a!.toLowerCase() === b!.toLowerCase()
-}
-
-function applyFilters(entries: LibraryEntry[], search: FullBrowseSearch): LibraryEntry[] {
-  const { type, rarity, keyword, color, pool } = search
-  if (!type && !rarity && !keyword && !color && !pool) return entries
-  return entries.filter((entry) => {
-    if (entry.kind === 'cards') {
-      const card = entry.item
-      if (type && !eq(card.type, type)) return false
-      if (rarity && !eq(card.rarity, rarity)) return false
-      if (color && !eq(card.color, color)) return false
-      if (keyword && !hasKeyword(card, keyword)) return false
-      return true
-    }
-    if (rarity && !eq(entry.item.rarity_key, rarity)) return false
-    if (pool && !eq(entry.item.pool, pool)) return false
-    return true
-  })
-}
-
-function hasKeyword(card: CodexCard, keyword: string): boolean {
-  const wanted = keyword.toLowerCase()
-  return (card.keywords ?? []).some((k) => k?.toLowerCase() === wanted)
-}
-
-function FilterSelect({
-  name,
-  value,
-  options,
-  onChange
-}: {
+interface FacetGroup {
+  key: FilterKey
   name: string
-  value: string | undefined
-  options: string[]
-  onChange: (next: string | undefined) => void
-}): JSX.Element | null {
-  if (options.length < 2) return null
+  values: string[]
+}
+
+/**
+ * The filter menus, built from the data that is actually loaded — and only the
+ * options that would leave something on screen.
+ *
+ * A dead chip is clutter, so a zero-count option is not rendered at all rather
+ * than rendered greyed out; and until the catalog arrives there is nothing to
+ * count, so the panel says so instead of flashing a row of chips that are about
+ * to vanish. The one option that survives a zero count is the one currently
+ * applied: hiding that would leave a filter narrowing the screen with no
+ * control anywhere to turn it off.
+ */
+function facetGroups(pool: LibraryEntry[], search: FullBrowseSearch, kind: CodexKind): FacetGroup[] {
+  const out: FacetGroup[] = []
+  for (const key of filterKeys(kind)) {
+    const counts = new Set<string>()
+    for (const entry of pool) {
+      if (!matches(entry, search, kind, key)) continue
+      for (const value of valuesFor(entry, key)) counts.add(value)
+    }
+    const active = search[key]
+    if (active && ![...counts].some((v) => eq(v, active))) counts.add(active)
+    // One option plus "Any" is a question with a single answer.
+    if (counts.size < 2) continue
+    out.push({ key, name: FILTER_NAMES[key], values: [...counts].sort((a, b) => a.localeCompare(b)) })
+  }
+  return out
+}
+
+function FilterPanel({
+  groups,
+  search,
+  hasData,
+  clearable,
+  onPick,
+  onClear
+}: {
+  groups: FacetGroup[]
+  search: FullBrowseSearch
+  hasData: boolean
+  clearable: boolean
+  onPick: (key: FilterKey, value: string | undefined) => void
+  onClear: () => void
+}): JSX.Element {
+  if (!hasData) return <PopoverNote>Waiting for the compendium…</PopoverNote>
+  if (!groups.length) return <PopoverNote>Nothing left to narrow here.</PopoverNote>
   return (
-    <Field>
-      {name}
-      <Select
-        aria-label={name}
-        value={value ?? ''}
-        onChange={(e) => onChange(e.target.value || undefined)}
-      >
-        <option value="">Any</option>
-        {options.map((o) => (
-          <option key={o} value={o}>
-            {o}
-          </option>
-        ))}
-      </Select>
-    </Field>
+    <>
+      {groups.map((group) => (
+        <PopoverGroup key={group.key} name={group.name}>
+          <OptionChip on={!search[group.key]} onSelect={() => onPick(group.key, undefined)}>
+            Any
+          </OptionChip>
+          {group.values.map((value) => (
+            <OptionChip
+              key={value}
+              caps
+              on={eq(value, search[group.key])}
+              tone={group.key === 'color' ? `var(--sts-${value.toLowerCase()}-primary, var(--ink-dim))` : undefined}
+              onSelect={() => onPick(group.key, value)}
+            >
+              {value}
+            </OptionChip>
+          ))}
+        </PopoverGroup>
+      ))}
+      {clearable ? (
+        <ClearRow>
+          <QuietLink type="button" onClick={onClear}>
+            Clear filters
+          </QuietLink>
+        </ClearRow>
+      ) : null}
+    </>
   )
 }
+
+const ClearRow = styled.div`
+  margin-top: 12px;
+  padding-top: 10px;
+  border-top: 1px solid var(--line);
+`
 
 // ── sorting ─────────────────────────────────────────────────────────────────
 
@@ -719,7 +918,7 @@ const SrOnly = styled.span`
 
 const Split = styled.div`
   display: grid;
-  grid-template-columns: minmax(220px, 280px) 1fr;
+  grid-template-columns: minmax(240px, 300px) 1fr;
   gap: 16px;
   align-items: start;
 
@@ -752,7 +951,7 @@ const ListRow = styled.button<{ $on: boolean }>`
   align-items: center;
   gap: 9px;
   width: 100%;
-  padding: 6px 8px;
+  padding: 5px 8px;
   cursor: pointer;
   text-align: left;
   border-radius: 8px;
@@ -769,9 +968,14 @@ const ListRow = styled.button<{ $on: boolean }>`
   }
 `
 
-const RowThumb = styled.span`
-  width: 26px;
-  height: 26px;
+/**
+ * The aspect ratio is declared rather than left to the image, so a row is its
+ * final height before any art has loaded and the column does not shuffle under
+ * the cursor as the CDN answers.
+ */
+const RowThumb = styled.span<{ $card: boolean }>`
+  width: ${(p) => (p.$card ? '44px' : '26px')};
+  aspect-ratio: ${(p) => (p.$card ? '400 / 520' : '1')};
   flex: 0 0 auto;
   display: inline-flex;
   align-items: center;

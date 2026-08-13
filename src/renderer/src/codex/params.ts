@@ -1,7 +1,7 @@
 import { useMemo } from 'react'
 import { useRouterState } from '@tanstack/react-router'
 import { isCodexBracket, type CodexBracket, type CodexKind } from '@shared/codex'
-import { getBracketPref, getCharacterPref, isCodexView, type CodexView } from './prefs'
+import { getBracketPref, getCharacterPref, getModePref, isCodexMode, type CodexMode } from './prefs'
 
 /**
  * The Codex's URL vocabulary: what a link is allowed to say, and what a bad
@@ -70,9 +70,23 @@ const LIBRARY_SORTS: LibrarySort[] = ['order', 'name', 'name-desc', 'score', 'el
 
 export const DEFAULT_LIBRARY_SORT: LibrarySort = 'order'
 
+/**
+ * Everything `browse/$kind` can say about what it is showing.
+ *
+ * This one route now carries all four modes, so it carries the union of what
+ * they each need: the library's own sort, the tier list's scroll target, and
+ * the table's column sort and variant. That is the point of the merge — a kind
+ * is one place, and switching how you look at it neither changes route nor
+ * throws away the filters you had set.
+ *
+ * The table's column sort is `col`, not `sort`, because `sort` already means
+ * the library's ordering and the two vocabularies do not overlap ("win" is not
+ * a library sort; "order" is not a column). One name for two meanings on one
+ * route would make a link's behaviour depend on which mode happened to read it.
+ */
 export interface BrowseSearch {
   q?: string
-  view?: CodexView
+  mode?: CodexMode
   sort?: LibrarySort
   /** Card type key. */
   type?: string
@@ -83,42 +97,39 @@ export interface BrowseSearch {
    *  codex-wide `character` cohort filter, which means something else entirely. */
   color?: string
   pool?: string
+  /** An entity to scroll to and ring, handed over from a detail's footer link. */
+  highlight?: string
+  /** Table mode: which column is sorted, and which way. */
+  col?: TableColumn
+  dir?: SortDir
+  /** Table mode: which of a card's two rows to list. */
+  variant?: Variant
 }
 
 export function validateBrowseSearch(search: Record<string, unknown>): BrowseSearch {
   const out: BrowseSearch = {}
   const q = str(search['q'])
   if (q) out.q = q
-  if (isCodexView(search['view'])) out.view = search['view']
+  if (isCodexMode(search['mode'])) out.mode = search['mode']
   const sort = oneOf(search['sort'], LIBRARY_SORTS)
   if (sort) out.sort = sort
-  for (const key of ['type', 'rarity', 'keyword', 'color', 'pool'] as const) {
+  for (const key of ['type', 'rarity', 'keyword', 'color', 'pool', 'highlight'] as const) {
     const value = str(search[key])
     if (value) out[key] = value
   }
+  const col = oneOf(search['col'], TABLE_COLUMNS)
+  if (col) out.col = col
+  const dir = oneOf(search['dir'], ['asc', 'desc'] as const)
+  if (dir) out.dir = dir
+  const variant = oneOf(search['variant'], ['base', 'upgraded', 'both'] as const)
+  if (variant) out.variant = variant
   return out
 }
 
 /** The full search a `/codex/browse/**` link has to satisfy. */
 export type FullBrowseSearch = CodexSearch & BrowseSearch
 
-// ── /codex/meta ─────────────────────────────────────────────────────────────
-
-export interface MetaSearch {
-  kind?: CodexKind
-  /** An entity to scroll to and ring, handed over from a detail's footer link. */
-  highlight?: string
-}
-
-export function validateMetaSearch(search: Record<string, unknown>): MetaSearch {
-  const out: MetaSearch = {}
-  if (isCodexKind(search['kind'])) out.kind = search['kind']
-  const highlight = str(search['highlight'])
-  if (highlight) out.highlight = highlight
-  return out
-}
-
-// ── /codex/meta/table ───────────────────────────────────────────────────────
+// ── table vocabulary ────────────────────────────────────────────────────────
 
 export type TableColumn =
   | 'name'
@@ -152,16 +163,71 @@ export type SortDir = 'asc' | 'desc'
 /** Which of a card's two rows to list. Relics and potions only have the one. */
 export type Variant = 'base' | 'upgraded' | 'both'
 
-export interface TableSearch {
+export const DEFAULT_TABLE_COLUMN: TableColumn = 'score'
+
+/** Numbers want their biggest value first; a name wants its alphabet first. */
+export function defaultTableDir(column: TableColumn): SortDir {
+  return column === 'name' || column === 'tier' ? 'asc' : 'desc'
+}
+
+// ── /codex/meta/** — the shape the old URLs used ────────────────────────────
+
+/**
+ * What a `/codex/meta`, `/codex/meta/tiers` or `/codex/meta/table` link could
+ * say, kept only so those links can be turned into their `browse` equivalents.
+ *
+ * The meta subtree is gone, but the URLs are not: they are in recents, in the
+ * back button, in whatever someone pasted into a chat two days ago. Reading
+ * them costs one validator and one redirect each; breaking them costs a reader
+ * a blank screen with no way to guess what replaced it.
+ */
+export interface LegacyMetaSearch {
+  kind?: CodexKind
+  highlight?: string
+  /** The old table route's column sort, which is `col` now. */
   sort?: TableColumn
   dir?: SortDir
-  /** Character colour filter (cards only); `curse` is included as a pseudo-colour. */
   color?: string
   variant?: Variant
 }
 
-export function validateTableSearch(search: Record<string, unknown>): TableSearch {
-  const out: TableSearch = {}
+/**
+ * The `browse` URL an old `/codex/meta/**` link was asking for.
+ *
+ * Pure, and taking the raw search rather than reading the router, so the
+ * redirect component can freeze its answer at mount — it re-renders during its
+ * own navigation with the *destination's* search, and recomputing from that
+ * would have it redirect to a translation of a URL it just wrote.
+ */
+export function legacyMetaTarget(
+  raw: Record<string, unknown>,
+  mode: 'tier' | 'table'
+): { kind: CodexKind; search: FullBrowseSearch } {
+  const legacy = validateLegacyMetaSearch(raw)
+  const scope = validateCodexSearch(raw)
+  const character = scope.character ?? getCharacterPref()
+  return {
+    kind: legacy.kind ?? 'cards',
+    search: {
+      bracket: scope.bracket ?? getBracketPref(),
+      ...(character ? { character } : {}),
+      mode,
+      ...(legacy.highlight ? { highlight: legacy.highlight } : {}),
+      ...(legacy.color ? { color: legacy.color } : {}),
+      ...(legacy.variant ? { variant: legacy.variant } : {}),
+      // The table's column sort was `sort` when the table had a route of its
+      // own; on `browse` that name already belongs to the library's ordering.
+      ...(legacy.sort ? { col: legacy.sort } : {}),
+      ...(legacy.dir ? { dir: legacy.dir } : {})
+    }
+  }
+}
+
+export function validateLegacyMetaSearch(search: Record<string, unknown>): LegacyMetaSearch {
+  const out: LegacyMetaSearch = {}
+  if (isCodexKind(search['kind'])) out.kind = search['kind']
+  const highlight = str(search['highlight'])
+  if (highlight) out.highlight = highlight
   const sort = oneOf(search['sort'], TABLE_COLUMNS)
   if (sort) out.sort = sort
   const dir = oneOf(search['dir'], ['asc', 'desc'] as const)
@@ -172,9 +238,6 @@ export function validateTableSearch(search: Record<string, unknown>): TableSearc
   if (variant) out.variant = variant
   return out
 }
-
-export type FullMetaSearch = CodexSearch & MetaSearch
-export type FullTableSearch = CodexSearch & MetaSearch & TableSearch
 
 // ── reading the URL back ────────────────────────────────────────────────────
 
@@ -244,36 +307,29 @@ export function useBrowseSearch(): FullBrowseSearch {
   )
 }
 
-export function useMetaSearch(): FullMetaSearch {
+/**
+ * How the current kind is being looked at: the URL if it says, otherwise the
+ * remembered preference, otherwise the art grid.
+ *
+ * Read from the raw search rather than from a route context so the layout — an
+ * ancestor of the browse route, and mounted on the redirect routes too — can
+ * ask the same question without knowing where it is.
+ */
+export function useBrowseMode(): CodexMode {
   const raw = useRawSearch()
-  const scope = useCodexScope()
-  return useMemo(
-    () => ({
-      ...validateMetaSearch(raw),
-      bracket: scope.bracket,
-      ...(scope.character ? { character: scope.character } : {})
-    }),
-    [raw, scope.bracket, scope.character]
-  )
-}
-
-export function useTableSearch(): FullTableSearch {
-  const raw = useRawSearch()
-  const meta = useMetaSearch()
-  return useMemo(() => ({ ...meta, ...validateTableSearch(raw) }), [meta, raw])
+  return useMemo(() => (isCodexMode(raw['mode']) ? raw['mode'] : getModePref()), [raw])
 }
 
 /**
- * Which kind the tab is currently about, wherever you are in it — the browse
- * route says it in the path, the meta routes say it in a search param, and the
- * sub-nav's freshness whisper needs an answer either way.
+ * Which kind the tab is currently about. The browse route says it in the path;
+ * anywhere else — the index redirect, the legacy meta redirects — cards is the
+ * one everybody wants.
  */
 export function useActiveKind(): CodexKind {
   const pathname = useRouterState({ select: (s) => s.location.pathname })
-  const raw = useRawSearch()
   return useMemo(() => {
     const segments = pathname.split('/').filter(Boolean)
     if (segments[1] === 'browse' && isCodexKind(segments[2])) return segments[2]
-    return validateMetaSearch(raw).kind ?? 'cards'
-  }, [pathname, raw])
+    return 'cards'
+  }, [pathname])
 }

@@ -5,7 +5,7 @@ import { DEFAULT_BRACKET, codexImageUrl } from '@shared/codex'
 import { Compare } from './Compare'
 import { installCodexFixtures } from './data'
 import { FIXTURE_IDS, fixturePayload } from './fixtures'
-import { setBracketPref, setCharacterPref, setViewPref, togglePin, usePins } from './prefs'
+import { setBracketPref, setCharacterPref, setModePref, togglePin, usePins } from './prefs'
 
 /**
  * Codex design harness (`#/mock/codex/:view`) — the real tab, fed canned data.
@@ -55,6 +55,9 @@ export function CodexMock(): JSX.Element {
   // view that cannot be reached by navigating; it gets a stage of its own.
   if (view === 'compare') return <CompareStage />
 
+  // Every view is a mode of one route now, so the harness says which mode
+  // rather than which screen — the same URL a reader produces by clicking the
+  // toolbar, which is the point of pointing the harness at real routes.
   const search = { bracket: DEFAULT_BRACKET } as const
   switch (view) {
     case 'browse-list':
@@ -62,7 +65,7 @@ export function CodexMock(): JSX.Element {
         <Navigate
           to="/codex/browse/$kind/$id"
           params={{ kind: 'cards', id: FIXTURE_IDS.card }}
-          search={{ ...search, view: 'list' }}
+          search={{ ...search, mode: 'list' }}
           replace
         />
       )
@@ -71,17 +74,25 @@ export function CodexMock(): JSX.Element {
         <Navigate
           to="/codex/browse/$kind/$id"
           params={{ kind: 'cards', id: FIXTURE_IDS.rareCard }}
-          search={{ ...search, view: 'grid' }}
+          search={{ ...search, mode: 'grid' }}
           replace
         />
       )
     case 'tiers':
-      return <Navigate to="/codex/meta/tiers" search={{ ...search, kind: 'cards' }} replace />
+      return (
+        <Navigate
+          to="/codex/browse/$kind"
+          params={{ kind: 'cards' }}
+          search={{ ...search, mode: 'tier' }}
+          replace
+        />
+      )
     case 'table':
       return (
         <Navigate
-          to="/codex/meta/table"
-          search={{ ...search, kind: 'cards', variant: 'both' }}
+          to="/codex/browse/$kind"
+          params={{ kind: 'cards' }}
+          search={{ ...search, mode: 'table', variant: 'both' }}
           replace
         />
       )
@@ -91,7 +102,7 @@ export function CodexMock(): JSX.Element {
         <Navigate
           to="/codex/browse/$kind"
           params={{ kind: 'cards' }}
-          search={{ ...search, view: 'grid' }}
+          search={{ ...search, mode: 'grid' }}
           replace
         />
       )
@@ -117,7 +128,9 @@ function useHarness(view: MockView): void {
   installCodexFixtures(fixturePayload)
   setBracketPref(DEFAULT_BRACKET)
   setCharacterPref(null)
-  setViewPref(view === 'browse-list' ? 'list' : 'grid')
+  setModePref(
+    view === 'browse-list' ? 'list' : view === 'tiers' ? 'tier' : view === 'table' ? 'table' : 'grid'
+  )
 
   // Pins are the exception: `togglePin` notifies its subscribers, and notifying
   // one during another component's render is how you get React's "cannot update

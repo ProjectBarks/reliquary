@@ -1,4 +1,12 @@
-import { useEffect, useRef, type ReactNode } from 'react'
+import {
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useRef,
+  useState,
+  type ReactNode,
+  type RefObject
+} from 'react'
 import { createPortal } from 'react-dom'
 import styled, { css, keyframes } from 'styled-components'
 import { Button, Panel, Spinner } from '../dashboard/ui'
@@ -229,16 +237,513 @@ const SegmentButton = styled.button<{ $on: boolean }>`
   }
 `
 
-// ── labelled control ────────────────────────────────────────────────────────
+// ── icon controls ───────────────────────────────────────────────────────────
 
-/** A control with its name above it, for toolbars where six selects sit in a row. */
-export const Field = styled.label`
+/**
+ * The toolbar's icons, drawn rather than typed.
+ *
+ * An emoji or a box-drawing glyph would have been two characters of code, and
+ * would have rendered at whatever size, weight and vertical offset the font
+ * happened to choose — different on every machine, never quite aligned with the
+ * 34px controls beside it. These are the same 1.4px-stroke line drawings as the
+ * titlebar's window controls, so the tab has one icon language.
+ */
+const Icon = styled.svg`
+  width: 16px;
+  height: 16px;
+  flex: 0 0 auto;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.4;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+`
+
+/** Four tiles: the art grid. */
+export function GridIcon(): JSX.Element {
+  return (
+    <Icon viewBox="0 0 16 16" aria-hidden>
+      <rect x="2.2" y="2.2" width="5.2" height="5.2" rx="1.1" />
+      <rect x="8.6" y="2.2" width="5.2" height="5.2" rx="1.1" />
+      <rect x="2.2" y="8.6" width="5.2" height="5.2" rx="1.1" />
+      <rect x="8.6" y="8.6" width="5.2" height="5.2" rx="1.1" />
+    </Icon>
+  )
+}
+
+/** Thumb-and-line rows: the list with its reading pane. */
+export function ListIcon(): JSX.Element {
+  return (
+    <Icon viewBox="0 0 16 16" aria-hidden>
+      <rect x="2.2" y="3" width="3.4" height="3.4" rx="0.9" />
+      <rect x="2.2" y="9.6" width="3.4" height="3.4" rx="0.9" />
+      <path d="M7.4 4.7h6.4M7.4 11.3h6.4" />
+    </Icon>
+  )
+}
+
+/** A podium, tallest in the middle: the tier list. */
+export function TierIcon(): JSX.Element {
+  return (
+    <Icon viewBox="0 0 16 16" aria-hidden>
+      <rect x="1.8" y="7.4" width="3.6" height="5.8" rx="0.9" />
+      <rect x="6.2" y="3.4" width="3.6" height="9.8" rx="0.9" />
+      <rect x="10.6" y="9.2" width="3.6" height="4" rx="0.9" />
+    </Icon>
+  )
+}
+
+/** Ruled rows and a column: the metrics table. */
+export function TableIcon(): JSX.Element {
+  return (
+    <Icon viewBox="0 0 16 16" aria-hidden>
+      <rect x="2" y="2.6" width="12" height="10.8" rx="1.4" />
+      <path d="M2 6.2h12M2 9.8h12M6.6 6.2v7.2" />
+    </Icon>
+  )
+}
+
+/** Two arrows pointing apart: choose an order. */
+export function SortIcon(): JSX.Element {
+  return (
+    <Icon viewBox="0 0 16 16" aria-hidden>
+      <path d="M4.6 13.2V2.9M2.3 5.2 4.6 2.9l2.3 2.3" />
+      <path d="M11.4 2.8v10.3M9.1 10.8l2.3 2.3 2.3-2.3" />
+    </Icon>
+  )
+}
+
+/** A funnel: narrow what is shown. */
+export function FilterIcon(): JSX.Element {
+  return (
+    <Icon viewBox="0 0 16 16" aria-hidden>
+      <path d="M2.4 3.1h11.2L9.3 8.3v4.4l-2.6 1.3V8.3z" />
+    </Icon>
+  )
+}
+
+export interface IconSegmentedOption<T extends string> {
+  value: T
+  icon: ReactNode
+  /** Both the accessible name and the tooltip — an icon has no text of its own. */
+  label: string
+}
+
+/**
+ * The segmented control, icon-only.
+ *
+ * Same group and same brand-filled active state as the labelled one; the
+ * difference is that each segment is a square and its name is spoken rather
+ * than printed. Four modes with words on them would have been half the toolbar.
+ */
+export function IconSegmented<T extends string>({
+  options,
+  value,
+  onChange,
+  label
+}: {
+  options: readonly IconSegmentedOption<T>[]
+  value: T
+  onChange: (next: T) => void
+  label: string
+}): JSX.Element {
+  return (
+    <SegmentedGroup role="group" aria-label={label}>
+      {options.map((o) => (
+        <IconSegment
+          key={o.value}
+          type="button"
+          aria-label={o.label}
+          title={o.label}
+          aria-pressed={o.value === value}
+          $on={o.value === value}
+          onClick={() => onChange(o.value)}
+        >
+          {o.icon}
+        </IconSegment>
+      ))}
+    </SegmentedGroup>
+  )
+}
+
+/**
+ * A square button carrying one icon, exactly as tall as `Button` and `Select`.
+ *
+ * That number — 34px — is the whole reason this exists. The toolbar's misery
+ * was controls of three different heights on three different baselines; every
+ * control in it now resolves to the same 34, so the row is aligned by
+ * construction rather than by nudging.
+ */
+export const IconButton = styled.button<{ $on?: boolean }>`
+  position: relative;
+  cursor: pointer;
+  width: 34px;
+  height: 34px;
+  flex: 0 0 auto;
   display: inline-flex;
-  flex-direction: column;
-  gap: 3px;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  border-radius: 8px;
+  border: 1px solid ${(p) => (p.$on ? 'var(--brand)' : 'var(--line-strong)')};
+  background: ${(p) => (p.$on ? 'var(--fill-hover)' : 'var(--fill)')};
+  color: ${(p) => (p.$on ? 'var(--ink)' : 'var(--ink-dim)')};
+  transition:
+    background 0.14s ease,
+    border-color 0.14s ease,
+    color 0.14s ease;
+  &:hover {
+    background: var(--fill-hover);
+    color: var(--ink);
+  }
+  &:focus-visible {
+    outline: 2px solid var(--brand);
+    outline-offset: 2px;
+  }
+`
+
+const IconSegment = styled(SegmentButton)`
+  width: 34px;
+  padding: 0;
+  justify-content: center;
+`
+
+/**
+ * The mark on a control whose popover is holding something: a count when there
+ * is one to give, a dot when "not the default" is the whole message.
+ *
+ * It sits on the button's corner rather than beside it so the row's geometry
+ * does not change when a filter is applied — the alternative moves every
+ * control to its right by 18px the moment somebody picks a rarity.
+ */
+const TriggerBadge = styled.span<{ $dot: boolean }>`
+  position: absolute;
+  top: ${(p) => (p.$dot ? '-3px' : '-5px')};
+  right: ${(p) => (p.$dot ? '-3px' : '-5px')};
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: ${(p) => (p.$dot ? '8px' : '15px')};
+  height: ${(p) => (p.$dot ? '8px' : '15px')};
+  padding: ${(p) => (p.$dot ? '0' : '0 4px')};
+  border-radius: 999px;
+  background: var(--brand);
+  border: 1px solid #201d1b;
+  color: #1a1613;
+  font-size: 9px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  line-height: 1;
+  pointer-events: none;
+`
+
+// ── popover ─────────────────────────────────────────────────────────────────
+
+/**
+ * A panel hung under an icon button.
+ *
+ * It exists because the toolbar's controls stopped being labelled: a sort with
+ * six options and a filter with four groups do not fit in a 34px square, and
+ * putting them back on the bar as labelled selects is exactly the misalignment
+ * this redesign removes. So the button carries the icon and the panel carries
+ * the choices — one row of controls, and everything they can express one click
+ * away.
+ *
+ * Everything a floating surface has to get right is here rather than at each
+ * call site: it flips at the viewport edges, it closes on Escape (through the
+ * layer stack, so a popover opened over a modal closes only the popover), on an
+ * outside click, and when focus tabs out of it, and Escape and selection hand
+ * focus back to the button that opened it. An outside click does not — the
+ * reader has already said where they want to be.
+ */
+export function Popover({
+  label,
+  title,
+  icon,
+  badge,
+  width = 268,
+  children
+}: {
+  /** The trigger's accessible name, and the panel's. */
+  label: string
+  title?: string
+  icon: ReactNode
+  /** A count, or `true` for a bare dot. Anything falsy shows nothing. */
+  badge?: number | boolean
+  width?: number
+  /** Rendered with a `close` the content can call after a single-select pick. */
+  children: (close: () => void) => ReactNode
+}): JSX.Element {
+  const trigger = useRef<HTMLButtonElement>(null)
+  const [open, setOpen] = useState(false)
+
+  const close = useCallback((returnFocus: boolean) => {
+    setOpen(false)
+    if (returnFocus) trigger.current?.focus()
+  }, [])
+
+  const dot = badge === true
+  const count = typeof badge === 'number' && badge > 0 ? badge : null
+
+  return (
+    <>
+      <IconButton
+        ref={trigger}
+        type="button"
+        // The written-out title is the better spoken name: "Filter — 2 applied"
+        // says what the badge is showing, which the badge itself cannot.
+        aria-label={title ?? label}
+        title={title ?? label}
+        aria-haspopup="dialog"
+        aria-expanded={open}
+        $on={open}
+        onClick={() => setOpen((o) => !o)}
+      >
+        {icon}
+        {dot || count != null ? (
+          <TriggerBadge $dot={dot} aria-hidden>
+            {count}
+          </TriggerBadge>
+        ) : null}
+      </IconButton>
+      {open ? (
+        <PopoverPanel anchor={trigger} label={label} width={width} onClose={close}>
+          {children(() => close(true))}
+        </PopoverPanel>
+      ) : null}
+    </>
+  )
+}
+
+function PopoverPanel({
+  anchor,
+  label,
+  width,
+  onClose,
+  children
+}: {
+  anchor: RefObject<HTMLButtonElement>
+  label: string
+  width: number
+  onClose: (returnFocus: boolean) => void
+  children: ReactNode
+}): JSX.Element {
+  const panel = useRef<HTMLDivElement>(null)
+  const [pos, setPos] = useState<{ left: number; top: number } | null>(null)
+
+  useTransientLayer(() => onClose(true))
+
+  // Measured and placed before the browser paints, so the panel is never seen
+  // in the corner it was rendered into. `offsetHeight` is the reason it has to
+  // be measured at all: the content is chips that wrap, and how many rows they
+  // wrap into decides whether there is room below the button.
+  useLayoutEffect(() => {
+    const rect = anchor.current?.getBoundingClientRect()
+    const node = panel.current
+    if (!rect || !node) return
+    setPos(placePopover(rect, node.offsetWidth, node.offsetHeight))
+    node.focus()
+  }, [anchor])
+
+  useEffect(() => {
+    const onDown = (e: MouseEvent): void => {
+      const target = e.target as Node | null
+      if (!target) return
+      if (panel.current?.contains(target)) return
+      // The trigger toggles itself on click; closing here as well would close
+      // and immediately reopen.
+      if (anchor.current?.contains(target)) return
+      onClose(false)
+    }
+    document.addEventListener('mousedown', onDown, true)
+    return () => document.removeEventListener('mousedown', onDown, true)
+  }, [anchor, onClose])
+
+  return createPortal(
+    <PopoverSurface
+      ref={panel}
+      role="dialog"
+      aria-label={label}
+      tabIndex={-1}
+      $width={width}
+      $ready={pos !== null}
+      style={{ left: pos?.left ?? 0, top: pos?.top ?? 0 }}
+      onBlur={(e) => {
+        const next = e.relatedTarget as Node | null
+        // Focus leaving for nothing at all is a window blur, not a dismissal.
+        if (!next) return
+        if (panel.current?.contains(next) || anchor.current?.contains(next)) return
+        onClose(false)
+      }}
+    >
+      {children}
+    </PopoverSurface>,
+    document.body
+  )
+}
+
+/**
+ * Under the button, left edges aligned; right-aligned instead when that would
+ * hang off the window, and above when there is no room below. Clamped to the
+ * viewport either way, because a panel that opens half off screen is a panel
+ * with options nobody can reach.
+ */
+function placePopover(
+  rect: DOMRect,
+  width: number,
+  height: number
+): { left: number; top: number } {
+  const GAP = 6
+  const MARGIN = 8
+  const vw = window.innerWidth
+  const vh = window.innerHeight
+
+  let left = rect.left
+  if (left + width > vw - MARGIN) left = rect.right - width
+  left = Math.max(MARGIN, Math.min(left, Math.max(MARGIN, vw - width - MARGIN)))
+
+  let top = rect.bottom + GAP
+  if (top + height > vh - MARGIN) {
+    const above = rect.top - GAP - height
+    top = above >= MARGIN ? above : Math.max(MARGIN, vh - height - MARGIN)
+  }
+  return { left, top }
+}
+
+const popIn = keyframes`
+  from { opacity: 0; transform: translateY(-4px); }
+  to   { opacity: 1; transform: none; }
+`
+
+const PopoverSurface = styled.div<{ $width: number; $ready: boolean }>`
+  position: fixed;
+  z-index: 65;
+  width: ${(p) => p.$width}px;
+  max-width: calc(100vw - 16px);
+  max-height: min(420px, calc(100vh - 16px));
+  overflow-y: auto;
+  visibility: ${(p) => (p.$ready ? 'visible' : 'hidden')};
+  padding: 10px 12px 12px;
+  border-radius: 12px;
+  border: 1px solid var(--line-strong);
+  background: #201d1b;
+  box-shadow: 5px 5px 0 oklch(0 0 0 / 25%);
+  animation: ${popIn} 0.14s cubic-bezier(0.16, 1, 0.3, 1);
+  ${scrollbar}
+  &:focus {
+    outline: none;
+  }
+  @media (prefers-reduced-motion: reduce) {
+    animation: none;
+  }
+`
+
+/** A named group of options inside a popover. */
+export function PopoverGroup({
+  name,
+  children
+}: {
+  name: string
+  children: ReactNode
+}): JSX.Element {
+  return (
+    <GroupWrap role="group" aria-label={name}>
+      <GroupName>{name}</GroupName>
+      <OptionRow>{children}</OptionRow>
+    </GroupWrap>
+  )
+}
+
+const GroupWrap = styled.div`
+  & + & {
+    margin-top: 12px;
+    padding-top: 11px;
+    border-top: 1px solid var(--line);
+  }
+`
+
+const GroupName = styled.div`
   font-size: 10px;
-  letter-spacing: 0.5px;
+  letter-spacing: 0.6px;
   text-transform: uppercase;
+  color: var(--ink-faint);
+  margin-bottom: 7px;
+`
+
+const OptionRow = styled.div`
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+`
+
+/**
+ * One choice in a group: a chip that is either on or off.
+ *
+ * `role="radio"` rather than a pressed button, because these are single-select
+ * within their group and a screen reader should say "2 of 5" rather than
+ * announcing five independent toggles that happen to be mutually exclusive.
+ */
+export function OptionChip({
+  on,
+  onSelect,
+  tone,
+  title,
+  caps,
+  children
+}: {
+  on: boolean
+  onSelect: () => void
+  tone?: string
+  title?: string
+  /** For raw data values ("common", "red"); off for written labels ("Win rate"). */
+  caps?: boolean
+  children: ReactNode
+}): JSX.Element {
+  return (
+    <ChipButton
+      type="button"
+      role="radio"
+      aria-checked={on}
+      $on={on}
+      $tone={tone}
+      $caps={Boolean(caps)}
+      title={title}
+      onClick={onSelect}
+    >
+      {children}
+    </ChipButton>
+  )
+}
+
+const ChipButton = styled.button<{ $on: boolean; $tone?: string; $caps: boolean }>`
+  cursor: pointer;
+  padding: 4px 10px;
+  border-radius: 999px;
+  font-family: inherit;
+  font-size: 11px;
+  line-height: 1.45;
+  text-transform: ${(p) => (p.$caps ? 'capitalize' : 'none')};
+  color: ${(p) => (p.$on ? '#1a1613' : (p.$tone ?? 'var(--ink-dim)'))};
+  background: ${(p) => (p.$on ? (p.$tone ?? 'var(--brand)') : 'var(--fill)')};
+  border: 1px solid ${(p) => (p.$on ? 'transparent' : 'var(--line)')};
+  transition:
+    background 0.12s ease,
+    color 0.12s ease;
+  &:hover {
+    background: ${(p) => (p.$on ? (p.$tone ?? 'var(--brand)') : 'var(--fill-hover)')};
+    color: ${(p) => (p.$on ? '#1a1613' : 'var(--ink)')};
+  }
+  &:focus-visible {
+    outline: 2px solid var(--brand);
+    outline-offset: 2px;
+  }
+`
+
+/** The line a popover shows when it has nothing to offer yet. */
+export const PopoverNote = styled.p`
+  margin: 2px 0;
+  font-size: 12px;
+  font-style: italic;
   color: var(--ink-faint);
 `
 
@@ -256,15 +761,6 @@ export const Chip = styled.span<{ $tone?: string }>`
   color: ${(p) => p.$tone ?? 'var(--ink-dim)'};
   background: var(--fill);
   border: 1px solid ${(p) => (p.$tone ? 'currentColor' : 'var(--line)')};
-`
-
-export const Whisper = styled.div`
-  font-size: 11px;
-  color: var(--ink-faint);
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  min-width: 0;
 `
 
 export const ResultCount = styled.div`

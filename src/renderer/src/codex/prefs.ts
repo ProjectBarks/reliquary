@@ -39,19 +39,40 @@ function write(key: string, value: unknown): void {
 
 // ── how you browse ──────────────────────────────────────────────────────────
 
-export type CodexView = 'grid' | 'list'
+/**
+ * The four ways to read a catalog. Grid and list are the compendium's two
+ * layouts; tier and table are the meta layer, which used to be a place of its
+ * own and is now simply two more ways of looking at the same kind.
+ */
+export type CodexMode = 'grid' | 'list' | 'tier' | 'table'
 
-export function isCodexView(v: unknown): v is CodexView {
-  return v === 'grid' || v === 'list'
+export function isCodexMode(v: unknown): v is CodexMode {
+  return v === 'grid' || v === 'list' || v === 'tier' || v === 'table'
 }
 
-export function getViewPref(): CodexView {
-  const v = read<unknown>('view', 'grid')
-  return isCodexView(v) ? v : 'grid'
+/**
+ * The old `view` preference held 'grid' | 'list' — the two modes that still
+ * exist under those exact names. Anyone who left the tab in list view has a
+ * `view: "list"` sitting in localStorage, and resetting them to grid because we
+ * renamed a key would be a change they never asked for. Copied across once, on
+ * first load after the upgrade; from then on `mode` is the only key written and
+ * the stale `view` is simply ignored.
+ */
+function migrateViewPref(): void {
+  if (read<unknown>('mode', null) !== null) return
+  const legacy = read<unknown>('view', null)
+  if (legacy === 'grid' || legacy === 'list') write('mode', legacy)
 }
 
-export function setViewPref(view: CodexView): void {
-  write('view', view)
+migrateViewPref()
+
+export function getModePref(): CodexMode {
+  const v = read<unknown>('mode', 'grid')
+  return isCodexMode(v) ? v : 'grid'
+}
+
+export function setModePref(mode: CodexMode): void {
+  write('mode', mode)
 }
 
 export function getBracketPref(): CodexBracket {

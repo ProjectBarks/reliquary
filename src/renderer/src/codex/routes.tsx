@@ -1,17 +1,20 @@
-import { Navigate, createRoute, useRouterState, type AnyRoute } from '@tanstack/react-router'
+import { useState } from 'react'
+import {
+  Navigate,
+  Outlet,
+  createRoute,
+  useRouterState,
+  type AnyRoute
+} from '@tanstack/react-router'
 import { CodexLayout } from './CodexLayout'
 import { LibraryView } from './LibraryView'
-import { MetaLayout } from './MetaLayout'
-import { MetricsTableView } from './MetricsTableView'
-import { TierListView } from './TierListView'
 import {
   isCodexKind,
+  legacyMetaTarget,
   useCodexSearch,
-  useMetaSearch,
   validateBrowseSearch,
   validateCodexSearch,
-  validateMetaSearch,
-  validateTableSearch
+  validateLegacyMetaSearch
 } from './params'
 
 /**
@@ -20,12 +23,9 @@ import {
  * ```
  * /codex                        CodexLayout (sub-nav, cohort selects, pin rail)
  * ├─ ''                         → /codex/browse/cards
- * ├─ browse/$kind               LibraryView
- * │   └─ $id                    …with the entry open (pane in list, modal in grid)
- * └─ meta                       MetaLayout (kind switcher, summary line)
- *     ├─ ''                     → /codex/meta/tiers
- *     ├─ tiers                  TierListView
- *     └─ table                  MetricsTableView
+ * ├─ browse/$kind               LibraryView — grid, list, tier or table
+ * │   └─ $id                    …with the entry open (pane in list, modal else)
+ * └─ meta/**                    redirects to the mode the old URL meant
  * ```
  *
  * It is a factory rather than a module-level tree so that `App.tsx` stays the
@@ -33,7 +33,7 @@ import {
  * shape of the Codex, and it can be grafted under the shell (or, later, under a
  * standalone quick-peek window) without either side importing the other's tree.
  *
- * Two structural decisions:
+ * Three structural decisions:
  *
  *   - `$id` is a **child** of `browse/$kind`, not a sibling. Opening an entry
  *     must not remount the library: a sibling route would rebuild 577 tiles,
@@ -44,6 +44,10 @@ import {
  *     A component that reaches back into the route it belongs to makes the
  *     route's own type depend on itself, and TypeScript answers that with
  *     `any` — which would silently un-type every link in the tab.
+ *   - The `meta` subtree is three redirects and no screen. Tier list and table
+ *     are modes of `browse/$kind` now, but the old URLs are in recents, in the
+ *     back button and in whatever anyone pasted anywhere, and a dead link to a
+ *     view that still exists under a different name is the worst kind.
  */
 export function codexRouteTree<TParent extends AnyRoute>(parent: TParent) {
   const codexRoute = createRoute({
@@ -74,36 +78,37 @@ export function codexRouteTree<TParent extends AnyRoute>(parent: TParent) {
     component: BrowseDetail
   })
 
+  // One validator on the parent covers all three: a child's search is merged
+  // with its parent's, so `tiers` and `table` need no vocabulary of their own.
   const metaRoute = createRoute({
     getParentRoute: () => codexRoute,
     path: 'meta',
-    validateSearch: validateMetaSearch,
-    component: MetaLayout
+    validateSearch: validateLegacyMetaSearch,
+    component: Outlet
   })
 
   const metaIndexRoute = createRoute({
     getParentRoute: () => metaRoute,
     path: '/',
-    component: MetaIndex
+    component: LegacyTiers
   })
 
-  const tiersRoute = createRoute({
+  const metaTiersRoute = createRoute({
     getParentRoute: () => metaRoute,
     path: 'tiers',
-    component: TierListView
+    component: LegacyTiers
   })
 
-  const tableRoute = createRoute({
+  const metaTableRoute = createRoute({
     getParentRoute: () => metaRoute,
     path: 'table',
-    validateSearch: validateTableSearch,
-    component: MetricsTableView
+    component: LegacyTable
   })
 
   return codexRoute.addChildren([
     codexIndexRoute,
     browseRoute.addChildren([browseDetailRoute]),
-    metaRoute.addChildren([metaIndexRoute, tiersRoute, tableRoute])
+    metaRoute.addChildren([metaIndexRoute, metaTiersRoute, metaTableRoute])
   ])
 }
 
@@ -125,11 +130,11 @@ function Browse(): JSX.Element | null {
   const segments = pathname.split('/').filter(Boolean)
 
   // The router state updates BEFORE this component unmounts, so during any
-  // navigation away (to /codex/meta, to a /mock harness) Browse re-renders
-  // once with the destination's pathname. Treating that render's segments[2]
-  // as "an unknown kind" fired the typo-fallback redirect below and hijacked
-  // the navigation back to cards. If the path isn't ours, the next match owns
-  // the screen — render nothing and let the transition finish.
+  // navigation away (to a /mock harness, to settings) Browse re-renders once
+  // with the destination's pathname. Treating that render's segments[2] as "an
+  // unknown kind" fired the typo-fallback redirect below and hijacked the
+  // navigation back to cards. If the path isn't ours, the next match owns the
+  // screen — render nothing and let the transition finish.
   if (segments[0] !== 'codex' || segments[1] !== 'browse') return null
 
   const kind = segments[2]
@@ -146,9 +151,36 @@ function BrowseDetail(): null {
   return null
 }
 
-function MetaIndex(): JSX.Element {
-  const search = useMetaSearch()
-  return <Navigate to="/codex/meta/tiers" search={search} replace />
+function LegacyTiers(): JSX.Element {
+  return <LegacyMeta mode="tier" />
+}
+
+function LegacyTable(): JSX.Element {
+  return <LegacyMeta mode="table" />
+}
+
+/**
+ * An old meta URL, translated: same kind, same cohort, same highlight, same
+ * table sort — as a mode on the browse route.
+ *
+ * The target is computed once, at mount. This component re-renders during its
+ * own navigation with the destination's search already in the router state, and
+ * translating *that* would produce a second redirect built out of the answer to
+ * the first.
+ */
+function LegacyMeta({ mode }: { mode: 'tier' | 'table' }): JSX.Element {
+  const raw = useRouterState({
+    select: (s) => s.location.search as unknown as Record<string, unknown>
+  })
+  const [target] = useState(() => legacyMetaTarget(raw, mode))
+  return (
+    <Navigate
+      to="/codex/browse/$kind"
+      params={{ kind: target.kind }}
+      search={target.search}
+      replace
+    />
+  )
 }
 
 /** A hand-typed `%` in an id should not throw — it should just not decode. */
