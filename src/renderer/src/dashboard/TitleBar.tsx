@@ -1,14 +1,26 @@
+import { createLink } from '@tanstack/react-router'
 import styled from 'styled-components'
 import { useMaximized } from '../hooks/useIpc'
 import { UpdateBanner } from './UpdateBanner'
 
 /** The three top-level dashboard tabs. */
-export type TabId = 'home' | 'settings'
+export type TabId = 'home' | 'codex' | 'settings'
 
-const TABS: { id: TabId; label: string }[] = [
-  { id: 'home', label: 'Home' },
-  { id: 'settings', label: 'Settings' }
-]
+const TABS = [
+  { id: 'home', label: 'Home', to: '/' },
+  { id: 'codex', label: 'Codex', to: '/codex' },
+  { id: 'settings', label: 'Settings', to: '/settings' }
+] as const satisfies readonly { id: TabId; label: string; to: string }[]
+
+/**
+ * Which tab owns a URL, from its first path segment — the tabs are the roots of
+ * the shell's route subtrees, so `/codex/browse/cards` is still the Codex tab.
+ * Anything unrecognised reads as Home, which is where the router sends it.
+ */
+export function tabForPath(pathname: string): TabId {
+  const segment = pathname.split('/')[1] ?? ''
+  return segment === 'codex' || segment === 'settings' ? segment : 'home'
+}
 
 /**
  * Custom frameless titlebar: a drag region carrying the app mark, the tab nav,
@@ -16,13 +28,7 @@ const TABS: { id: TabId; label: string }[] = [
  * The bar itself is a drag region (-webkit-app-region: drag); every interactive
  * child opts back out with no-drag so clicks aren't swallowed by the drag.
  */
-export function TitleBar({
-  active,
-  onTab
-}: {
-  active: TabId
-  onTab: (id: TabId) => void
-}): JSX.Element {
+export function TitleBar({ active }: { active: TabId }): JSX.Element {
   const maximized = useMaximized()
   const ctl = (a: 'minimize' | 'maximize' | 'close') => (): void =>
     window.spectra?.windowControl(a)
@@ -42,8 +48,16 @@ export function TitleBar({
       </Brand>
 
       <Tabs>
+        {/* The paint comes from `active` (the shell's one reading of the URL);
+            activeOptions only decides which link gets aria-current, and Home
+            has to be exact or it would claim every route beneath '/'. */}
         {TABS.map((t) => (
-          <Tab key={t.id} $active={active === t.id} onClick={() => onTab(t.id)}>
+          <Tab
+            key={t.id}
+            to={t.to}
+            activeOptions={{ exact: t.to === '/' }}
+            $active={active === t.id}
+          >
             {t.label}
           </Tab>
         ))}
@@ -142,9 +156,17 @@ const Right = styled.div`
   gap: 10px;
 `
 
-const Tab = styled.button<{ $active: boolean }>`
+/**
+ * A tab is a real link now — one route each, so middle-click, the back button
+ * and a deep-linked window all behave. The styling is unchanged from the button
+ * it replaces; an anchor's only visual differences here are the UA underline and
+ * link colour, and the colour was already being set. `$active` stays transient
+ * so styled-components keeps it out of the DOM.
+ */
+const TabAnchor = styled.a<{ $active: boolean }>`
   -webkit-app-region: no-drag;
   cursor: pointer;
+  text-decoration: none;
   padding: 7px 18px;
   border-radius: 8px;
   font-family: var(--font-display);
@@ -161,6 +183,9 @@ const Tab = styled.button<{ $active: boolean }>`
     background: ${(p) => (p.$active ? 'var(--brand)' : 'oklch(1 0 0 / 8%)')};
   }
 `
+
+/** The anchor above, taught to navigate the router (and to type-check `to`). */
+const Tab = createLink(TabAnchor)
 
 const Controls = styled.div`
   -webkit-app-region: no-drag;

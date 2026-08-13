@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import styled from 'styled-components'
-import { Navigate, useParams } from 'react-router-dom'
+import { Navigate, useParams } from '@tanstack/react-router'
 import { HomeScene, type SceneGems, type SceneState } from './HomeScene'
 
 /**
@@ -65,9 +65,11 @@ function parseState(variant: string | undefined): SceneState {
 }
 
 export function HomeMock(): JSX.Element {
-  const { variant } = useParams<{ variant: string }>()
+  // Non-strict: this route only exists in a dev build, so it is not in the
+  // router's registered path types.
+  const { variant } = useParams({ strict: false }) as { variant?: string }
   if (variant === 'a' || variant === 'b' || variant === 'c') {
-    return <Navigate to="/mock/home/d" replace />
+    return <Navigate to="/mock/home/$variant" params={{ variant: 'd' }} replace />
   }
   return <MockScene variant={variant} />
 }

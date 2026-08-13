@@ -1,25 +1,126 @@
-import { Routes, Route, Navigate } from 'react-router-dom'
+import {
+  Navigate,
+  Outlet,
+  createHashHistory,
+  createRootRoute,
+  createRoute,
+  createRouter
+} from '@tanstack/react-router'
 import { Shell } from './dashboard/Shell'
+import { Home } from './dashboard/Home'
+import { Settings } from './dashboard/Settings'
+import { CodexHome, CodexLayout } from './codex/CodexLayout'
 import { Sts2Overlay } from './overlays/sts2/Sts2Overlay'
 import { TrackerMock } from './overlays/sts2/TrackerMock'
 import { HomeMock } from './dashboard/HomeMock'
 
 /**
- * One React bundle, two screens, selected by the window's hash route
- * (mirrors the original app):
- *   #/             -> Shell (frameless main window: Home / Debug / Logs tabs)
+ * One React bundle, several screens, selected by the window's hash route
+ * (each BrowserWindow loads the same index.html with a different hash):
+ *   #/             -> Shell > Home
+ *   #/settings     -> Shell > Settings
+ *   #/codex        -> Shell > Codex
  *   #/overlay/sts2 -> Sts2Overlay (transparent, click-through overlay window)
+ *
+ * The tree is code-based on purpose: file-based routing would need a Vite
+ * plugin and a generated route file, and electron-vite's three-config build is
+ * not worth complicating for a tree this small.
  */
-export function App(): JSX.Element {
-  return (
-    <Routes>
-      <Route path="/" element={<Shell />} />
-      <Route path="/overlay/sts2" element={<Sts2Overlay />} />
-      {/* Design harness for the deck tracker: dev server only, never shipped. */}
-      {import.meta.env.DEV ? <Route path="/mock/tracker" element={<TrackerMock />} /> : null}
-      {/* Home scene harness with canned states: dev server only, never shipped. */}
-      {import.meta.env.DEV ? <Route path="/mock/home/:variant" element={<HomeMock />} /> : null}
-      <Route path="*" element={<Navigate to="/" replace />} />
-    </Routes>
-  )
+
+const rootRoute = createRootRoute({
+  component: Outlet,
+  // Any unknown hash (a stale deep link, a typo in a loadURL) lands on Home
+  // rather than a blank window — a frameless window with nothing in it looks
+  // exactly like a crash.
+  notFoundComponent: () => <Navigate to="/" replace />
+})
+
+/**
+ * The dashboard chrome. Pathless (an `id`, not a `path`) so the overlay window's
+ * route can sit beside it at the top level: a parent with path '/' would want to
+ * claim every URL below it, and the overlay must render with no titlebar at all.
+ */
+const shellRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  id: 'shell',
+  component: Shell
+})
+
+const indexRoute = createRoute({
+  getParentRoute: () => shellRoute,
+  path: '/',
+  component: Home
+})
+
+const settingsRoute = createRoute({
+  getParentRoute: () => shellRoute,
+  path: '/settings',
+  component: Settings
+})
+
+const codexRoute = createRoute({
+  getParentRoute: () => shellRoute,
+  path: '/codex',
+  component: CodexLayout
+})
+
+const codexIndexRoute = createRoute({
+  getParentRoute: () => codexRoute,
+  path: '/',
+  component: CodexHome
+})
+
+const overlayRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/overlay/sts2',
+  component: Sts2Overlay
+})
+
+/**
+ * The design harnesses: the deck tracker's (#/mock/tracker) and the Home
+ * scene's (#/mock/home/d). Dev server only, never shipped.
+ *
+ * The router has no conditional route registration, so these are gated the way
+ * the old element tree gated them — by not being in the tree at all in a
+ * production build. The routes are *built* inside the branch too, because
+ * `import.meta.env.DEV` is statically replaced: the whole branch, and with it
+ * the only references to the harness components, drops out of a prod bundle.
+ */
+const devRoutes = import.meta.env.DEV
+  ? [
+      createRoute({
+        getParentRoute: () => rootRoute,
+        path: '/mock/tracker',
+        component: TrackerMock
+      }),
+      createRoute({
+        getParentRoute: () => rootRoute,
+        path: '/mock/home/$variant',
+        component: HomeMock
+      })
+    ]
+  : []
+
+const routeTree = rootRoute.addChildren([
+  shellRoute.addChildren([indexRoute, settingsRoute, codexRoute.addChildren([codexIndexRoute])]),
+  overlayRoute,
+  ...devRoutes
+])
+
+/**
+ * Hash history, not browser history: production loads the renderer over
+ * `file://`, where a path-based history has nothing to push onto.
+ */
+export const router = createRouter({
+  routeTree,
+  history: createHashHistory(),
+  // Nothing here is fetched on navigation yet, and the windows are small enough
+  // that hover-preloading would only add work.
+  defaultPreload: false
+})
+
+declare module '@tanstack/react-router' {
+  interface Register {
+    router: typeof router
+  }
 }

@@ -1,37 +1,60 @@
-import { useState } from 'react'
+import { useEffect, useRef } from 'react'
+import { Outlet, useRouterState } from '@tanstack/react-router'
 import styled from 'styled-components'
-import { TitleBar, type TabId } from './TitleBar'
-import { Home } from './Home'
-import { Settings } from './Settings'
+import { TitleBar, tabForPath, type TabId } from './TitleBar'
 import { ErrorBoundary, reportEvent } from '../telemetry'
 
 /**
- * Dashboard shell (#/). The window is frameless + opaque, so Windows 11 draws the
- * native drop shadow and rounded corners; this just paints the surface (a custom
- * titlebar with drag + window controls + tabs above the active tab's content).
- * No CSS shadow/padding/rounding — the OS handles all of that.
+ * Dashboard shell (#/, #/codex, #/settings). The window is frameless + opaque,
+ * so Windows 11 draws the native drop shadow and rounded corners; this just
+ * paints the surface (a custom titlebar with drag + window controls + tabs above
+ * the active route's content). No CSS shadow/padding/rounding — the OS handles
+ * all of that.
+ *
+ * Which tab is showing is the URL's business now, not local state: the tab is
+ * simply the first path segment, so a route deep inside Codex still lights the
+ * Codex tab, and every nested view the compendium grows is linkable.
  */
 export function Shell(): JSX.Element {
-  const [tab, setTab] = useState<TabId>('home')
-
-  const selectTab = (next: TabId): void => {
-    setTab(next)
-    reportEvent('tab_viewed', { tab: next })
-  }
+  const tab = useRouterState({ select: (s) => tabForPath(s.location.pathname) })
+  useTabViewed(tab)
 
   return (
     <Frame className="dashboard">
-      <TitleBar active={tab} onTab={selectTab} />
+      <TitleBar active={tab} />
       <Content>
         {/* Per-tab isolation: a crash in Debug's JSON viewer must not take the
-            Logs tab with it, since Logs is where a user goes to describe it. */}
-        <ErrorBoundary name={`tab:${tab}`} fallback={<TabCrashed />}>
-          {tab === 'home' && <Home />}
-          {tab === 'settings' && <Settings />}
+            Logs tab with it, since Logs is where a user goes to describe it.
+            Keyed by tab so switching tabs remounts the boundary and a crashed
+            tab gets a clean try. */}
+        <ErrorBoundary key={tab} name={`tab:${tab}`} fallback={<TabCrashed />}>
+          <Outlet />
         </ErrorBoundary>
       </Content>
     </Frame>
   )
+}
+
+/**
+ * `tab_viewed`, once per arrival at a tab.
+ *
+ * The event used to hang off the tab button's click handler; now that the tabs
+ * are links it hangs off the tab actually changing, so it still fires exactly
+ * once per navigation and never on a re-render. The tab the window opens on is
+ * deliberately not reported — that was never a view the user chose, and counting
+ * it would put a `tab_viewed` under every launch.
+ */
+function useTabViewed(tab: TabId): void {
+  const seen = useRef<TabId | null>(null)
+  useEffect(() => {
+    if (seen.current === null) {
+      seen.current = tab
+      return
+    }
+    if (seen.current === tab) return
+    seen.current = tab
+    reportEvent('tab_viewed', { tab })
+  }, [tab])
 }
 
 function TabCrashed(): JSX.Element {

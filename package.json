@@ -81,8 +81,8 @@
     ]
   },
   "dependencies": {
+    "@tanstack/react-router": "^1.170.27",
     "posthog-node": "^5.47.10",
-    "react-router-dom": "^6.28.0",
     "styled-components": "^5.3.11"
   },
   "optionalDependencies": {
