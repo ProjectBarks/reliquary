@@ -19,6 +19,7 @@ import {
   SectionHead,
   SectionNote,
   SectionTitle,
+  Select,
   Spinner,
   Switch
 } from './ui'
@@ -138,16 +139,6 @@ export function Settings(): JSX.Element {
         ]
   const picked = selected ?? current
   const isUpgrade = upd?.latest != null && picked === upd.latest
-
-  const [railExpanded, setRailExpanded] = useState(false)
-  // Four tokens covers "the new one, mine, and a couple back" on one line;
-  // the rest sit behind an "older" token. The current and armed versions
-  // always stay visible, even when they fall outside the newest four.
-  const shownVersions = railExpanded
-    ? versions
-    : versions.filter(
-        (v, i) => i < 4 || v.version === current || v.version === picked
-      )
 
   const copyReport = async (): Promise<void> => {
     const report = [
@@ -290,44 +281,10 @@ export function Settings(): JSX.Element {
         <Panel>
           <Row>
             <RowMain>
-              {/* With no rail (dev build, no release list yet) the label must
-                  carry the number itself. */}
+              {/* With no release list (dev build) the label carries the number;
+                  otherwise the dropdown beside the buttons does. No prose —
+                  the picker plus one confirm button is the whole story. */}
               <RowLabel>Version{versions.length > 1 ? '' : ` ${current}`}</RowLabel>
-              {/* Every version is a token you can see and press — no dropdown
-                  to open, no hidden list. Arming one only changes the copy and
-                  the buttons; nothing happens until it is confirmed. */}
-              {versions.length > 1 ? (
-                <VersionRail role="radiogroup" aria-label="Choose a version">
-                  {shownVersions.map((v) => (
-                    <VersionChip
-                      key={v.version}
-                      role="radio"
-                      aria-checked={v.version === picked}
-                      $current={v.version === current}
-                      $armed={
-                        (v.version === picked && picked !== current) ||
-                        v.version === upd?.target
-                      }
-                      disabled={busy || upd?.status === 'ready'}
-                      onClick={() =>
-                        setSelected(v.version === current ? null : v.version)
-                      }
-                    >
-                      {v.version}
-                      {v.version === current ? (
-                        <ChipTag>current</ChipTag>
-                      ) : v.version === upd?.latest ? (
-                        <ChipTag $new>new</ChipTag>
-                      ) : null}
-                    </VersionChip>
-                  ))}
-                  {!railExpanded && versions.length > shownVersions.length ? (
-                    <MoreChip onClick={() => setRailExpanded(true)}>
-                      {versions.length - shownVersions.length} older
-                    </MoreChip>
-                  ) : null}
-                </VersionRail>
-              ) : null}
               {downloading ? (
                 <Track
                   role="progressbar"
@@ -341,6 +298,27 @@ export function Settings(): JSX.Element {
               {upd?.error ? <Mono className="err">{upd.error}</Mono> : null}
             </RowMain>
             <RowAside>
+              {versions.length > 1 ? (
+                <Select
+                  aria-label="Choose a version"
+                  value={picked}
+                  disabled={downloading || upd?.status === 'ready'}
+                  onChange={(e) =>
+                    setSelected(e.target.value === current ? null : e.target.value)
+                  }
+                >
+                  {versions.map((v) => (
+                    <option key={v.version} value={v.version}>
+                      {v.version}
+                      {v.version === current
+                        ? ' — current'
+                        : v.version === upd?.latest
+                          ? ' — newest'
+                          : ''}
+                    </option>
+                  ))}
+                </Select>
+              ) : null}
               {upd?.status === 'ready' ? (
                 <>
                   <Button $primary onClick={() => window.spectra?.updateAction({ action: 'install' })}>
@@ -543,104 +521,6 @@ const Wrap = styled.div`
  * and compared against the last one you read; a bar is understood at a glance,
  * which is all this needs since nothing is blocked on it finishing.
  */
-/** The version rail: every installable version inline, current marked. */
-const VersionRail = styled.div`
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 7px;
-  margin: 9px 0 2px;
-`
-
-const VersionChip = styled.button<{ $current: boolean; $armed: boolean }>`
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  /* Every control in this row — chip, older-token, action button — is
-     exactly 34px tall, so the rail and its buttons read as one system. */
-  height: 34px;
-  cursor: ${(p) => (p.$current ? 'default' : 'pointer')};
-  font-family: var(--font-display);
-  font-size: 13.5px;
-  letter-spacing: 0.02em;
-  padding: 0 13px;
-  border-radius: 8px;
-  color: ${(p) => (p.$armed ? '#1b1512' : p.$current ? 'var(--ink)' : 'var(--ink-dim)')};
-  background: ${(p) =>
-    p.$armed
-      ? 'var(--brand-soft)'
-      : p.$current
-        ? 'oklch(1 0 0 / 9%)'
-        : 'oklch(1 0 0 / 4%)'};
-  border: 1px solid
-    ${(p) =>
-      p.$armed
-        ? 'var(--brand)'
-        : p.$current
-          ? 'var(--line-strong)'
-          : 'var(--line)'};
-  box-shadow: ${(p) => (p.$armed ? '3px 3px 0 oklch(0 0 0 / 30%)' : '2px 2px 0 oklch(0 0 0 / 18%)')};
-  /* The armed token sits lifted — the same "picked up" read as a card in
-     hand. Dashboard motion keeps the app's shared ease; the overshoot spring
-     belongs to the in-game tracker alone. */
-  transform: ${(p) => (p.$armed ? 'translateY(-2px)' : 'none')};
-  transition:
-    background 130ms ease,
-    color 130ms ease,
-    border-color 130ms ease,
-    box-shadow 130ms ease,
-    transform 200ms cubic-bezier(0.16, 1, 0.3, 1);
-  &:hover:not(:disabled) {
-    color: ${(p) => (p.$armed ? '#1b1512' : 'var(--ink)')};
-    border-color: ${(p) => (p.$armed ? 'var(--brand)' : 'var(--line-strong)')};
-    transform: translateY(${(p) => (p.$armed ? '-2px' : '-1px')});
-  }
-  @media (prefers-reduced-motion: reduce) {
-    transform: none;
-    transition: none;
-  }
-  &:disabled {
-    opacity: 0.5;
-    cursor: default;
-  }
-  &:focus-visible {
-    outline: 2px solid var(--brand);
-    outline-offset: 2px;
-  }
-`
-
-const ChipTag = styled.span<{ $new?: boolean }>`
-  font-family: var(--font-body);
-  font-size: 9.5px;
-  font-weight: 700;
-  letter-spacing: 0.1em;
-  text-transform: uppercase;
-  color: ${(p) => (p.$new ? 'var(--brand)' : 'var(--ink-faint)')};
-`
-
-const MoreChip = styled.button`
-  display: inline-flex;
-  align-items: center;
-  height: 34px;
-  cursor: pointer;
-  font-family: var(--font-body);
-  font-size: 11.5px;
-  color: var(--ink-faint);
-  background: none;
-  border: 1px dashed var(--line-strong);
-  border-radius: 8px;
-  padding: 0 13px;
-  transition: color 130ms ease, border-color 130ms ease;
-  &:hover {
-    color: var(--ink);
-    border-color: var(--ink-faint);
-  }
-  &:focus-visible {
-    outline: 2px solid var(--brand);
-    outline-offset: 2px;
-  }
-`
-
 const Track = styled.div`
   margin-top: 8px;
   height: 4px;

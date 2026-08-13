@@ -71,8 +71,10 @@ const base = `
 const Pill = styled.div`
   ${base}
   color: oklch(1 0 0 / 55%);
-  background: oklch(1 0 0 / 6%);
-  border: 1px solid oklch(1 0 0 / 8%);
+  /* The scene's caption material — violet glass — so the pill reads as a
+     shard of the Home world resting in the chrome. */
+  background: color-mix(in oklch, var(--panel-veil) 80%, transparent);
+  border: 1px solid oklch(1 0 0 / 10%);
 `
 
 const Dot = styled.span`
@@ -87,17 +89,19 @@ const Ready = styled.button`
   ${base}
   cursor: pointer;
   color: var(--sts-color-cream);
-  background: color-mix(in oklch, var(--brand) 22%, transparent);
-  border: 1px solid color-mix(in oklch, var(--brand) 45%, transparent);
+  /* Ready is an invitation: the same violet glass, trimmed in the scene's
+     gold rather than shouting in brand purple. */
+  background: color-mix(in oklch, var(--panel-veil) 85%, transparent);
+  border: 1px solid var(--trim-gold);
   transition: background 120ms ease;
 
   &:hover {
-    background: color-mix(in oklch, var(--brand) 34%, transparent);
+    background: color-mix(in oklch, var(--sts-color-gold) 16%, transparent);
   }
 
   em {
     font-style: normal;
     font-weight: 600;
-    color: var(--brand);
+    color: var(--sts-color-gold);
   }
 `

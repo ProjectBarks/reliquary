@@ -69,7 +69,15 @@ const Frame = styled.div`
   display: flex;
   flex-direction: column;
   overflow: hidden;
-  background: radial-gradient(120% 120% at 50% 0%, #2a2622 0%, #171512 62%, #100e0c 100%);
+  /* The Home scene's sky, hushed: night into indigo-violet with a breath of
+     ember warmth low down, so tab chrome and pages share one world. */
+  background:
+    radial-gradient(
+      90% 50% at 50% 118%,
+      color-mix(in oklch, var(--scene-ember) 22%, transparent) 0%,
+      transparent 62%
+    ),
+    linear-gradient(to bottom, var(--scene-night) 0%, var(--scene-indigo) 52%, var(--scene-violet) 100%);
   color: var(--sts-color-cream);
 `
 

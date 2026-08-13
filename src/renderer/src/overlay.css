@@ -65,6 +65,31 @@
   --fill: oklch(1 0 0 / 5%);
   --fill-hover: oklch(1 0 0 / 9%);
 
+  /* ── The Reliquary scene vocabulary ─────────────────────────────────────
+     Home's painted world (night sky burning down into a sunset horizon around
+     one dark spire) is the app's identity; every other surface borrows from
+     this ramp so no screen feels like a different program. Sky stops are the
+     exact gradient of the Home scene, top to horizon. */
+  --scene-night: #07071a;
+  --scene-indigo: #131233;
+  --scene-violet: #2a1c44;
+  --scene-dusk: #553052;
+  --scene-rose: #94484a;
+  --scene-ember: #d97a4a;
+  --scene-ground: #120a1a;
+
+  /* Status gem tones: the four relic gems orbiting the spire crown, reused by
+     every smaller health indicator in the app. */
+  --gem-ok: var(--sts-color-green);
+  --gem-wait: var(--sts-color-gold);
+  --gem-bad: var(--sts-color-red);
+  --gem-off: #8b8b9a;
+
+  /* Scene material: dark violet glass with a gold trim, the panel language of
+     the scene's captions and any chrome that floats over it. */
+  --panel-veil: oklch(0.14 0.02 300 / 82%);
+  --trim-gold: color-mix(in oklch, var(--sts-color-gold) 40%, transparent);
+
   /* Type stack, named once.
      Montserrat is the incumbent body face, carried over from the original
      companion so the dashboard and the in-game overlays speak with one voice.

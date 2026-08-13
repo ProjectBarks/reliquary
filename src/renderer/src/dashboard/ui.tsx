@@ -174,7 +174,14 @@ export const Mono = styled.div`
   }
 `
 
-/** A state dot plus label, for inline health readouts. */
+const pipTone = (t: 'ok' | 'warn' | 'bad' | 'idle'): string =>
+  t === 'ok' ? 'var(--gem-ok)' : t === 'warn' ? 'var(--gem-wait)' : t === 'bad' ? 'var(--gem-bad)' : 'var(--gem-off)'
+
+/**
+ * A state gem plus label, for inline health readouts. The mark is a small
+ * faceted relic gem — the same stones that orbit the spire on Home, held
+ * still — so health reads in one vocabulary everywhere in the app.
+ */
 export const Pip = styled.span<{ $tone: 'ok' | 'warn' | 'bad' | 'idle' }>`
   display: inline-flex;
   align-items: center;
@@ -184,24 +191,18 @@ export const Pip = styled.span<{ $tone: 'ok' | 'warn' | 'bad' | 'idle' }>`
   white-space: nowrap;
   &::before {
     content: '';
-    width: 8px;
-    height: 8px;
-    border-radius: 50%;
+    width: 10px;
+    height: 13px;
     flex: 0 0 auto;
-    background: ${(p) =>
-      p.$tone === 'ok'
-        ? 'var(--sts-color-green)'
-        : p.$tone === 'warn'
-          ? 'var(--sts-color-orange)'
-          : p.$tone === 'bad'
-            ? 'var(--sts-color-red)'
-            : 'var(--ink-faint)'};
-    box-shadow: ${(p) =>
-      p.$tone === 'ok'
-        ? '0 0 8px var(--sts-color-green)'
-        : p.$tone === 'warn'
-          ? '0 0 8px var(--sts-color-orange)'
-          : 'none'};
+    /* Elongated hexagonal cut, lit from the upper left like the scene gems. */
+    clip-path: polygon(50% 0%, 92% 27%, 76% 78%, 50% 100%, 24% 78%, 8% 27%);
+    background:
+      linear-gradient(155deg, oklch(1 0 0 / 85%) 0%, transparent 34%),
+      linear-gradient(335deg, oklch(0 0 0 / 45%) 8%, transparent 46%),
+      ${(p) => pipTone(p.$tone)};
+    filter: ${(p) =>
+      p.$tone === 'idle' ? 'none' : `drop-shadow(0 0 5px ${pipTone(p.$tone)})`};
+    opacity: ${(p) => (p.$tone === 'idle' ? 0.6 : 1)};
   }
 `
 
@@ -240,6 +241,51 @@ export const Button = styled.button<{ $primary?: boolean }>`
   &:disabled {
     opacity: 0.45;
     cursor: default;
+  }
+`
+
+/**
+ * Native select dressed as the shared Button — same 34px height, padding,
+ * border, radius and type — so a picker can sit inline beside action buttons
+ * and read as one row of controls. The option list is explicitly dark so the
+ * UA dropdown stays legible against the app's night surfaces.
+ */
+export const Select = styled.select`
+  cursor: pointer;
+  height: 34px;
+  padding: 0 30px 0 13px;
+  border-radius: 8px;
+  font-size: 13px;
+  font-weight: 600;
+  font-family: inherit;
+  color: var(--ink);
+  background-color: var(--fill);
+  border: 1px solid var(--line-strong);
+  appearance: none;
+  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6'><path d='M1 1l4 4 4-4' fill='none' stroke='%23fff6e2' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round'/></svg>");
+  background-repeat: no-repeat;
+  background-position: right 11px center;
+  transition:
+    background-color 0.14s ease,
+    border-color 0.14s ease;
+
+  &:hover:not(:disabled) {
+    background-color: var(--fill-hover);
+    border-color: oklch(1 0 0 / 24%);
+  }
+  &:focus-visible {
+    outline: 2px solid var(--brand);
+    outline-offset: 2px;
+  }
+  &:disabled {
+    opacity: 0.45;
+    cursor: default;
+  }
+
+  option {
+    font-weight: 400;
+    color: var(--ink);
+    background: #1d1a2e;
   }
 `
 
