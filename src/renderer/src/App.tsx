@@ -17,8 +17,8 @@ export function App(): JSX.Element {
       <Route path="/overlay/sts2" element={<Sts2Overlay />} />
       {/* Design harness for the deck tracker: dev server only, never shipped. */}
       {import.meta.env.DEV ? <Route path="/mock/tracker" element={<TrackerMock />} /> : null}
-      {/* TEMP: unfenced while Home variants are being chosen; fence with DEV after. */}
-      <Route path="/mock/home/:variant" element={<HomeMock />} />
+      {/* Home scene harness with canned states: dev server only, never shipped. */}
+      {import.meta.env.DEV ? <Route path="/mock/home/:variant" element={<HomeMock />} /> : null}
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>
   )
