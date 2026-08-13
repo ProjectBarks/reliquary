@@ -216,8 +216,12 @@ export function Detail({
             </QuietLink>
             <QuietLink
               type="button"
-              title="Opens spire-codex.com, the source of every number on this page"
-              onClick={() => window.spectra?.openExternal('https://spire-codex.com')}
+              title="Opens this entity's page on spire-codex.com, the source of every number here"
+              onClick={() =>
+                window.spectra?.openExternal(
+                  `https://spire-codex.com/${kind}/${entry.id.toLowerCase()}`
+                )
+              }
             >
               View on spire-codex.com ↗
             </QuietLink>

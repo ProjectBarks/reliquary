@@ -361,8 +361,21 @@ function wireIpc(): void {
     // and "view the source" has to be a real link, not a footnote.
     'https://spire-codex.com'
   ])
+  /**
+   * The codex tab deep-links every entity's page (/cards/{id}, /relics/{id},
+   * /potions/{id}) — 900+ exact Set entries would just restate "same origin",
+   * so spire-codex.com is allowed by origin instead. Parsed, not prefix-matched:
+   * "https://spire-codex.com.evil.tld/…" must not pass.
+   */
+  const isSpireCodexLink = (url: string): boolean => {
+    try {
+      return new URL(url).origin === 'https://spire-codex.com'
+    } catch {
+      return false
+    }
+  }
   on(IPC.OpenExternal, (_e, url: string) => {
-    if (EXTERNAL_LINKS.has(url)) void shell.openExternal(url)
+    if (EXTERNAL_LINKS.has(url) || isSpireCodexLink(url)) void shell.openExternal(url)
   })
 }
 
