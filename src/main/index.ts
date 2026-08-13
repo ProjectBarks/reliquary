@@ -398,6 +398,20 @@ async function captureScreens(dir: string): Promise<void> {
   await delay(2800) // let webfonts, stub data, and intro animations settle
   mkdirSync(dir, { recursive: true })
   writeFileSync(join(dir, 'dashboard.png'), (await dash.webContents.capturePage()).toPNG())
+  // Optional route walk: SPECTRA_CAPTURE_ROUTES="/codex/browse/cards,/codex/meta/tiers"
+  // captures the dashboard at each hash route (filename derived from the route).
+  // Exists for verifying multi-view features (the codex tab) without hand-driving
+  // the window; harmless when unset.
+  const routes = (process.env['SPECTRA_CAPTURE_ROUTES'] ?? '')
+    .split(',')
+    .map((r) => r.trim())
+    .filter(Boolean)
+  for (const route of routes) {
+    await dash.webContents.executeJavaScript(`window.location.hash = ${JSON.stringify(route)}`)
+    await delay(2200) // route render + remote art
+    const name = route.replace(/^[#/]+/, '').replace(/[^a-z0-9]+/gi, '-').replace(/-+$/, '')
+    writeFileSync(join(dir, `dash-${name || 'root'}.png`), (await dash.webContents.capturePage()).toPNG())
+  }
   await ov.webContents.insertCSS(
     '.sts2-overlay{background:radial-gradient(120% 90% at 50% 0%,#241a33,#140f1c 60%,#0c0910)}'
   )
