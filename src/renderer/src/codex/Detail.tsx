@@ -342,12 +342,35 @@ function KindChips({ entry }: { entry: LibraryEntry }): JSX.Element {
 }
 
 /**
+ * The API's upgrade deltas are machine keys, not copy: numeric tweaks arrive as
+ * `{damage: "+3"}` but flags arrive as `{remove_ethereal: 1}` and bookkeeping
+ * as `{description_changed: 1}`. Rendered raw, a chip reads "remove_ethereal 1"
+ * — so each key is translated: flags become verbs, bookkeeping disappears
+ * (the upgraded text beside it already IS the changed description), and
+ * everything else becomes "Word Word +3".
+ */
+function humanizeUpgradeDelta(name: string, delta: string | number): string | null {
+  const words = (s: string): string =>
+    s
+      .replace(/[_-]+/g, ' ')
+      .trim()
+      .replace(/\b\w/g, (c) => c.toUpperCase())
+  if (name === 'description_changed') return null
+  const flag = /^(add|remove)_(.+)$/.exec(name)
+  if (flag) return `${flag[1] === 'add' ? 'Gains' : 'Loses'} ${words(flag[2])}`
+  const amount = typeof delta === 'number' && delta > 0 ? `+${delta}` : String(delta)
+  return `${words(name)} ${amount}`.trim()
+}
+
+/**
  * The upgrade, stated twice on purpose: the whole upgraded text (because that
  * is what the card will read) and the raw deltas as green chips (because that
  * is the question — "what does + actually give me").
  */
 function UpgradeBlock({ card }: { card: CodexCard }): JSX.Element | null {
   const deltas = Object.entries(card.upgrade ?? {})
+    .map(([name, delta]) => humanizeUpgradeDelta(name, delta))
+    .filter((label): label is string => label !== null)
   if (!card.upgrade_description && !deltas.length) return null
   return (
     <Upgrade>
@@ -355,9 +378,9 @@ function UpgradeBlock({ card }: { card: CodexCard }): JSX.Element | null {
       {card.upgrade_description ? <RichText text={card.upgrade_description} /> : null}
       {deltas.length ? (
         <ChipRow>
-          {deltas.map(([name, delta]) => (
-            <Chip key={name} $tone="var(--sts-color-green)">
-              {name} {delta}
+          {deltas.map((label) => (
+            <Chip key={label} $tone="var(--sts-color-green)">
+              {label}
             </Chip>
           ))}
         </ChipRow>
