@@ -98,9 +98,13 @@ export class ReaderHost {
    * an archive, but a fork target is the wrong thing to gamble on for every
    * install — so the bundle is also unpacked, and the real on-disk copy wins
    * when it exists. Falls back to the asar path either way.
+   *
+   * `.mjs`, not `.js`: the unpacked directory carries no package.json, so a
+   * .js file there is parsed as CommonJS and the ESM bundle dies at startup.
+   * The extension keeps the module type self-evident wherever the file lands.
    */
   private modulePath(): string {
-    const inAsar = join(__dirname, 'reader.js')
+    const inAsar = join(__dirname, 'reader.mjs')
     if (!app.isPackaged) return inAsar
     const unpacked = inAsar.replace(`app.asar${sep}`, `app.asar.unpacked${sep}`)
     return existsSync(unpacked) ? unpacked : inAsar

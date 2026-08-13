@@ -28,6 +28,17 @@ import {
   type WindowAction
 } from '@shared/types'
 
+// A GUI app's stdout can die under it (launched from a script or console that
+// exits, output redirected to a closed pipe). Every console.log then raises
+// EPIPE, which the uncaught-exception reporter would file as a fatal issue —
+// hundreds per minute, drowning real reports. Dead stdout is not an error for
+// this app; the Logs tab and telemetry are the surfaces that matter.
+for (const stream of [process.stdout, process.stderr]) {
+  stream?.on('error', (err: NodeJS.ErrnoException) => {
+    if (err?.code !== 'EPIPE') throw err
+  })
+}
+
 // Catch stray throws/rejections so one bad callback can't silently kill the app,
 // and report them. Routed through console.* so the in-app Logs tab sees them too.
 installProcessTelemetry()

@@ -67,7 +67,14 @@ export default defineConfig({
         },
         // native/optional deps must stay external (not bundled)
         external: ['node-window-manager'],
-        output: { entryFileNames: '[name].js' }
+        // The reader is forked from app.asar.unpacked, where no package.json
+        // sits beside it to declare "type": "module" — a .js extension there
+        // makes Node parse the ESM bundle as CommonJS and the child dies at
+        // startup (the v0.5.0 packaged-only crash). `.mjs` states the module
+        // type in the filename, independent of any package.json.
+        output: {
+          entryFileNames: (chunk) => (chunk.name === 'reader' ? '[name].mjs' : '[name].js')
+        }
       }
     },
     resolve: {
