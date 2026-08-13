@@ -65,8 +65,6 @@ export default defineConfig({
           index: resolve('src/main/index.ts'),
           reader: resolve('src/main/scry/readerProcess.ts')
         },
-        // native/optional deps must stay external (not bundled)
-        external: ['node-window-manager'],
         // The reader is forked from app.asar.unpacked, where no package.json
         // sits beside it to declare "type": "module" — a .js extension there
         // makes Node parse the ESM bundle as CommonJS and the child dies at

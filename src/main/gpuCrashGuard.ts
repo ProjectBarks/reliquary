@@ -121,11 +121,13 @@ export function installGpuCrashGuard(nowMs: () => number = Date.now): void {
   })
 
   // Survived long enough → decay the counter so occasional, spread-out crashes
-  // don't eventually trip the HWA-disable.
-  setTimeout(() => {
+  // don't eventually trip the HWA-disable. Unref'd: this is bookkeeping, and a
+  // pending write must never be the reason the process is still alive.
+  const decay = setTimeout(() => {
     const s = readState()
     if (s.crashes > 0 && nowMs() - s.updatedAt > DECAY_MS - 5_000) {
       writeState({ disableHwa: s.disableHwa, crashes: 0, updatedAt: nowMs() })
     }
   }, DECAY_MS)
+  decay.unref?.()
 }

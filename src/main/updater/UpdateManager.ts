@@ -61,6 +61,7 @@ export class UpdateManager {
     error: null
   }
   private timer: NodeJS.Timeout | null = null
+  private firstCheck: NodeJS.Timeout | null = null
   private started = false
   private abort: AbortController | null = null
   /** Path of a fully downloaded, verified installer awaiting the user. */
@@ -89,13 +90,18 @@ export class UpdateManager {
       return
     }
 
-    setTimeout(() => void this.check(), FIRST_CHECK_DELAY_MS).unref?.()
+    // Held rather than fire-and-forget: an unstored timer cannot be cancelled,
+    // so stop() could not prevent a check firing after teardown.
+    this.firstCheck = setTimeout(() => void this.check(), FIRST_CHECK_DELAY_MS)
+    this.firstCheck.unref?.()
     this.timer = setInterval(() => void this.check(), CHECK_INTERVAL_MS)
     this.timer.unref?.()
   }
 
   stop(): void {
+    if (this.firstCheck) clearTimeout(this.firstCheck)
     if (this.timer) clearInterval(this.timer)
+    this.firstCheck = null
     this.timer = null
     this.abort?.abort()
   }

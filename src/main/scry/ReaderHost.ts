@@ -164,7 +164,11 @@ export class ReaderHost {
         }
       })
 
-      child.on('exit', (code) => {
+      child.on('exit', (rawCode) => {
+        // A force-killed utility process reports its code unsigned, so a plain
+        // -1 arrives as 18446744073709552000 and lands in the logs and in
+        // telemetry as noise no one can interpret.
+        const code = rawCode > 0x7fffffff ? -1 : rawCode
         const uptime = Date.now() - this.startedAt
         this.child = null
         if (this.stopping) return
@@ -175,7 +179,9 @@ export class ReaderHost {
           uptime_ms: uptime,
           restarts: this.restarts
         })
-        console.warn(`[reader] process exited (code ${code}) after ${Math.round(uptime / 1000)}s`)
+        console.warn(
+          `[reader] process exited (${code === -1 ? 'killed' : `code ${code}`}) after ${Math.round(uptime / 1000)}s`
+        )
         this.scheduleRestart(uptime)
       })
 
