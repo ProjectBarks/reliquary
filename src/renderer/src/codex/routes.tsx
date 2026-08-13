@@ -120,9 +120,18 @@ function CodexIndex(): JSX.Element {
  * an error, because there is a perfectly good screen to show and no reason to
  * make the reader's mistake their problem.
  */
-function Browse(): JSX.Element {
+function Browse(): JSX.Element | null {
   const pathname = useRouterState({ select: (s) => s.location.pathname })
   const segments = pathname.split('/').filter(Boolean)
+
+  // The router state updates BEFORE this component unmounts, so during any
+  // navigation away (to /codex/meta, to a /mock harness) Browse re-renders
+  // once with the destination's pathname. Treating that render's segments[2]
+  // as "an unknown kind" fired the typo-fallback redirect below and hijacked
+  // the navigation back to cards. If the path isn't ours, the next match owns
+  // the screen — render nothing and let the transition finish.
+  if (segments[0] !== 'codex' || segments[1] !== 'browse') return null
+
   const kind = segments[2]
   const id = segments[3] ? safeDecode(segments[3]) : undefined
 
