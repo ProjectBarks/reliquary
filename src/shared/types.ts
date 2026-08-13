@@ -9,6 +9,21 @@
  * the overlays can be exercised without the game running.
  */
 
+/**
+ * The spire-codex compendium model lives in its own file — it is a large,
+ * self-contained third-party schema and mixing it in here would bury the StS2
+ * domain. It is re-exported so `@shared/types` stays the single import every
+ * surface reaches for.
+ */
+export * from './codex'
+import type {
+  CatalogPayload,
+  CodexCatalogKind,
+  CodexPushMessage,
+  MetricsPayload,
+  MetricsQuery
+} from './codex'
+
 /** Screen-space rectangle the overlay is pinned to. */
 export interface WindowBounds {
   x: number
@@ -304,7 +319,19 @@ export const IPC = {
   /** renderer -> main: check for an update now, or install a downloaded one */
   UpdateAction: 'spectra:update-action',
   /** renderer -> main: open an allow-listed external link in the default browser */
-  OpenExternal: 'spectra:open-external'
+  OpenExternal: 'spectra:open-external',
+  // ── Codex compendium (invoke/response, unlike everything above) ──
+  // These four are request/reply rather than fire-and-forget because the
+  // renderer needs the *answer*, not a later broadcast: a table that cannot say
+  // "still loading" versus "there is no data" is a table that lies while empty.
+  /** renderer -> main: `(kind) => CatalogPayload` — one whole catalog list */
+  CodexCatalog: 'spectra:codex-catalog',
+  /** renderer -> main: `({kind, bracket, character}) => MetricsPayload` */
+  CodexMetrics: 'spectra:codex-metrics',
+  /** renderer -> main: `(kind) => void` — force a revalidation now */
+  CodexRefresh: 'spectra:codex-refresh',
+  /** main -> renderer: a background revalidation landed ({ key, value }) */
+  CodexPush: 'spectra:codex-push'
 } as const
 
 /** One installable release, as listed on GitHub. */
@@ -398,4 +425,17 @@ export interface SpectraApi {
   windowControl(action: WindowAction): void
   /** Open an external link in the default browser. Main only honours allow-listed URLs. */
   openExternal(url: string): void
+
+  // ── Codex compendium ──
+  /**
+   * One catalog list. Resolves to cached data (possibly `stale`) or `{error}` —
+   * it never rejects, so callers render a state instead of catching one.
+   */
+  codexCatalog<K extends CodexCatalogKind>(kind: K): Promise<CatalogPayload<K>>
+  /** One metrics table for a kind × bracket × character slice. */
+  codexMetrics(query: MetricsQuery): Promise<MetricsPayload>
+  /** Force a catalog revalidation; the fresh copy arrives via `onCodexPush`. */
+  codexRefresh(kind: CodexCatalogKind): Promise<void>
+  /** main -> renderer: a revalidation landed. Returns unsubscribe. */
+  onCodexPush(cb: (message: CodexPushMessage) => void): () => void
 }

@@ -1,7 +1,12 @@
 import { contextBridge, ipcRenderer } from 'electron'
 import {
   IPC,
+  type CatalogPayload,
+  type CodexCatalogKind,
+  type CodexPushMessage,
   type DiagnosticsState,
+  type MetricsPayload,
+  type MetricsQuery,
   type KeyedSnapshot,
   type LogLine,
   type RendererTelemetryEvent,
@@ -71,6 +76,28 @@ const api: SpectraApi = {
 
   openExternal(url: string): void {
     ipcRenderer.send(IPC.OpenExternal, url)
+  },
+
+  // The codex channels are the only invoke/response pair in this bridge. Main
+  // resolves them with `{data,…}` or `{error}` and never rejects, so there is
+  // deliberately no try/catch here to flatten a rejection into — a throw
+  // escaping these would mean a bug in main, and swallowing it would hide it.
+  codexCatalog<K extends CodexCatalogKind>(kind: K): Promise<CatalogPayload<K>> {
+    return ipcRenderer.invoke(IPC.CodexCatalog, kind)
+  },
+
+  codexMetrics(query: MetricsQuery): Promise<MetricsPayload> {
+    return ipcRenderer.invoke(IPC.CodexMetrics, query)
+  },
+
+  codexRefresh(kind: CodexCatalogKind): Promise<void> {
+    return ipcRenderer.invoke(IPC.CodexRefresh, kind)
+  },
+
+  onCodexPush(cb: (message: CodexPushMessage) => void): () => void {
+    const listener = (_e: unknown, message: CodexPushMessage): void => cb(message)
+    ipcRenderer.on(IPC.CodexPush, listener)
+    return () => ipcRenderer.removeListener(IPC.CodexPush, listener)
   },
 
   onUpdate(cb: (state: UpdateState) => void): () => void {

@@ -12,11 +12,14 @@ import {
   installGpuCrashGuard
 } from './gpuCrashGuard'
 import { SettingsStore } from './settings/SettingsStore'
+import { CompendiumService } from './codex/CompendiumService'
 import { UpdateManager } from './updater/UpdateManager'
 import { APP_VERSION, telemetry } from './telemetry/Telemetry'
 import { installAppTelemetry, installProcessTelemetry } from './telemetry/install'
 import {
   IPC,
+  type CodexCatalogKind,
+  type MetricsQuery,
   type RendererTelemetryEvent,
   type UpdateCommand,
   type DiagnosticsState,
@@ -110,6 +113,14 @@ function broadcast(channel: string, payload: unknown): void {
     }
   }
 }
+
+/**
+ * The Codex compendium. Constructed eagerly but *does nothing* until a renderer
+ * invokes one of its channels — no network, no disk, not even a userData path
+ * resolution — so it can be a plain const instead of another nullable that
+ * every call site has to re-check.
+ */
+const compendium = new CompendiumService((message) => broadcast(IPC.CodexPush, message))
 
 function diagnostics(): DiagnosticsState {
   const b = overlay.browserWindow?.getBounds() ?? null
@@ -244,6 +255,23 @@ function wireIpc(): void {
     })
   }
 
+  /**
+   * The invoke/response twin of `on`. Same reasoning — a throw must not escape
+   * the dispatcher — but the failure mode differs: an unguarded rejection here
+   * reaches the renderer as "Error invoking remote method '<channel>'", which
+   * names the pipe and hides the cause. The fallback is a value the caller can
+   * actually render.
+   */
+  const handle = <A extends unknown[], R>(
+    channel: string,
+    fn: (...args: A) => Promise<R>,
+    fallback: R
+  ): void => {
+    ipcMain.handle(channel, (_e, ...args) =>
+      telemetry.guardAsync(`ipc:${channel}`, () => fn(...(args as A)), fallback, { channel })
+    )
+  }
+
   on(IPC.SetInteractive, (_e, interactive: boolean) => {
     overlay.setInteractive(!!interactive)
   })
@@ -313,9 +341,26 @@ function wireIpc(): void {
     dashboard.control(action)
   })
 
+  // The Codex compendium. Lazy on purpose: nothing here touches the network
+  // until a renderer asks, so a cold or unreachable spire-codex.com costs the
+  // launch nothing. The service resolves `{error}` rather than rejecting, so
+  // the fallbacks below only fire if the service itself is missing.
+  handle(IPC.CodexCatalog, (kind: CodexCatalogKind) => compendium.catalog(kind), {
+    error: 'compendium unavailable'
+  })
+  handle(IPC.CodexMetrics, (query: MetricsQuery) => compendium.metrics(query), {
+    error: 'compendium unavailable'
+  })
+  handle(IPC.CodexRefresh, (kind: CodexCatalogKind) => compendium.refresh(kind), undefined)
+
   // Deliberately an allow-list, not a generic opener: a compromised renderer
   // must not be able to launch arbitrary URLs (or file paths) via the shell.
-  const EXTERNAL_LINKS = new Set(['https://github.com/ProjectBarks/reliquary'])
+  const EXTERNAL_LINKS = new Set([
+    'https://github.com/ProjectBarks/reliquary',
+    // Attribution: every number in the Codex tab is community data from here,
+    // and "view the source" has to be a real link, not a footnote.
+    'https://spire-codex.com'
+  ])
   on(IPC.OpenExternal, (_e, url: string) => {
     if (EXTERNAL_LINKS.has(url)) void shell.openExternal(url)
   })
