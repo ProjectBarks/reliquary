@@ -955,3 +955,24 @@ What must change before WP3 starts:
 No replan: every fix is local to a WP that already exists, and none of them touches §2's policy or
 the mockup. Phasing stands as written, with WP1 growing the `deckSize` + nullable-act reads and WP3
 growing `provider.ts` in its file list.
+
+# User decisions (final, 2026-08-14)
+
+These override any conflicting defaults in the plan body or audit:
+
+1. **Session matching: ASK in the ambiguous window.** When two candidate runs are
+   genuinely indistinguishable (same character, both inside the pre-first-pick
+   window, act/deck identical), the recorder does NOT silently pick. It records
+   into a NEW provisional file (so no data is ever lost) and raises a
+   non-blocking resolution prompt in the Journal UI - a banner on Current Run /
+   the Archive: "Fresh run, or resuming <candidate>?" Resolving as "resuming"
+   merges the provisional into the candidate; ignoring it forever leaves the
+   provisional standing as its own run. The prompt must never block the game or
+   pop a dialog over it. Outside the provably-ambiguous window the decision
+   table's automatic rules stand unchanged.
+2. **Retention: keep everything**, per-run Delete in the Archive, size telemetry.
+3. **Merge/split affordance: deferred** past v1 (the ambiguity banner in (1) is
+   the only manual resolution surface v1 ships).
+4. **Multiplayer: tag + exclude from archive averages.** MP runs are recorded,
+   badged 2P/3P/4P, viewable in full; excluded from archive-average comparisons;
+   analysis caveated, community cohort matched where the API supports it.
