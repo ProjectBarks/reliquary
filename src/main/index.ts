@@ -438,13 +438,27 @@ if (!hasLock) {
   app.quit()
 }
 app.on('second-instance', () => {
-  telemetry.capture('second_instance_focus')
   const win = dashboard.browserWindow
+  telemetry.capture('second_instance_focus', { dashboard_recreated: !win })
   if (win) {
     if (win.isMinimized()) win.restore()
     win.show()
     win.focus()
+    return
   }
+  // Closing the dashboard does NOT quit the app: the overlay window keeps the
+  // process — and the single-instance lock — alive in the background. Every
+  // later launch of the exe lands here, so a closed dashboard must be
+  // recreated or clicking the app icon does nothing, forever, and the app
+  // reads as "won't launch" until the zombie is killed in Task Manager.
+  if (!app.isReady()) return
+  const created = dashboard.create()
+  dashboard.load(process.env['ELECTRON_RENDERER_URL'])
+  created.webContents.once('did-finish-load', () => {
+    if (created.isDestroyed()) return
+    created.show()
+    created.focus()
+  })
 })
 
 if (hasLock)
