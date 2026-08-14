@@ -86,7 +86,7 @@ export function ArchiveView(): JSX.Element {
           <EmptyPlate>
             <strong>Nothing recorded yet.</strong>
             <span>
-              The archive writes itself the first time you play with Reliquary open — one file
+              The archive writes itself the first time you play with Reliquary open. One file
               per run, kept on this machine.
             </span>
           </EmptyPlate>
@@ -113,7 +113,7 @@ export function ArchiveView(): JSX.Element {
 
         {catalog.error ? (
           <Whisper style={{ margin: '10px 2px 0', color: 'var(--sts-color-red)' }}>
-            the list may be out of date — {catalog.error}
+            the list may be out of date · {catalog.error}
           </Whisper>
         ) : null}
       </Section>
@@ -172,7 +172,7 @@ function ArchiveRow({ entry }: { entry: CatalogEntry }): JSX.Element {
     : entry.unreadable
       ? `schema ${entry.schema} · update Reliquary to read it`
       : provisional
-        ? `${handle} · provisional — answer the banner above`
+        ? `${handle} · provisional · answer the banner above`
         : entry.supersededBy
           ? `${handle} · superseded by a later run`
           : word.note
@@ -403,12 +403,21 @@ const RunName = styled.span`
   ${RunNameStyles}
 `
 
+/**
+ * The name is a link, but it wears no underline in any state: the whole row is
+ * the click target and already lights up on hover, so an underline appearing
+ * under one word inside a row that is lifting as a whole reads as a second,
+ * competing affordance. Focus still gets a ring, which is the state that has to
+ * be visible.
+ */
 const RunAnchor = styled.a`
   ${RunNameStyles}
   cursor: pointer;
-  border-bottom: 1px solid transparent;
-  &:hover {
-    border-bottom-color: currentColor;
+  &:hover,
+  &:focus,
+  &:active,
+  &:visited {
+    text-decoration: none;
   }
   &:focus-visible {
     outline: 2px solid var(--brand);

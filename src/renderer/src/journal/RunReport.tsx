@@ -1,40 +1,35 @@
 import { useCallback, useMemo, useState } from 'react'
-import styled from 'styled-components'
 import type { RunFile } from '@shared/types'
 import { runCohort } from '@shared/types'
-import { Section, SectionHead, SectionNote, SectionTitle } from '../dashboard/ui'
+import { Section, SectionHead, SectionTitle } from '../dashboard/ui'
 import { ErrorState, Loading } from '../codex/parts'
 import { DASH } from '../codex/format'
-import { budgetLine, flagsByRoom, readAnalysis } from './analysis'
-import { cohortPace } from './cohort'
+import { flagsByRoom, readAnalysis } from './analysis'
+import { cohortPace, type CohortAverage } from './cohort'
 import { useJournalCatalog, reanalyzeRun, useRunFile } from './data'
 import { deriveDeck, deriveRoute, isPartial } from './derive'
 import { DeckLedger } from './DeckLedger'
 import { Findings } from './Findings'
-import { CensusStrip, RouteLedger, RoutePartialNote } from './RouteLedger'
+import { CensusStrip, RouteLedger } from './RouteLedger'
 import { NotReadableChip, RelicsStrip } from './RelicsStrip'
 import {
-  ANALYSIS_WORD,
   HONESTY_LINE,
   characterName,
   characterTint,
   fmtDuration,
   fmtPace,
-  outcomeBanner,
-  runStamp
+  outcomeBanner
 } from './format'
 import {
   Banner,
   CharValue,
   EmptyPlate,
   Num,
-  OutlineChip,
   PCell,
   Plaque,
   RunHead,
   RunHeadTop,
-  RunTitle,
-  Whisper
+  RunTitle
 } from './parts'
 
 /**
@@ -57,9 +52,19 @@ import {
  *
  * The header carries no section title of its own either: the sub-nav says
  * Journal, the picker names the run, and the plaque's own h1 says RUN REPORT.
- * What is left is one mono identity line — date, handle, game build — with the
- * bookkeeping a reader never reads (schema, request budget, what v1 cannot see)
- * moved onto tooltips and into the export, which is where audit trails belong.
+ * It carries no *manifest* either any more. The mono identity line (stamp,
+ * handle, game build) and the analysis-state chip beside it were the file's
+ * metadata printed at the top of the file's own report — the picker above
+ * already names the run, and analysis state is legible where it matters: the
+ * review section's own pending / never-reviewed / failed states, and the
+ * Archive's chips. What is left in the header is the run: its name, its result,
+ * and six numbers.
+ *
+ * **Section heads carry their title and nothing else.** Every head here used to
+ * trail a note — "rooms in order entered", "25 cards · 20 rows", "4 findings" —
+ * and each one either restated the section below it or duplicated a number that
+ * section prints in full. `SectionHead` still exists for the odd chip that is
+ * genuinely a status (the relic strip's "not readable"), not for description.
  */
 
 export function RunReport({ id }: { id: string }): JSX.Element {
@@ -105,37 +110,28 @@ function Report({
 
   const banner = outcomeBanner(run.state, run.outcome)
   const last = route.rooms[route.rooms.length - 1]
-  const shopsWithNoCard = route.rooms.filter(
-    (room) => room.room === 'shop' && room.notes.some((n) => n.t === 'no-purchase')
-  ).length
 
   return (
     <>
+      {/* The partial-run whisper that used to sit under this header is gone:
+          "counts are under-counts" is what the `≈` in front of the room count
+          already says, in one character, in the cell the count lives in. The
+          long form is on that cell's tooltip. */}
       <Section>
         <RunHeader
           run={run}
           banner={banner}
           lastRoom={last?.roomIndex ?? run.roomsEntered}
-          budget={budgetLine(analysis.value)}
+          cohort={cohort}
         />
-
-        {isPartial(run) ? (
-          <Whisper style={{ margin: '4px 2px 0' }}>
-            {run.observedFrom === 'mid-run'
-              ? 'joined mid-run — every count below is a floor, not a total'
-              : 'this run was played for a while without us — counts are under-counts'}
-          </Whisper>
-        ) : null}
       </Section>
 
       <Section>
         <SectionHead>
           <SectionTitle>Route Ledger</SectionTitle>
-          <SectionNote>rooms in order entered</SectionNote>
         </SectionHead>
         <CensusStrip census={route.census} />
         <RouteLedger route={route} outcomeWord={banner.word} flags={flags} />
-        {isPartial(run) ? <RoutePartialNote /> : null}
       </Section>
 
       {/* No final deck means the run has not ended: the deck-so-far is on the
@@ -145,9 +141,6 @@ function Report({
         <Section>
           <SectionHead>
             <SectionTitle>Deck Ledger</SectionTitle>
-            <SectionNote title="Sorted by played, descending — never-played rows last">
-              {deck.cards} cards · {deck.rows.length} rows
-            </SectionNote>
           </SectionHead>
           <DeckLedger deck={deck} halfDead={analysis.value?.halfDead} />
         </Section>
@@ -168,20 +161,12 @@ function Report({
       <Section>
         <SectionHead>
           <SectionTitle>Journey Review</SectionTitle>
-          <SectionNote>
-            {analysis.value
-              ? `${analysis.value.findings.length} finding${analysis.value.findings.length === 1 ? '' : 's'}`
-              : ANALYSIS_WORD[run.analysisStatus]}
-          </SectionNote>
         </SectionHead>
         <Findings
           status={run.analysisStatus}
           analysis={analysis.value}
           malformed={analysis.malformed}
           deck={deck}
-          perRoomAvgMs={run.pace.perRoomAvgMs}
-          cohort={cohort}
-          shopsWithNoCard={shopsWithNoCard}
           onReanalyze={onReanalyze}
           busy={busy}
         />
@@ -194,31 +179,36 @@ function Report({
  * The plaque.
  *
  * Every cell here is something a reader can act on, and the cells the mockup
- * had to leave out — HP, gold, ascension — are *absent* rather than dashed. A
+ * had to leave out (HP, gold, ascension) are *absent* rather than dashed. A
  * grid of `·` reads as a broken screen; an absence reads as a report that only
- * prints what it saw. The line that used to name those absences is a tooltip on
- * the manifest now: the reader who wonders where gold went can hover, and the
- * reader who never wondered is not charged a line for the answer.
+ * prints what it saw. The line that used to name those absences is the plaque's
+ * own tooltip: the reader who wonders where gold went can hover the row of
+ * numbers, and the reader who never wondered is not charged a line for it.
  *
- * The manifest itself is identity only — the stamp, the handle, the game build
- * — because that is the part a reader recognises. `schema 1 · analysis 0 req /
- * budget 12` is bookkeeping about the *file*, not about the run; it rides the
- * analysis chip's tooltip and goes out whole in the export.
+ * Three facts that used to be printed sentences now ride the cells they are
+ * about, because a tooltip on the number is where a reader looks for the
+ * number's caveat:
+ *
+ *   - the `≈` on Rooms carries "we joined late, so this is a floor";
+ *   - Pace carries the cohort average it used to state in a footnote chip;
+ *   - the plaque as a whole carries what v1 cannot read at all.
+ *
+ * Nothing was deleted from the *file* — the manifest's schema and request
+ * budget, and every footnote sentence, go out whole in the exported JSON.
  */
 function RunHeader({
   run,
   banner,
   lastRoom,
-  budget
+  cohort
 }: {
   run: RunFile
   banner: { word: string; tone: 'red' | 'green' | 'gold' | 'aqua' }
   lastRoom: number
-  /** "analysis 11 req / budget 12", when the pipeline reported one. */
-  budget: string | null
+  /** This run's cohort baseline, for the Pace cell's tooltip. */
+  cohort: CohortAverage
 }): JSX.Element {
   const tint = characterTint(run.character)
-  const stamp = runStamp(run)
   const act = run.actReached
   const deckSize = run.finalDeck
     ? run.finalDeck.reduce((n, row) => n + row.count, 0)
@@ -226,24 +216,24 @@ function RunHeader({
   const rows = run.finalDeck
     ? new Set(run.finalDeck.map((row) => row.id)).size
     : null
+  // A thin cohort gets no tooltip at all rather than a sentence explaining that
+  // it is thin: the comparison is simply absent, and absences do not need prose.
+  const paceTitle = cohort.thin
+    ? undefined
+    : `${cohort.label.toLowerCase()} archive average ${fmtPace(cohort.perRoomAvgMs)} across ${cohort.runs} runs`
+  const roomsTitle = isPartial(run)
+    ? run.observedFrom === 'mid-run'
+      ? 'we joined this run in progress · every count here is a floor, not a total'
+      : 'part of this run was played without us · counts are floors, not totals'
+    : undefined
 
   return (
     <RunHead $frame={tint.frame} $edge={tint.edge}>
       <RunHeadTop>
         <RunTitle>
           <h1>
-            <em style={{ color: tint.edge }}>{characterName(run.character)}</em> — RUN REPORT
+            <em style={{ color: tint.edge }}>{characterName(run.character)}</em> · RUN REPORT
           </h1>
-          <Manifest>
-            <Whisper title={HONESTY_LINE}>
-              run {stamp.stamp} · {stamp.tail} · game {run.gameVersion ?? 'unknown'}
-            </Whisper>
-            <OutlineChip
-              title={`schema ${run.schema}${budget ? ` · ${budget}` : ''} — also in the exported JSON`}
-            >
-              {ANALYSIS_WORD[run.analysisStatus]}
-            </OutlineChip>
-          </Manifest>
         </RunTitle>
         <Banner $tone={banner.tone}>
           <span className="word">{banner.word}</span>
@@ -256,7 +246,7 @@ function RunHeader({
         </Banner>
       </RunHeadTop>
 
-      <Plaque $frame={tint.frame}>
+      <Plaque $frame={tint.frame} title={HONESTY_LINE}>
         <PCell>
           <div className="k">Character</div>
           <CharValue $edge={tint.edge}>{characterName(run.character)}</CharValue>
@@ -276,7 +266,7 @@ function RunHeader({
           </div>
           <div className="w">{rows === null ? 'in progress' : `${rows} rows`}</div>
         </PCell>
-        <PCell>
+        <PCell title={roomsTitle}>
           <div className="k">Rooms</div>
           <div className="v">
             <Num>
@@ -288,21 +278,15 @@ function RunHeader({
             {run.floorReached === null ? 'entered' : `entered · floor ${run.floorReached}`}
           </div>
         </PCell>
-        <PCell>
+        <PCell title={paceTitle}>
           <div className="k">Pace</div>
-          <div className="v" style={{ fontSize: 18 }}>
-            {fmtPace(run.pace.perRoomAvgMs)}
-          </div>
+          <div className="v">{fmtPace(run.pace.perRoomAvgMs)}</div>
           <div className="w">per room</div>
         </PCell>
-        <PCell>
+        <PCell title="Observed play time, not wall clock">
           <div className="k">Elapsed</div>
-          <div className="v" style={{ fontSize: 18 }}>
-            {fmtDuration(run.pace.elapsedMs)}
-          </div>
-          <div className="w" title="Observed play time, not wall clock">
-            observed time
-          </div>
+          <div className="v">{fmtDuration(run.pace.elapsedMs)}</div>
+          <div className="w">observed time</div>
         </PCell>
       </Plaque>
     </RunHead>
@@ -327,11 +311,3 @@ export function NoRunsYet(): JSX.Element {
     </Section>
   )
 }
-
-/** The identity line and the analysis chip, on one baseline. */
-const Manifest = styled.div`
-  display: flex;
-  align-items: baseline;
-  flex-wrap: wrap;
-  gap: 4px 10px;
-`

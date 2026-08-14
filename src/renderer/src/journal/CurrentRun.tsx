@@ -3,7 +3,7 @@ import { createLink } from '@tanstack/react-router'
 import styled from 'styled-components'
 import type { JournalCurrentRun, RunFile } from '@shared/types'
 import { cohortLabel, runCohort } from '@shared/types'
-import { Section, SectionHead, SectionNote, SectionTitle } from '../dashboard/ui'
+import { Section, SectionHead, SectionTitle } from '../dashboard/ui'
 import { DASH } from '../codex/format'
 import { ErrorState, Loading } from '../codex/parts'
 import { AmbiguityBanner } from './AmbiguityBanner'
@@ -71,11 +71,16 @@ import {
  * dashes where the numbers go. Three lines, one of them a link.
  *
  * Neither state prints a section title. The sub-nav is already showing Current
- * Run in brand, and a heading under it saying "Current Run — nothing is being
+ * Run in brand, and a heading under it saying "Current Run, nothing is being
  * recorded" spent a whole line restating the tab the reader just clicked. The
  * plaque (or the idle plate) is the first thing on the page now, and the live
- * view's honest caveats — joined mid-run, counts are partial — ride the
- * manifest whisper where the run's other identity facts already are.
+ * view's honest caveats (joined mid-run, counts are partial) ride the manifest
+ * whisper where the run's other identity facts already are.
+ *
+ * The two inner heads below it carry their titles and nothing else. "observable
+ * live" under Combat piles and "last 12 rooms" under Route so far were both
+ * captions for a thing the reader was already looking at: the piles update in
+ * front of them, and the ledger's own rows are numbered.
  */
 
 export function CurrentRun(): JSX.Element {
@@ -164,7 +169,7 @@ function LiveRun({ live, run }: { live: JournalCurrentRun; run: RunFile }): JSX.
           <RunHeadTop>
             <RunTitle>
               <h1>
-                <em style={{ color: tint.edge }}>{characterName(run.character)}</em> — CURRENT RUN
+                <em style={{ color: tint.edge }}>{characterName(run.character)}</em> · CURRENT RUN
               </h1>
               {/* Identity, plus the two words that change how every number
                   below should be read. The reasoning is on the tooltip: a live
@@ -217,7 +222,15 @@ function LiveRun({ live, run }: { live: JournalCurrentRun; run: RunFile }): JSX.
               </div>
               <div className="w">owned now</div>
             </PCell>
-            <PCell>
+            {/* The `≈` is the whole caveat; its long form is on the cell, not
+                under the plaque as a sentence. */}
+            <PCell
+              title={
+                isPartial(run)
+                  ? 'part of this run was not observed · this count is a floor, not a total'
+                  : undefined
+              }
+            >
               <div className="k">Rooms</div>
               <div className="v">
                 <Num>
@@ -231,16 +244,12 @@ function LiveRun({ live, run }: { live: JournalCurrentRun; run: RunFile }): JSX.
             </PCell>
             <PCell>
               <div className="k">Pace</div>
-              <div className="v" style={{ fontSize: 18 }}>
-                {fmtPace(pace)}
-              </div>
+              <div className="v">{fmtPace(pace)}</div>
               <div className="w">per room</div>
             </PCell>
             <PCell>
               <div className="k">Elapsed</div>
-              <div className="v" style={{ fontSize: 18 }}>
-                {fmtDuration(live.elapsedActiveMs)}
-              </div>
+              <div className="v">{fmtDuration(live.elapsedActiveMs)}</div>
               <div className="w">observed this run</div>
             </PCell>
           </Plaque>
@@ -252,7 +261,6 @@ function LiveRun({ live, run }: { live: JournalCurrentRun; run: RunFile }): JSX.
           <div>
             <SectionHead>
               <SectionTitle as="h3">Combat piles</SectionTitle>
-              <SectionNote>observable live</SectionNote>
             </SectionHead>
             <CellGrid $min="90px">
               <Pile label="hand" n={piles?.hand.length ?? null} />
@@ -265,7 +273,7 @@ function LiveRun({ live, run }: { live: JournalCurrentRun; run: RunFile }): JSX.
                 omission is named in four words here and explained on hover. */}
             <Whisper
               style={{ margin: '10px 2px 0' }}
-              title="The same readers the overlay runs on, updating every ~250 ms — the exhaust pile is not in the emitted pile state yet"
+              title="The same readers the overlay runs on, updating every ~250 ms · the exhaust pile is not in the emitted pile state yet"
             >
               exhaust not readable{piles ? '' : ' · no combat on screen'}
             </Whisper>
@@ -274,7 +282,6 @@ function LiveRun({ live, run }: { live: JournalCurrentRun; run: RunFile }): JSX.
           <div>
             <SectionHead>
               <SectionTitle as="h3">Route so far</SectionTitle>
-              <SectionNote>last {recent.shown} rooms</SectionNote>
             </SectionHead>
             {recent.empty ? (
               <Note>No rooms entered yet this run.</Note>

@@ -6,10 +6,7 @@ import { TierBadge } from '../codex/tiers'
 import { DASH, fmtInt } from '../codex/format'
 import { useEntities } from './art'
 import type { AnalysisFinding, ParsedAnalysis } from './analysis'
-import type { CohortAverage } from './cohort'
-import { thinCohortLine } from './cohort'
 import type { DeckLedger } from './derive'
-import { fmtPace, footnoteTail } from './format'
 import {
   Art,
   CellGrid,
@@ -19,13 +16,12 @@ import {
   GridCell,
   Note,
   Num,
-  OutlineChip,
   Plate,
   Whisper
 } from './parts'
 
 /**
- * Journey Review — the summary strip, the finding cards, and the two footnotes.
+ * Journey Review — the summary strip and the finding cards.
  *
  * The pipeline that produces findings is WP6; what is built here is every
  * *state* around it, which is the part that outlives any one analysis schema:
@@ -41,18 +37,19 @@ import {
  *     which is a different and untrue claim.
  *   - **none** — the run was never queued; offer to queue it.
  *
- * The PACE footnote is computed locally too, against the archive average *for
- * this run's player-count cohort* — a solo run against your solo runs, a 2P run
- * against your 2P runs (the user's decision). A cohort too thin to average
- * never borrows another cohort's baseline; it simply prints no comparison.
+ * **There is no footnote block, and no "still arriving" line.** Both were
+ * removed on the user's call and neither was a small loss dressed up as a win:
+ * a row of chips reading PACE / PROXY / LOCAL / BUDGET under a page of findings
+ * was a second, quieter report about the *reviewer* rather than about the run,
+ * and "analysis partial, more findings may still arrive" was a status the
+ * reader can neither act on nor wait for on this screen. Every one of those
+ * sentences is still in the run file and goes out whole in the exported JSON —
+ * this file simply stopped printing them. Pace survives where it was already
+ * being read: the header's own stat cell, whose tooltip now carries the cohort
+ * average the PACE chip used to state.
  *
- * **The footnote block is chips, not paragraphs.** Every footnote here is a
- * whole sentence — the pipeline writes them that way and the export keeps them
- * that way — and four of them stacked under a page of findings was the longest
- * unbroken run of prose in the tab. Each chip now shows a tail of a few words
- * and carries its sentence on `title`, so the block reads as a row of facts
- * with the reasoning one hover away. `footnoteTail` in `format.ts` owns the
- * shortening; nothing is edited out of the data.
+ * The finding card is **two columns**: the verdict in words on the left, the
+ * cards and grades it is about on the right. See `CardGrid`.
  */
 
 const SEVERITY_BG = {
@@ -66,9 +63,6 @@ export function Findings({
   analysis,
   malformed,
   deck,
-  perRoomAvgMs,
-  cohort,
-  shopsWithNoCard,
   onReanalyze,
   busy
 }: {
@@ -76,11 +70,6 @@ export function Findings({
   analysis: ParsedAnalysis | null
   malformed: boolean
   deck: DeckLedger
-  /** This run's own pace. */
-  perRoomAvgMs: number | null
-  /** The archive average for this run's cohort — possibly thin. */
-  cohort: CohortAverage
-  shopsWithNoCard: number
   onReanalyze: () => void
   busy: boolean
 }): JSX.Element {
@@ -91,13 +80,13 @@ export function Findings({
       <Summary analysis={analysis} deck={deck} />
 
       {status === 'pending' ? (
-        <Loading label="Analysis queued — findings arrive when it lands." />
+        <Loading label="Analysis queued. Findings arrive when it lands." />
       ) : null}
 
       {status === 'failed' ? (
         <ErrorState
           title="The analysis for this run failed"
-          message="Nothing was lost — the run file is complete and the review can be run again."
+          message="Nothing was lost. The run file is complete and the review can be run again."
           onRetry={onReanalyze}
         />
       ) : null}
@@ -128,65 +117,7 @@ export function Findings({
       ) : status === 'done' && !malformed ? (
         <Note>Nothing to flag.</Note>
       ) : null}
-
-      {status === 'partial' ? (
-        <Whisper style={{ margin: '12px 2px 0' }}>
-          analysis partial — more findings may still arrive
-        </Whisper>
-      ) : null}
-
-      <Footnotes>
-        <PaceFootnote
-          perRoomAvgMs={perRoomAvgMs}
-          cohort={cohort}
-          shopsWithNoCard={shopsWithNoCard}
-        />
-        {(analysis?.footnotes ?? []).map((note) => (
-          <Footnote key={note.chip} title={note.text}>
-            <OutlineChip>{note.chip}</OutlineChip>
-            <FootnoteText>{footnoteTail(note.chip, note.text)}</FootnoteText>
-          </Footnote>
-        ))}
-      </Footnotes>
     </>
-  )
-}
-
-/**
- * PACE — the run's own number, and a comparison only when one exists.
- *
- * The visible text is the value: `37s / room`. A cohort with an average adds it
- * in the same breath — `37s / room · archive avg 46s` — because that is the
- * comparison the reader came for. A cohort too thin to average adds *nothing*
- * visible: "first solo run — no archive average yet" is an explanation of an
- * absence, and the absence is already there to see. It waits on the tooltip
- * with the shop tally, for the reader who wonders why no average appeared.
- */
-function PaceFootnote({
-  perRoomAvgMs,
-  cohort,
-  shopsWithNoCard
-}: {
-  perRoomAvgMs: number | null
-  cohort: CohortAverage
-  shopsWithNoCard: number
-}): JSX.Element {
-  const shops =
-    shopsWithNoCard > 0
-      ? ` · ${shopsWithNoCard} shop${shopsWithNoCard === 1 ? '' : 's'} left with no card gained`
-      : ''
-  const why = cohort.thin
-    ? thinCohortLine(cohort)
-    : `${cohort.label.toLowerCase()} archive average ${fmtPace(cohort.perRoomAvgMs)} across ${cohort.runs} runs`
-
-  return (
-    <Footnote title={`${why}${shops}`}>
-      <OutlineChip>pace</OutlineChip>
-      <FootnoteText>
-        {fmtPace(perRoomAvgMs)} / room
-        {cohort.thin ? '' : ` · archive avg ${fmtPace(cohort.perRoomAvgMs)}`}
-      </FootnoteText>
-    </Footnote>
   )
 }
 
@@ -262,78 +193,115 @@ function Cell({
   )
 }
 
+/**
+ * One finding, in two columns: what we think, and what it is about.
+ *
+ * Column one is the whole verdict as language — the flag and severity, the
+ * headline, the sentence, its evidence chips, and the provenance whisper that
+ * says where the judgement came from. A reader can read that column alone and
+ * have the finding.
+ *
+ * Column two is the material: the card that should have been taken above the
+ * card that was, stacked, with the `vs` between them. Stacked rather than side
+ * by side because the pair is not a comparison of two options in a row of
+ * options — it is one *substitution*, read top to bottom, and side-by-side art
+ * spent the card's full width saying so while pushing the sentence into a
+ * narrow gutter. When a finding has no cards but a list of offenders (dead
+ * cards, repeat draws), that list is what column two holds instead.
+ *
+ * With neither, there is no second column at all and the verdict runs the full
+ * width — an empty half card is worse than a wide paragraph.
+ */
 function FindingCard({ finding }: { finding: AnalysisFinding }): JSX.Element {
   const entities = useEntities()
   const hasRenders = Boolean(finding.passed || finding.taken)
+  const hasMinis = !hasRenders && finding.minis.length > 0
+  const stock = finding.outcome === 'left-in-stock'
 
   return (
     <Card>
-      <CardHead>
-        <Flag>{finding.ref}</Flag>
-        <Plate $bg={SEVERITY_BG[finding.severity]}>{finding.severity}</Plate>
-        <h3>{finding.title}</h3>
-        {finding.at ? <At>{finding.at}</At> : null}
-      </CardHead>
-      <CardBody $split={!hasRenders && finding.minis.length > 0} $wide={!hasRenders}>
+      <CardGrid $two={hasRenders || hasMinis}>
+        <Verdict>
+          <VerdictHead>
+            <Flag>{finding.ref}</Flag>
+            <Plate $bg={SEVERITY_BG[finding.severity]}>{finding.severity}</Plate>
+            {finding.at ? <At>{finding.at}</At> : null}
+          </VerdictHead>
+          <h3>{finding.title}</h3>
+          {finding.verdict ? <VerdictLine>{finding.verdict}</VerdictLine> : null}
+          {finding.evidence.length > 0 ? (
+            <Evidence>
+              {finding.evidence.map((chip) => (
+                <EvidenceChip key={chip.label}>
+                  {chip.label}
+                  {chip.value ? <b>{chip.value}</b> : null}
+                </EvidenceChip>
+              ))}
+            </Evidence>
+          ) : null}
+          {finding.mono ? <Whisper as="p">{finding.mono}</Whisper> : null}
+        </Verdict>
+
         {hasRenders ? (
-          <Renders>
+          <Judgement>
             {finding.passed ? (
               <Slot>
-                <span className="cap">Passed</span>
                 <Art
                   entity={entities.card(finding.passed.id)}
                   variant="big"
                   edge="passed"
                   alt={entities.card(finding.passed.id).name}
                 />
-                <span className="nm">{entities.card(finding.passed.id).name}</span>
-                <Grade $good>
-                  <b>
-                    <Num>{finding.passed.score ?? DASH}</Num>
-                  </b>
-                  <TierBadge $tier={finding.passed.tier}>{finding.passed.tier ?? DASH}</TierBadge>
-                </Grade>
+                <SlotText>
+                  <span className="cap">should have taken</span>
+                  <span className="nm">{entities.card(finding.passed.id).name}</span>
+                  <Grade $good>
+                    <b>
+                      <Num>{finding.passed.score ?? DASH}</Num>
+                    </b>
+                    <TierBadge $tier={finding.passed.tier}>{finding.passed.tier ?? DASH}</TierBadge>
+                  </Grade>
+                </SlotText>
               </Slot>
             ) : null}
+
+            {finding.passed && finding.taken ? <Vs>vs</Vs> : null}
+
             {finding.taken ? (
-              <Slot $stock={finding.outcome === 'left-in-stock'}>
-                <span className="cap">
-                  {finding.outcome === 'left-in-stock' ? 'Outcome' : 'Taken'}
-                </span>
+              <Slot $stock={stock}>
                 <StockWrap>
                   <Art
                     entity={entities.card(finding.taken.id)}
                     variant="big"
-                    edge={finding.outcome === 'left-in-stock' ? 'stock' : null}
+                    edge={stock ? 'stock' : null}
                     alt={entities.card(finding.taken.id).name}
                   />
-                  {finding.outcome === 'left-in-stock' ? (
-                    <StockPlate>left in stock</StockPlate>
-                  ) : null}
+                  {stock ? <StockPlate>left in stock</StockPlate> : null}
                 </StockWrap>
-                <span className="nm">
-                  {finding.outcome === 'left-in-stock'
-                    ? 'never entered the deck'
-                    : entities.card(finding.taken.id).name}
-                </span>
-                {finding.outcome === 'left-in-stock' ? (
-                  finding.cost === null ? null : (
-                    <Cost>
-                      <Num>{finding.cost}g</Num>
-                    </Cost>
-                  )
-                ) : (
-                  <Grade>
-                    <b>
-                      <Num>{finding.taken.score ?? DASH}</Num>
-                    </b>
-                    <TierBadge $tier={finding.taken.tier}>{finding.taken.tier ?? DASH}</TierBadge>
-                  </Grade>
-                )}
+                <SlotText>
+                  <span className="cap">{stock ? 'stayed in the shop' : 'you took'}</span>
+                  <span className="nm">
+                    {stock ? 'never entered the deck' : entities.card(finding.taken.id).name}
+                  </span>
+                  {stock ? (
+                    finding.cost === null ? null : (
+                      <Cost>
+                        <Num>{finding.cost}g</Num>
+                      </Cost>
+                    )
+                  ) : (
+                    <Grade>
+                      <b>
+                        <Num>{finding.taken.score ?? DASH}</Num>
+                      </b>
+                      <TierBadge $tier={finding.taken.tier}>{finding.taken.tier ?? DASH}</TierBadge>
+                    </Grade>
+                  )}
+                </SlotText>
               </Slot>
             ) : null}
-          </Renders>
-        ) : finding.minis.length > 0 ? (
+          </Judgement>
+        ) : hasMinis ? (
           <Minis>
             {finding.minis.map((mini) => (
               <Mini key={`${mini.id}-${mini.label ?? ''}`}>
@@ -347,22 +315,7 @@ function FindingCard({ finding }: { finding: AnalysisFinding }): JSX.Element {
             ))}
           </Minis>
         ) : null}
-
-        <CardMain>
-          {finding.evidence.length > 0 ? (
-            <Evidence>
-              {finding.evidence.map((chip) => (
-                <EvidenceChip key={chip.label}>
-                  {chip.label}
-                  {chip.value ? <b>{chip.value}</b> : null}
-                </EvidenceChip>
-              ))}
-            </Evidence>
-          ) : null}
-          {finding.verdict ? <VerdictLine>{finding.verdict}</VerdictLine> : null}
-          {finding.mono ? <Whisper as="p">{finding.mono}</Whisper> : null}
-        </CardMain>
-      </CardBody>
+      </CardGrid>
     </Card>
   )
 }
@@ -390,44 +343,25 @@ const Card = styled.article`
   overflow: hidden;
 `
 
-const CardHead = styled.header`
-  display: flex;
-  align-items: center;
-  gap: 11px;
-  flex-wrap: wrap;
-  padding: 10px 15px;
-  border-bottom: 1px solid var(--line);
-  background: oklch(0 0 0 / 14%);
-
-  h3 {
-    margin: 0;
-    flex: 1 1 260px;
-    font-family: var(--font-display);
-    font-weight: 400;
-    font-size: 15.5px;
-    letter-spacing: 0.3px;
-    color: var(--ink);
-  }
-`
-
-const At = styled.span`
-  font-family: var(--font-mono);
-  font-size: 11px;
-  letter-spacing: 0.6px;
-  color: var(--ink-faint);
-  white-space: nowrap;
-`
-
-const CardBody = styled.div<{ $split: boolean; $wide: boolean }>`
+/**
+ * The two columns.
+ *
+ * The text column is fluid and the card column is fixed: art has a true size
+ * and stretching it buys nothing, while a verdict sentence wants every pixel it
+ * can get. 296px holds a 94px render, a 12px gutter and enough room for the
+ * longest card name in the game without hyphenating it; at the dashboard's
+ * 1180px content width that leaves the verdict a comfortable ~760px, and its
+ * own `62ch` measure keeps the line from outrunning the eye.
+ *
+ * Below 1080px the two columns become one, verdict first: a 296px sidebar and a
+ * paragraph cannot both be readable in what is left of a narrow window, and the
+ * sentence is the half that carries the finding.
+ */
+const CardGrid = styled.div<{ $two: boolean }>`
   display: grid;
-  gap: 18px;
-  padding: 14px 15px 15px;
-  grid-template-columns: ${(p) =>
-    p.$split
-      ? 'minmax(320px, 420px) minmax(0, 1fr)'
-      : p.$wide
-        ? 'minmax(0, 1fr)'
-        : '236px minmax(0, 1fr)'};
+  gap: 22px;
+  padding: 15px 16px 16px;
+  grid-template-columns: ${(p) => (p.$two ? 'minmax(0, 1fr) 296px' : 'minmax(0, 1fr)')};
   align-items: start;
 
   @media (max-width: 1080px) {
@@ -435,33 +369,112 @@ const CardBody = styled.div<{ $split: boolean; $wide: boolean }>`
   }
 `
 
-const Renders = styled.div`
+/** Column one: flag and severity, headline, sentence, evidence, provenance. */
+const Verdict = styled.div`
   display: flex;
-  gap: 16px;
+  flex-direction: column;
+  gap: 9px;
+  min-width: 0;
+
+  /* The column's own gap sets the rhythm; a browser's default paragraph margin
+     on the provenance whisper would double the space above it. */
+  p {
+    margin: 0;
+  }
+
+  h3 {
+    margin: 0;
+    font-family: var(--font-display);
+    font-weight: 400;
+    font-size: var(--fs-md);
+    line-height: 1.3;
+    letter-spacing: 0.3px;
+    color: var(--ink);
+  }
+`
+
+const VerdictHead = styled.div`
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+`
+
+const At = styled.span`
+  font-family: var(--font-mono);
+  font-size: var(--fs-xs);
+  letter-spacing: 0.6px;
+  color: var(--ink-faint);
+  white-space: nowrap;
+`
+
+/**
+ * Column two: the substitution, framed as one object so it reads as a single
+ * exhibit rather than as two loose pictures beside a paragraph.
+ */
+const Judgement = styled.div`
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: oklch(0 0 0 / 16%);
 `
 
 const Slot = styled.figure<{ $stock?: boolean }>`
   display: flex;
-  flex-direction: column;
   align-items: center;
-  gap: 6px;
-  width: 110px;
+  gap: 12px;
   margin: 0;
+  min-width: 0;
 
   .cap {
     font-family: var(--font-body);
     font-weight: 600;
-    font-size: 9px;
+    font-size: var(--fs-2xs);
+    line-height: var(--lh-tight);
     letter-spacing: 1.1px;
     text-transform: uppercase;
     color: var(--ink-faint);
   }
   .nm {
-    font-size: 11.5px;
+    font-size: var(--fs-base);
     font-weight: 600;
-    text-align: center;
-    line-height: 1.25;
+    line-height: 1.3;
     color: ${(p) => (p.$stock ? 'var(--ink-dim)' : 'var(--ink)')};
+  }
+`
+
+const SlotText = styled.figcaption`
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+`
+
+/**
+ * The relationship between the two slots, and the only thing in the card that
+ * is a word about the layout rather than about the run — so it is a hairline
+ * with two letters on it, not a label.
+ */
+const Vs = styled.div`
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  font-family: var(--font-display);
+  font-size: var(--fs-2xs);
+  line-height: 1;
+  letter-spacing: 1.6px;
+  text-transform: uppercase;
+  color: var(--ink-faint);
+
+  &::before,
+  &::after {
+    content: '';
+    flex: 1 1 auto;
+    height: 1px;
+    background: var(--line-strong);
   }
 `
 
@@ -483,7 +496,7 @@ const StockPlate = styled.span`
   border: 1px solid var(--line-strong);
   border-radius: 6px;
   font-family: var(--font-display);
-  font-size: 11px;
+  font-size: var(--fs-2xs);
   letter-spacing: 1.4px;
   text-transform: uppercase;
   color: var(--ink-dim);
@@ -496,7 +509,7 @@ const Grade = styled.span<{ $good?: boolean }>`
 
   b {
     font-family: var(--font-display);
-    font-size: 16px;
+    font-size: var(--fs-md);
     line-height: 1;
     /* The passed card's score is the one the reader is meant to regret. */
     color: ${(p) => (p.$good ? 'var(--sts-color-green)' : 'var(--ink)')};
@@ -506,15 +519,19 @@ const Grade = styled.span<{ $good?: boolean }>`
 
 const Cost = styled.span`
   font-family: var(--font-display);
-  font-size: 13px;
+  font-size: var(--fs-base);
   letter-spacing: 0.3px;
   color: var(--sts-color-gold);
 `
 
+/** The other thing column two can hold: the run's repeat offenders, listed. */
 const Minis = styled.div`
   display: flex;
   flex-direction: column;
-  max-width: 520px;
+  padding: 4px 12px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: oklch(0 0 0 / 16%);
 `
 
 const Mini = styled.div`
@@ -530,32 +547,28 @@ const Mini = styled.div`
 
   .who {
     flex: 1 1 auto;
-    font-size: 12.5px;
+    min-width: 0;
+    font-size: var(--fs-sm);
     font-weight: 500;
+    line-height: 1.35;
     color: var(--ink);
   }
   .who em {
+    display: block;
     font-style: normal;
     font-family: var(--font-mono);
-    font-size: 10.5px;
+    font-size: var(--fs-2xs);
     color: var(--ink-faint);
-    margin-left: 8px;
   }
 `
 
 const Tally = styled.span`
   font-family: var(--font-display);
-  font-size: 15px;
+  font-size: var(--fs-md);
   letter-spacing: 0.4px;
   color: var(--sts-color-red);
   font-variant-numeric: tabular-nums;
-`
-
-const CardMain = styled.div`
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-  min-width: 0;
+  white-space: nowrap;
 `
 
 const Evidence = styled.div`
@@ -575,7 +588,7 @@ const EvidenceChip = styled.span`
   color: var(--ink-dim);
   font-family: var(--font-body);
   font-weight: 500;
-  font-size: 11px;
+  font-size: var(--fs-xs);
   white-space: nowrap;
 
   b {
@@ -587,30 +600,8 @@ const EvidenceChip = styled.span`
 
 const VerdictLine = styled.p`
   margin: 0;
-  font-size: 13px;
-  line-height: 1.55;
+  font-size: var(--fs-base);
+  line-height: var(--lh-body);
   color: var(--ink);
   max-width: 62ch;
-`
-
-const Footnotes = styled.div`
-  display: flex;
-  flex-direction: column;
-  gap: 7px;
-  margin: 14px 2px 0;
-`
-
-const Footnote = styled.p`
-  display: flex;
-  align-items: flex-start;
-  gap: 10px;
-  margin: 0;
-`
-
-const FootnoteText = styled.span`
-  font-family: var(--font-mono);
-  font-size: 11px;
-  line-height: 1.65;
-  letter-spacing: 0.2px;
-  color: var(--ink-faint);
 `

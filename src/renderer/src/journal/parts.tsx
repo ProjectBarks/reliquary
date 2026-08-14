@@ -25,7 +25,7 @@ import type { ResolvedEntity } from './art'
 /** The mono aside that carries every honesty note in the tab. */
 export const Whisper = styled.div`
   font-family: var(--font-mono);
-  font-size: 11px;
+  font-size: var(--fs-xs);
   line-height: 1.5;
   letter-spacing: 0.2px;
   color: var(--ink-faint);
@@ -54,7 +54,7 @@ export const OutlineChip = styled.span<{ $tone?: string | null }>`
   border-radius: 6px;
   white-space: nowrap;
   font-family: var(--font-body);
-  font-size: 10px;
+  font-size: var(--fs-2xs);
   font-weight: 600;
   letter-spacing: 0.8px;
   text-transform: uppercase;
@@ -78,7 +78,7 @@ export const Plate = styled.span<{ $bg: string }>`
   border-radius: 6px;
   white-space: nowrap;
   font-family: var(--font-display);
-  font-size: 12px;
+  font-size: var(--fs-sm);
   font-weight: 600;
   letter-spacing: 0.5px;
   line-height: 1;
@@ -98,7 +98,7 @@ export const Flag = styled.span`
   color: var(--sts-color-red);
   background: transparent;
   font-family: var(--font-body);
-  font-size: 10px;
+  font-size: var(--fs-2xs);
   font-weight: 700;
   letter-spacing: 0.7px;
   line-height: 1.8;
@@ -132,7 +132,8 @@ export function Art({
   alt?: string
   /**
    * A finding slot's treatment: `passed` gets the green edge of the card that
-   * was not taken; `stock` is the dimmed, dashed card that stayed on the shelf.
+   * should have been taken; `stock` is the dimmed, dashed card that stayed on
+   * the shelf.
    */
   edge?: 'passed' | 'stock' | null
 }): JSX.Element {
@@ -227,13 +228,21 @@ const RenderBox = styled.span<{ $missing: boolean }>`
   ${artImg}
 `
 
+/**
+ * A finding's card render. 94×130 keeps the 400:520 aspect of the real art and
+ * is sized for the finding card's *second column*, where the two verdict cards
+ * are stacked one above the other rather than laid out side by side: at the old
+ * 110×152 a stacked pair stood taller than the verdict text beside it and the
+ * card became a column of art with a paragraph in the margin.
+ */
 const BigBox = styled.span<{ $missing: boolean; $edge: 'passed' | 'stock' | null }>`
   position: relative;
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 110px;
-  height: 152px;
+  flex: 0 0 auto;
+  width: 94px;
+  height: 130px;
   overflow: hidden;
   border-radius: 8px;
   background: var(--fill);
@@ -264,7 +273,7 @@ const BigBox = styled.span<{ $missing: boolean; $edge: 'passed' | 'stock' | null
 
 const PlateText = styled.span`
   font-family: var(--font-display);
-  font-size: 10.5px;
+  font-size: var(--fs-2xs);
   letter-spacing: 0.3px;
   line-height: 1;
   color: var(--ink-dim);
@@ -275,7 +284,7 @@ const BigPlateText = styled.span`
   text-align: center;
   line-height: 1.25;
   font-family: var(--font-display);
-  font-size: 12px;
+  font-size: var(--fs-sm);
   letter-spacing: 0.4px;
   color: var(--ink-dim);
 `
@@ -293,7 +302,7 @@ export const TBox = styled.div`
 export const Table = styled.table`
   width: 100%;
   border-collapse: collapse;
-  font-size: 13px;
+  font-size: var(--fs-base);
   font-variant-numeric: tabular-nums;
 
   thead th {
@@ -301,7 +310,7 @@ export const Table = styled.table`
     text-align: left;
     font-family: var(--font-body);
     font-weight: 600;
-    font-size: 10px;
+    font-size: var(--fs-2xs);
     letter-spacing: 0.9px;
     text-transform: uppercase;
     color: var(--ink-dim);
@@ -331,7 +340,7 @@ export const Table = styled.table`
     padding: 8px 12px;
     border-top: 1px solid var(--line-strong);
     background: #1d1a18;
-    font-size: 11px;
+    font-size: var(--fs-xs);
     font-weight: 600;
     color: var(--ink-dim);
     white-space: nowrap;
@@ -367,7 +376,7 @@ export const GridCell = styled.div`
 `
 
 export const CellKey = styled.div`
-  font-size: 9px;
+  font-size: var(--fs-2xs);
   letter-spacing: 0.7px;
   text-transform: uppercase;
   color: var(--ink-faint);
@@ -375,8 +384,8 @@ export const CellKey = styled.div`
 
 export const CellValue = styled.div<{ $tone?: string | null }>`
   font-family: var(--font-display);
-  font-size: 21px;
-  line-height: 1.2;
+  font-size: var(--fs-2xl);
+  line-height: var(--lh-tight);
   font-variant-numeric: tabular-nums;
   color: ${(p) => p.$tone ?? 'var(--ink)'};
 `
@@ -493,7 +502,7 @@ export const Banner = styled.div<{ $tone: BannerTone }>`
     text-shadow: 2px 2px 0 oklch(0 0 0 / 45%);
   }
   .sub {
-    font-size: 11px;
+    font-size: var(--fs-xs);
     line-height: 1.45;
     color: var(--ink-dim);
   }
@@ -515,7 +524,7 @@ export const LiveChip = styled.span`
   border: 1px solid color-mix(in oklab, var(--sts-color-aqua) 55%, transparent);
   color: var(--sts-color-aqua);
   font-family: var(--font-body);
-  font-size: 10px;
+  font-size: var(--fs-2xs);
   font-weight: 700;
   letter-spacing: 0.9px;
   animation: ${breathe} 2.6s ease-in-out infinite;
@@ -548,6 +557,22 @@ export const Plaque = styled.div<{ $frame: string }>`
   }
 `
 
+/**
+ * One cell of the plaque: three lines, three sizes, and no exceptions.
+ *
+ * A plaque is read *across* rather than down, so every drift in it is visible
+ * at a glance: the cells used to run a 22px number beside a 19px character name
+ * beside an 18px duration set by an inline style, with a 9.5px label above and
+ * a 10px whisper below. Six cells, four value sizes, one of them off the type
+ * scale entirely — which read as three designs sharing a frame.
+ *
+ * It is now one token per row: `--fs-2xs` label, `--fs-xl` value, `--fs-xs`
+ * sub-line, `--lh-tight` throughout so the three baselines land in the same
+ * places in all six columns. The value step is `--fs-xl` rather than `--fs-2xl`
+ * because the widest value in the row is a character name, not a number, and
+ * NECROBINDER at 22px does not fit a sixth of the dashboard's width — the name
+ * shares the number's size (`CharValue` below) instead of being shrunk to fit.
+ */
 export const PCell = styled.div`
   padding: 10px 14px 11px;
   border-right: 1px solid var(--line);
@@ -557,27 +582,30 @@ export const PCell = styled.div`
   }
 
   .k {
-    font-size: 9.5px;
+    font-size: var(--fs-2xs);
+    line-height: var(--lh-tight);
     letter-spacing: 1px;
     text-transform: uppercase;
     color: var(--ink-faint);
   }
   .v {
-    margin-top: 1px;
+    margin-top: 2px;
     font-family: var(--font-display);
-    font-size: 22px;
-    line-height: 1.18;
+    font-size: var(--fs-xl);
+    line-height: var(--lh-tight);
     color: var(--ink);
     font-variant-numeric: tabular-nums;
     white-space: nowrap;
   }
   .v small {
-    font-size: 12px;
+    font-size: var(--fs-sm);
     color: var(--ink-dim);
   }
   .w {
+    margin-top: 2px;
     font-family: var(--font-mono);
-    font-size: 10px;
+    font-size: var(--fs-xs);
+    line-height: var(--lh-tight);
     color: var(--ink-faint);
     white-space: nowrap;
     overflow: hidden;
@@ -585,15 +613,21 @@ export const PCell = styled.div`
   }
 `
 
-/** The character cell's value takes the run's tint; every other cell is ink. */
+/**
+ * The character cell's value takes the run's tint; every other cell is ink.
+ * Size and line-height are the plaque's value step, unchanged — a name is still
+ * a value, and the only thing that may differ from its five neighbours is hue.
+ */
 export const CharValue = styled.div<{ $edge: string }>`
-  margin-top: 1px;
+  margin-top: 2px;
   font-family: var(--font-display);
-  font-size: 19px;
-  line-height: 1.18;
+  font-size: var(--fs-xl);
+  line-height: var(--lh-tight);
   letter-spacing: 0.8px;
   color: ${(p) => p.$edge};
   white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 `
 
 // ── misc ────────────────────────────────────────────────────────────────────
@@ -612,7 +646,7 @@ export const Duo = styled.div`
 /** A quiet inline note, for the one-line states a section shows instead of data. */
 export const Note = styled.p`
   margin: 14px 2px;
-  font-size: 13px;
+  font-size: var(--fs-base);
   font-style: italic;
   color: var(--ink-faint);
 `
@@ -644,13 +678,13 @@ export const EmptyPlate = styled.div`
   strong {
     font-family: var(--font-display);
     font-weight: 500;
-    font-size: 17px;
+    font-size: var(--fs-lg);
     letter-spacing: 0.5px;
     color: var(--ink);
   }
   span {
-    font-size: 13px;
-    line-height: 1.55;
+    font-size: var(--fs-base);
+    line-height: var(--lh-body);
     color: var(--ink-faint);
     max-width: 62ch;
   }

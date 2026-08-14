@@ -17,7 +17,9 @@ import { roomKind, type RoomKind } from './format'
  *      reward shown in R10 is written *after* R11's `room_enter`. Attaching
  *      outcomes to "whatever room is current" would put every skip one row too
  *      low. Offers are tracked by `eid` and their outcome is attached to the
- *      room they were *shown* in — the room the reader remembers.
+ *      room they were *shown* in — the room the reader remembers. The whole
+ *      offer rides on that row (`RouteRoom.offer`), not just its outcome, so
+ *      the ledger can reopen the reward screen without a second event pass.
  *   2. **Notes are data, not sentences.** A route note needs a card's display
  *      name, and names live in the compendium join, not in the log. So this
  *      module emits structured notes and `routeNoteText` turns them into words
@@ -58,6 +60,42 @@ function costMap(e: RunEvent, key: string): Record<string, number> {
   return out
 }
 
+/** One offered card's deck-conditioned advice, as `offer_shown.advice` stores it. */
+interface RawAdvice {
+  /** 0–1, deck-conditioned. The ledger speaks in 0–100. */
+  score: number
+  reasons: string[]
+}
+
+/**
+ * `offer_shown.advice`, read the same defensive way everything else here is.
+ *
+ * The map is written twice by two different halves of the app: the recorder
+ * patches it onto the event while the offer is on screen (advice the overlay
+ * had already fetched to answer the draft), and the post-run pipeline patches
+ * the same field for offers that never got any, stamping `adviceSource:
+ * 'replay'`. Both look identical here, which is the point: the panel shows the
+ * numbers and says which of the two produced them.
+ */
+function adviceMap(e: RunEvent, key: string): Record<string, RawAdvice> {
+  const v = (e as unknown as Bag)[key]
+  if (!v || typeof v !== 'object' || Array.isArray(v)) return {}
+  const out: Record<string, RawAdvice> = {}
+  for (const [id, row] of Object.entries(v as Bag)) {
+    if (!row || typeof row !== 'object' || Array.isArray(row)) continue
+    const bag = row as Bag
+    const score = bag['score']
+    if (typeof score !== 'number' || !Number.isFinite(score)) continue
+    out[id] = {
+      score,
+      reasons: Array.isArray(bag['reasons'])
+        ? (bag['reasons'] as unknown[]).filter((r): r is string => typeof r === 'string')
+        : []
+    }
+  }
+  return out
+}
+
 // ── the route ledger ────────────────────────────────────────────────────────
 
 /** One card in a route row's pickup cell. */
@@ -84,6 +122,55 @@ export type RouteNote =
   | { t: 'gained' }
   | { t: 'game-over' }
 
+/** One thing that was on offer in a room, with everything the panel shows about it. */
+export interface RouteOfferOption {
+  id: string
+  /** The level it entered the deck at. Only ever non-zero on the taken option. */
+  upgradeLevel: number
+  /** Gold price, when the room was a shop and the price was readable. */
+  cost: number | null
+  /** The advice grade, rescaled from the model's 0–1 to the report's 0–100. */
+  score: number | null
+  /** "Bloodletting 68%" — already flattened by the advice client. */
+  reasons: string[]
+  /** True for the one that entered the deck. */
+  taken: boolean
+}
+
+/**
+ * Everything a room's `offer_shown` said, kept whole.
+ *
+ * The route row itself only ever shows the pickup and (in a tooltip) what was
+ * left — that is the blend spec's one-accent-per-row rule, and it is right for
+ * a table you read top to bottom. But the question "what else was on that
+ * screen?" is the *second* question every reader asks, and the answer is
+ * already in the log. So the fold keeps the full offer on the row and the
+ * ledger reveals it on click, rather than a second pass over the events
+ * building a parallel and eventually divergent idea of what a room contained.
+ */
+export interface RouteOffer {
+  /** The `offer_shown` event id this came from. */
+  eid: number
+  /** The recorder's own word: `cardReward`, `merchant`, `chooseACard`, … */
+  source: string
+  /** True when the options carry prices and the room was a shop. */
+  shop: boolean
+  /** Every card that was on the screen, in the order it was offered. */
+  options: RouteOfferOption[]
+  /**
+   * Priced merchant ids that are not cards: relics and potions. They are on the
+   * same shelf and the panel shows them, as sprites, because no framed render
+   * exists for either.
+   */
+  stock: Array<{ id: string; cost: number | null }>
+  /** What was taken, or null for a skip. */
+  picked: string | null
+  /** False for an offer whose window never closed (a run cut short mid-screen). */
+  resolved: boolean
+  /** Where the grades came from, or null when the file carries none. */
+  advice: 'live' | 'replay' | null
+}
+
 export interface RouteRoom {
   kind: 'room'
   key: string
@@ -98,6 +185,8 @@ export interface RouteRoom {
   pickup: RouteCard | null
   /** What was offered and left — struck through beside the pickup. */
   passed: RouteCard[]
+  /** The whole reward screen, when this room showed one. Null for every other room. */
+  offer: RouteOffer | null
   /** The run's last room: the one tinted row. */
   end: boolean
   /** Finding reference (`F-01`), attached from the analysis when there is one. */
@@ -161,6 +250,8 @@ interface OpenOffer {
   costs: Record<string, number>
   room: RouteRoom | null
   picked: string | null
+  /** The row's own copy, mutated in place as the outcome arrives. */
+  payload: RouteOffer
 }
 
 const MAX_NOTES = 3
@@ -197,6 +288,7 @@ export function deriveRoute(run: RunFile): DerivedRoute {
           notes: [],
           pickup: null,
           passed: [],
+          offer: null,
           end: false,
           flag: null
         }
@@ -214,7 +306,7 @@ export function deriveRoute(run: RunFile): DerivedRoute {
           kind: 'act',
           key: `act${to}-${seq}`,
           act: to + 1,
-          note: 'act index changed after this room (boss inferred)'
+          note: 'act index changed after this room'
         })
         break
       }
@@ -245,13 +337,36 @@ export function deriveRoute(run: RunFile): DerivedRoute {
         const source = str(event, 'source') ?? 'unknown'
         const offered = strs(event, 'offered')
         const costs = costMap(event, 'costs')
-        offers.set(eid, { source, offered, costs, room: current, picked: null })
+        const advice = adviceMap(event, 'advice')
+        const graded = Object.keys(advice).length > 0
+        const payload: RouteOffer = {
+          eid,
+          source,
+          shop: source === 'merchant',
+          options: offered.map((id) => ({
+            id,
+            upgradeLevel: 0,
+            cost: costs[id] ?? null,
+            // The model answers in probabilities and the report speaks in
+            // whole points, the same rescale `AnalysisRunner.grade` applies.
+            score: advice[id] ? Math.round(advice[id].score * 100) : null,
+            reasons: advice[id]?.reasons ?? [],
+            taken: false
+          })),
+          stock: [],
+          picked: null,
+          resolved: false,
+          advice: !graded ? null : str(event, 'adviceSource') === 'replay' ? 'replay' : 'live'
+        }
+        offers.set(eid, { source, offered, costs, room: current, picked: null, payload })
+        if (current) current.offer = payload
         // Merchant stock carries priced ids that are *not* cards — relics and
         // potions. Shop stock is the only observable trace either leaves today,
         // which is exactly what the Relics & Potions strip admits to showing.
         if (source === 'merchant') {
           for (const [id, cost] of Object.entries(costs)) {
             if (offered.includes(id)) continue
+            payload.stock.push({ id, cost })
             if (sightings.some((s) => s.id === id && s.roomIndex === current?.roomIndex)) continue
             sightings.push({
               id,
@@ -268,8 +383,15 @@ export function deriveRoute(run: RunFile): DerivedRoute {
         const eid = num(event, 'eid')
         const offer = eid === null ? undefined : offers.get(eid)
         if (!offer) break
-        const picked = str(event, 'picked')
+        // `ambiguous:ID` is pick inference admitting it could not choose between
+        // two identical gains; the id after the prefix is still the better guess
+        // than nothing, and the panel marks it the same way.
+        const raw = str(event, 'picked')
+        const picked = raw && raw.startsWith('ambiguous:') ? raw.slice('ambiguous:'.length) : raw
         offer.picked = picked
+        offer.payload.picked = picked
+        offer.payload.resolved = true
+        for (const option of offer.payload.options) option.taken = option.id === picked
         if (picked === null) {
           totals.skipped++
           note(offer.room, offer.source === 'merchant' ? { t: 'no-purchase' } : { t: 'skipped' })
@@ -298,6 +420,14 @@ export function deriveRoute(run: RunFile): DerivedRoute {
         const cost = offer?.costs[id] ?? null
         const card: RouteCard = { id, upgradeLevel: num(event, 'upgradeLevel') ?? 0, cost }
         if (row) row.pickup = card
+        // The gain lands before the offer's window closes, so this is where the
+        // acquisition upgrade level is known — and where an offer that never
+        // resolved (a run cut short on the reward screen) still learns its pick.
+        for (const option of offer?.payload.options ?? []) {
+          if (option.id !== id) continue
+          option.upgradeLevel = card.upgradeLevel
+          option.taken = true
+        }
         if (offer?.source === 'merchant') note(row, { t: 'bought', id, cost })
         else if (!offer) note(row, row?.room === 'event' ? { t: 'event-add' } : { t: 'gained' })
         break
@@ -414,8 +544,66 @@ export function routeNoteText(
     case 'gained':
       return 'card gained'
     case 'game-over':
-      return `${outcome} — game over`
+      return `${outcome} · game over`
   }
+}
+
+// ── the offer a room showed ─────────────────────────────────────────────────
+
+/**
+ * The offer on a route line, or null when the line is a divider or a room that
+ * showed nothing.
+ *
+ * A one-line accessor rather than a second fold, deliberately: the ledger needs
+ * "is this row expandable?" for every line it draws, and the only correct
+ * answer is the one `deriveRoute` already computed while it had the events in
+ * front of it.
+ */
+export function routeOffer(line: RouteLine): RouteOffer | null {
+  return line.kind === 'room' ? line.offer : null
+}
+
+/** The recorder's `source` in the reader's words: `cardReward` → `card reward`. */
+export function offerSourceText(source: string): string {
+  switch (source) {
+    case 'cardReward':
+      return 'card reward'
+    case 'merchant':
+      return 'shop'
+    case 'chooseACard':
+      return 'choose a card'
+    case 'ancient':
+      return 'ancient choice'
+    case 'grid':
+      return 'card grid'
+    case 'event':
+      return 'event choice'
+    default:
+      // A source from a newer recorder still reads as words: camelCase splits,
+      // everything else prints itself rather than becoming "unknown".
+      return source.replace(/([a-z0-9])([A-Z])/g, '$1 $2').toLowerCase()
+  }
+}
+
+/**
+ * Where an offer's grades came from, in the words the honesty notes use.
+ *
+ * The distinction is not pedantry: live advice is what the overlay actually
+ * showed the player at the moment they chose, and replayed advice is what the
+ * model says now, knowing the deck that offer produced. A reader deciding
+ * whether a grade is a fair criticism needs to know which one they are reading.
+ */
+export function offerAdviceText(offer: RouteOffer): string {
+  if (offer.advice === 'live') return 'advice captured live'
+  if (offer.advice === 'replay') return 'advice replayed after the run'
+  return 'no advice recorded for this offer'
+}
+
+/** What became of the offer, for the panel's one-line summary. */
+export function offerOutcomeText(offer: RouteOffer): string {
+  if (!offer.resolved && offer.picked === null) return 'still open'
+  if (offer.picked === null) return offer.shop ? 'nothing bought' : 'skipped'
+  return offer.shop ? 'bought' : 'taken'
 }
 
 // ── the deck ledger ─────────────────────────────────────────────────────────
