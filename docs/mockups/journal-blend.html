@@ -109,6 +109,11 @@ h1,h2,h3{margin:0;font-family:var(--font-display);font-weight:500}
 .chip-outline.tier-F{
   color:var(--tier);border-color:color-mix(in oklab,var(--tier) 42%,transparent);
 }
+/* room-type hues — type is DATA, not accent (spec amendment B) */
+.chip-outline.rt-fight{color:var(--ink-dim);border-color:color-mix(in oklab,var(--ink-dim) 42%,transparent)}
+.chip-outline.rt-event{color:var(--brand-soft);border-color:color-mix(in oklab,var(--brand-soft) 42%,transparent)}
+.chip-outline.rt-shop{color:var(--gold);border-color:color-mix(in oklab,var(--gold) 42%,transparent)}
+.chip-outline.rt-other{color:var(--aqua);border-color:color-mix(in oklab,var(--aqua) 42%,transparent)}
 .flag{
   display:inline-flex;align-items:center;padding:0 6px;border-radius:6px;
   border:1px solid color-mix(in oklab,var(--red) 55%,transparent);
@@ -191,7 +196,7 @@ h1,h2,h3{margin:0;font-family:var(--font-display);font-weight:500}
 .runhead{position:relative;padding:16px 18px 17px 20px;overflow:hidden;background:var(--panel-solid)}
 .runhead::before{
   content:'';position:absolute;left:0;top:0;bottom:0;width:3px;
-  background:var(--ironclad-frame);
+  background:linear-gradient(to bottom,var(--ironclad-edge),var(--ironclad-frame) 70%,transparent);
 }
 .rh-top{display:flex;align-items:flex-start;gap:18px;flex-wrap:wrap}
 .rh-title{flex:1 1 360px;min-width:0}
@@ -203,10 +208,14 @@ h1,h2,h3{margin:0;font-family:var(--font-display);font-weight:500}
 .banner{
   flex:0 0 auto;display:flex;align-items:center;gap:13px;
   padding:9px 15px;border-radius:10px;
-  background:oklch(0.62 0.21 22 / 10%);
+  background:oklch(0.62 0.21 22 / 16%);
   border:1px solid oklch(0.62 0.21 22 / 38%);
+  box-shadow:var(--float-shadow);
 }
-.banner .word{font-family:var(--font-display);font-size:21px;letter-spacing:1.6px;color:var(--red);line-height:1}
+.banner .word{
+  font-family:var(--font-display);font-size:24px;letter-spacing:1.8px;color:var(--red);line-height:1;
+  text-shadow:2px 2px 0 oklch(0 0 0 / 45%);
+}
 .banner .sub{font-size:11px;color:var(--ink-dim);line-height:1.45}
 .banner .sub b{color:var(--ink);font-weight:600}
 .banner.win{background:oklch(0.86 0.24 130 / 8%);border-color:oklch(0.86 0.24 130 / 34%)}
@@ -221,7 +230,7 @@ h1,h2,h3{margin:0;font-family:var(--font-display);font-weight:500}
 .plaque{
   margin-top:16px;display:grid;grid-template-columns:1.5fr .8fr 1fr 1.15fr 1.05fr 1fr;
   border:1px solid var(--line-strong);border-radius:10px;overflow:hidden;
-  background:oklch(0 0 0 / 24%);
+  background:color-mix(in oklab,var(--ironclad-frame) 14%,oklch(0 0 0 / 24%));
 }
 .plaque.three{grid-template-columns:1.5fr .8fr 1fr 1fr 1.15fr}
 @media (max-width:1060px){ .plaque,.plaque.three{grid-template-columns:repeat(3,minmax(0,1fr))} }
@@ -290,6 +299,23 @@ tr.actrule:hover td{background:#1b1815}
 
 .chiprow{display:inline-flex;align-items:center;gap:6px;flex-wrap:wrap}
 
+/* route census band — hairline cells, same construction as .piles */
+.census{
+  display:grid;grid-template-columns:repeat(4,minmax(0,1fr));
+  background:var(--line);gap:1px;border-radius:11px;overflow:hidden;margin-bottom:12px;
+}
+.census .cc{background:#1e1b18;padding:11px 14px 12px}
+.census .ctop{display:flex;align-items:center;justify-content:space-between;gap:9px}
+.census .cn{
+  font-family:var(--font-display);font-size:22px;line-height:1.15;color:var(--ink);
+  font-variant-numeric:tabular-nums;
+}
+.census .cbar{
+  display:block;height:5px;margin-top:7px;border-radius:3px;
+  background:var(--fill);overflow:hidden;
+}
+.census .cbar i{display:block;height:100%;border-radius:3px}
+
 /* ── state divider bands (spec §6) ────────────────────────────────────────── */
 .stateband{
   margin-top:0;padding:14px 26px;
@@ -354,7 +380,7 @@ tr.actrule:hover td{background:#1b1815}
 .deck-ledger thead th .ar{font-size:9px;margin-left:3px;color:var(--ink-faint)}
 
 .deck-ledger tbody td{
-  height:38px;padding:5px 12px;border-top:1px solid var(--line);
+  height:51px;padding:3px 12px;border-top:1px solid var(--line);
   color:var(--ink);white-space:nowrap;vertical-align:middle;
 }
 .deck-ledger tbody tr:first-child td{border-top:0}
@@ -365,11 +391,21 @@ tr.actrule:hover td{background:#1b1815}
 }
 .deck-ledger td.dimnum{color:var(--ink-dim)}
 
-/* card cell — framed 34×26 thumb + name + ×N + upgrade mark */
+/* card cell — BARE 34×44 FULL render (400:520) + name + ×N + upgrade mark.
+   no container: the card art carries its own frame and rounded corners. art is
+   an identifier, not a gallery — the table reads as a dense ledger. the fixed
+   w/h means the miss placeholder holds the identical footprint, so rows with
+   no full render on the CDN stay uniform with the art rows. */
 .deck-ledger .cardcell{display:flex;align-items:center;gap:10px;min-width:0}
 .deck-ledger .thumb{
-  width:34px;height:26px;border-radius:4px;border:1px solid var(--ironclad-frame);
+  width:34px;height:44px;border:0;border-radius:0;background:transparent;
 }
+/* the four ids with no full render on the CDN fall back (via onerror) to a
+   card-shaped silhouette — radius returns for this state only. */
+.deck-ledger .thumb.miss{
+  background:var(--fill);border:1px solid var(--line);border-radius:4px;
+}
+.deck-ledger .thumb.miss::after{font-size:10.5px;color:var(--ink-dim)}
 .deck-ledger .nm{
   font-family:var(--font-body);font-weight:500;font-size:12.5px;color:var(--ink);
   overflow:hidden;text-overflow:ellipsis;
@@ -383,6 +419,19 @@ tr.actrule:hover td{background:#1b1815}
 .deck-ledger tr.is-half .nm{color:var(--orange)}
 .deck-ledger tr.is-dead td.played,
 .deck-ledger tr.is-dead td.ratenum{color:var(--red)}
+
+/* never-played rows: tinted wash + red numerals + 1px edge (Ledger's treatment).
+   the :nth-child(even) companions exist only to out-specify the zebra rule. */
+.deck-ledger tr.is-dead td{background:oklch(0.62 0.21 22 / 8%)}
+.deck-ledger tbody tr.is-dead:nth-child(even) td{background:oklch(0.62 0.21 22 / 8%)}
+.deck-ledger tbody tr.is-dead:hover td{background:oklch(0.62 0.21 22 / 13%)}
+.deck-ledger tr.is-dead td:first-child{box-shadow:inset 1px 0 0 var(--red)}
+.deck-ledger tr.is-dead td.idx,
+.deck-ledger tr.is-dead td.dimnum{color:var(--red)}
+/* half-dead row: orange wash only — the chip is the row's accent, numerals stay ink */
+.deck-ledger tr.is-half td{background:oklch(0.75 0.16 62 / 6%)}
+.deck-ledger tbody tr.is-half:nth-child(even) td{background:oklch(0.75 0.16 62 / 6%)}
+.deck-ledger tbody tr.is-half:hover td{background:oklch(0.75 0.16 62 / 11%)}
 
 /* rate: number + 3px bar on a --fill track (the only bars in the document) */
 .deck-ledger .ratewrap{display:flex;align-items:center;gap:10px;justify-content:flex-end}
@@ -431,6 +480,23 @@ tr.actrule:hover td{background:#1b1815}
 }
 
 /* ══ 3. JOURNEY REVIEW — findings ═════════════════════════════════════════ */
+/* summary strip — hairline cells, same construction as .piles / .census */
+.findings .audit{
+  display:flex;flex-wrap:wrap;gap:1px;background:var(--line);
+  border:1px solid var(--line);border-radius:10px;overflow:hidden;margin-bottom:14px;
+}
+.findings .audit > div{flex:1 1 130px;background:#1e1b18;padding:8px 14px 9px}
+.findings .audit .k{
+  font-size:9px;letter-spacing:.7px;text-transform:uppercase;color:var(--ink-faint);
+}
+.findings .audit .v{
+  font-family:var(--font-display);font-size:21px;line-height:1.2;color:var(--ink);
+  font-variant-numeric:tabular-nums;
+}
+.findings .audit .v.bad{color:var(--red)}
+.findings .audit .v.warn{color:var(--orange)}
+.findings .audit .v.good{color:var(--green)}
+
 .findings .cards{display:flex;flex-direction:column;gap:14px}
 
 .findings .fc{
@@ -447,6 +513,13 @@ tr.actrule:hover td{background:#1b1815}
 }
 .findings .fc-head .at{
   font-family:var(--font-mono);font-size:11px;letter-spacing:.6px;color:var(--ink-faint);white-space:nowrap;
+}
+/* severity chips get ledger plate geometry (backgrounds + dark text stay) */
+.findings .sev-severe,
+.findings .sev-major,
+.findings .sev-noted{
+  height:20px;display:inline-flex;align-items:center;font-weight:600;
+  border:1px solid oklch(0 0 0 / 22%);
 }
 .findings .sev-severe{background:var(--red)}
 .findings .sev-major{background:var(--orange)}
@@ -621,13 +694,26 @@ tr.actrule:hover td{background:#1b1815}
 <section class="section">
   <div class="section-head">
     <h2>Route Ledger</h2>
-    <span class="chiprow">
-      <span class="chip chip-outline">26 combat</span>
-      <span class="chip chip-outline">6 event</span>
-      <span class="chip chip-outline">4 shop</span>
-      <span class="chip chip-outline">9 other</span>
-    </span>
     <span class="whisper">rooms in order entered</span>
+  </div>
+
+  <div class="census">
+    <div class="cc">
+      <div class="ctop"><span class="chip chip-outline rt-fight">FIGHT</span><span class="cn">26</span></div>
+      <span class="cbar"><i style="width:58%;background:var(--ink-dim)"></i></span>
+    </div>
+    <div class="cc">
+      <div class="ctop"><span class="chip chip-outline rt-event">EVENT</span><span class="cn">6</span></div>
+      <span class="cbar"><i style="width:13%;background:var(--brand-soft)"></i></span>
+    </div>
+    <div class="cc">
+      <div class="ctop"><span class="chip chip-outline rt-shop">SHOP</span><span class="cn">4</span></div>
+      <span class="cbar"><i style="width:9%;background:var(--gold)"></i></span>
+    </div>
+    <div class="cc">
+      <div class="ctop"><span class="chip chip-outline rt-other">OTHER</span><span class="cn">9</span></div>
+      <span class="cbar"><i style="width:20%;background:var(--aqua)"></i></span>
+    </div>
   </div>
 
   <div class="tbox">
@@ -638,91 +724,91 @@ tr.actrule:hover td{background:#1b1815}
       </thead>
       <tbody>
 
-        <tr><td class="r">R01</td><td><span class="chip chip-outline">FIGHT</span></td><td class="entry dim">—</td><td class="dim">—</td><td class="flagcell"></td></tr>
-        <tr><td class="r">R02</td><td><span class="chip chip-outline">FIGHT</span></td><td class="entry dim">—</td><td class="dim">—</td><td class="flagcell"></td></tr>
-        <tr><td class="r">R03</td><td><span class="chip chip-outline">FIGHT</span></td><td class="entry dim">—</td>
+        <tr><td class="r">R01</td><td><span class="chip chip-outline rt-fight">FIGHT</span></td><td class="entry dim">—</td><td class="dim">—</td><td class="flagcell"></td></tr>
+        <tr><td class="r">R02</td><td><span class="chip chip-outline rt-fight">FIGHT</span></td><td class="entry dim">—</td><td class="dim">—</td><td class="flagcell"></td></tr>
+        <tr><td class="r">R03</td><td><span class="chip chip-outline rt-fight">FIGHT</span></td><td class="entry dim">—</td>
           <td><span class="pk"><span class="art"><img src="https://cdn.spire-codex.com/cards/anger.webp" alt="" loading="lazy" decoding="async" onerror="this.style.display='none';this.nextElementSibling.style.display='inline-flex'"><span class="plate">AN</span></span><span class="nm">Anger</span></span></td>
           <td class="flagcell"></td></tr>
-        <tr><td class="r">R04</td><td><span class="chip chip-outline">EVENT</span></td><td class="entry dim">—</td><td class="dim">—</td><td class="flagcell"></td></tr>
-        <tr><td class="r">R05</td><td><span class="chip chip-outline">FIGHT</span></td><td class="entry dim">—</td>
+        <tr><td class="r">R04</td><td><span class="chip chip-outline rt-event">EVENT</span></td><td class="entry dim">—</td><td class="dim">—</td><td class="flagcell"></td></tr>
+        <tr><td class="r">R05</td><td><span class="chip chip-outline rt-fight">FIGHT</span></td><td class="entry dim">—</td>
           <td><span class="pk"><span class="art"><img src="https://cdn.spire-codex.com/cards/shrug_it_off.webp" alt="" loading="lazy" decoding="async" onerror="this.style.display='none';this.nextElementSibling.style.display='inline-flex'"><span class="plate">SO</span></span><span class="nm">Shrug It Off</span></span></td>
           <td class="flagcell"></td></tr>
-        <tr><td class="r">R06</td><td><span class="chip chip-outline">OTHER</span></td><td class="entry dim">—</td><td class="dim">—</td><td class="flagcell"></td></tr>
-        <tr><td class="r">R07</td><td><span class="chip chip-outline">FIGHT</span></td><td class="entry dim">—</td>
+        <tr><td class="r">R06</td><td><span class="chip chip-outline rt-other">OTHER</span></td><td class="entry dim">—</td><td class="dim">—</td><td class="flagcell"></td></tr>
+        <tr><td class="r">R07</td><td><span class="chip chip-outline rt-fight">FIGHT</span></td><td class="entry dim">—</td>
           <td><span class="pk"><span class="art"><img src="https://cdn.spire-codex.com/cards/pommel_strike.webp" alt="" loading="lazy" decoding="async" onerror="this.style.display='none';this.nextElementSibling.style.display='inline-flex'"><span class="plate">PS</span></span><span class="nm">Pommel Strike</span></span></td>
           <td class="flagcell"></td></tr>
-        <tr><td class="r">R08</td><td><span class="chip chip-outline">FIGHT</span></td><td class="entry">2 enemies</td><td class="dim">—</td><td class="flagcell"></td></tr>
-        <tr><td class="r">R09</td><td><span class="chip chip-outline">SHOP</span></td><td class="entry">removed Strike · bought Whirlwind 156g</td>
+        <tr><td class="r">R08</td><td><span class="chip chip-outline rt-fight">FIGHT</span></td><td class="entry">2 enemies</td><td class="dim">—</td><td class="flagcell"></td></tr>
+        <tr><td class="r">R09</td><td><span class="chip chip-outline rt-shop">SHOP</span></td><td class="entry">removed Strike · bought Whirlwind 156g</td>
           <td><span class="pk"><span class="art"><img src="https://cdn.spire-codex.com/cards/whirlwind.webp" alt="" loading="lazy" decoding="async" onerror="this.style.display='none';this.nextElementSibling.style.display='inline-flex'"><span class="plate">WW</span></span><span class="nm">Whirlwind</span></span></td>
           <td class="flagcell"></td></tr>
-        <tr><td class="r">R10</td><td><span class="chip chip-outline">FIGHT</span></td><td class="entry">reward skipped</td>
+        <tr><td class="r">R10</td><td><span class="chip chip-outline rt-fight">FIGHT</span></td><td class="entry">reward skipped</td>
           <td><span class="pk"><span class="art"><img src="https://cdn.spire-codex.com/cards/iron_wave.webp" alt="" loading="lazy" decoding="async" onerror="this.style.display='none';this.nextElementSibling.style.display='inline-flex'"><span class="plate">IW</span></span><span class="nm gone">Iron Wave</span></span></td>
           <td class="flagcell"></td></tr>
-        <tr><td class="r">R11</td><td><span class="chip chip-outline">OTHER</span></td><td class="entry">upgraded Bash+</td><td class="dim">—</td><td class="flagcell"></td></tr>
-        <tr><td class="r">R12</td><td><span class="chip chip-outline">FIGHT</span></td><td class="entry">skipped Feel No Pain</td>
+        <tr><td class="r">R11</td><td><span class="chip chip-outline rt-other">OTHER</span></td><td class="entry">upgraded Bash+</td><td class="dim">—</td><td class="flagcell"></td></tr>
+        <tr><td class="r">R12</td><td><span class="chip chip-outline rt-fight">FIGHT</span></td><td class="entry">skipped Feel No Pain</td>
           <td><span class="pk"><span class="art"><img src="https://cdn.spire-codex.com/cards/twin_strike.webp" alt="" loading="lazy" decoding="async" onerror="this.style.display='none';this.nextElementSibling.style.display='inline-flex'"><span class="plate">TS</span></span><span class="nm plain">Twin Strike</span></span></td>
           <td class="flagcell"><span class="flag">F-01</span></td></tr>
-        <tr><td class="r">R13</td><td><span class="chip chip-outline">EVENT</span></td><td class="entry">event add</td>
+        <tr><td class="r">R13</td><td><span class="chip chip-outline rt-event">EVENT</span></td><td class="entry">event add</td>
           <td><span class="pk"><span class="art"><img src="https://cdn.spire-codex.com/cards/bloodletting.webp" alt="" loading="lazy" decoding="async" onerror="this.style.display='none';this.nextElementSibling.style.display='inline-flex'"><span class="plate">BL</span></span><span class="nm">Bloodletting</span></span></td>
           <td class="flagcell"></td></tr>
-        <tr><td class="r">R14</td><td><span class="chip chip-outline">OTHER</span></td><td class="entry">upgraded Inflame+</td><td class="dim">—</td><td class="flagcell"></td></tr>
-        <tr><td class="r">R15</td><td><span class="chip chip-outline">FIGHT</span></td><td class="entry dim">—</td>
+        <tr><td class="r">R14</td><td><span class="chip chip-outline rt-other">OTHER</span></td><td class="entry">upgraded Inflame+</td><td class="dim">—</td><td class="flagcell"></td></tr>
+        <tr><td class="r">R15</td><td><span class="chip chip-outline rt-fight">FIGHT</span></td><td class="entry dim">—</td>
           <td><span class="pk"><span class="art"><img src="https://cdn.spire-codex.com/cards/demon_form.webp" alt="" loading="lazy" decoding="async" onerror="this.style.display='none';this.nextElementSibling.style.display='inline-flex'"><span class="plate">DF</span></span><span class="nm">Demon Form</span></span></td>
           <td class="flagcell"></td></tr>
 
         <tr class="actrule"><td colspan="5"><b>ACT&nbsp;2</b>act index changed after this combat (boss inferred)</td></tr>
 
-        <tr><td class="r">R16</td><td><span class="chip chip-outline">FIGHT</span></td><td class="entry dim">—</td><td class="dim">—</td><td class="flagcell"></td></tr>
-        <tr><td class="r">R17</td><td><span class="chip chip-outline">FIGHT</span></td><td class="entry dim">—</td>
+        <tr><td class="r">R16</td><td><span class="chip chip-outline rt-fight">FIGHT</span></td><td class="entry dim">—</td><td class="dim">—</td><td class="flagcell"></td></tr>
+        <tr><td class="r">R17</td><td><span class="chip chip-outline rt-fight">FIGHT</span></td><td class="entry dim">—</td>
           <td><span class="pk"><span class="art"><img src="https://cdn.spire-codex.com/cards/uppercut.webp" alt="" loading="lazy" decoding="async" onerror="this.style.display='none';this.nextElementSibling.style.display='inline-flex'"><span class="plate">UC</span></span><span class="nm">Uppercut</span></span></td>
           <td class="flagcell"></td></tr>
-        <tr><td class="r">R18</td><td><span class="chip chip-outline">EVENT</span></td><td class="entry dim">—</td><td class="dim">—</td><td class="flagcell"></td></tr>
-        <tr><td class="r">R19</td><td><span class="chip chip-outline">FIGHT</span></td><td class="entry dim">—</td>
+        <tr><td class="r">R18</td><td><span class="chip chip-outline rt-event">EVENT</span></td><td class="entry dim">—</td><td class="dim">—</td><td class="flagcell"></td></tr>
+        <tr><td class="r">R19</td><td><span class="chip chip-outline rt-fight">FIGHT</span></td><td class="entry dim">—</td>
           <td><span class="pk"><span class="art"><img src="https://cdn.spire-codex.com/cards/carnage.webp" alt="" loading="lazy" decoding="async" onerror="this.style.display='none';this.nextElementSibling.style.display='inline-flex'"><span class="plate">CA</span></span><span class="nm">Carnage</span></span></td>
           <td class="flagcell"></td></tr>
-        <tr><td class="r">R20</td><td><span class="chip chip-outline">OTHER</span></td><td class="entry dim">—</td><td class="dim">—</td><td class="flagcell"></td></tr>
-        <tr><td class="r">R21</td><td><span class="chip chip-outline">FIGHT</span></td><td class="entry dim">—</td>
+        <tr><td class="r">R20</td><td><span class="chip chip-outline rt-other">OTHER</span></td><td class="entry dim">—</td><td class="dim">—</td><td class="flagcell"></td></tr>
+        <tr><td class="r">R21</td><td><span class="chip chip-outline rt-fight">FIGHT</span></td><td class="entry dim">—</td>
           <td><span class="pk"><span class="art"><img src="https://cdn.spire-codex.com/cards/disarm.webp" alt="" loading="lazy" decoding="async" onerror="this.style.display='none';this.nextElementSibling.style.display='inline-flex'"><span class="plate">DI</span></span><span class="nm">Disarm</span></span></td>
           <td class="flagcell"></td></tr>
-        <tr><td class="r">R22</td><td><span class="chip chip-outline">OTHER</span></td><td class="entry">upgraded Shrug It Off+</td><td class="dim">—</td><td class="flagcell"></td></tr>
-        <tr><td class="r">R23</td><td><span class="chip chip-outline">FIGHT</span></td><td class="entry">2 enemies</td><td class="dim">—</td><td class="flagcell"></td></tr>
-        <tr><td class="r">R24</td><td><span class="chip chip-outline">FIGHT</span></td><td class="entry dim">—</td>
+        <tr><td class="r">R22</td><td><span class="chip chip-outline rt-other">OTHER</span></td><td class="entry">upgraded Shrug It Off+</td><td class="dim">—</td><td class="flagcell"></td></tr>
+        <tr><td class="r">R23</td><td><span class="chip chip-outline rt-fight">FIGHT</span></td><td class="entry">2 enemies</td><td class="dim">—</td><td class="flagcell"></td></tr>
+        <tr><td class="r">R24</td><td><span class="chip chip-outline rt-fight">FIGHT</span></td><td class="entry dim">—</td>
           <td><span class="pk"><span class="art"><img src="https://cdn.spire-codex.com/cards/battle_trance.webp" alt="" loading="lazy" decoding="async" onerror="this.style.display='none';this.nextElementSibling.style.display='inline-flex'"><span class="plate">BT</span></span><span class="nm">Battle Trance</span></span></td>
           <td class="flagcell"></td></tr>
-        <tr><td class="r">R25</td><td><span class="chip chip-outline">EVENT</span></td><td class="entry">event add</td>
+        <tr><td class="r">R25</td><td><span class="chip chip-outline rt-event">EVENT</span></td><td class="entry">event add</td>
           <td><span class="pk"><span class="art"><img src="https://cdn.spire-codex.com/cards/body_slam.webp" alt="" loading="lazy" decoding="async" onerror="this.style.display='none';this.nextElementSibling.style.display='inline-flex'"><span class="plate">BS</span></span><span class="nm">Body Slam</span></span></td>
           <td class="flagcell"></td></tr>
-        <tr><td class="r">R26</td><td><span class="chip chip-outline">FIGHT</span></td><td class="entry dim">—</td><td class="dim">—</td><td class="flagcell"></td></tr>
-        <tr><td class="r">R27</td><td><span class="chip chip-outline">SHOP</span></td><td class="entry">no card gained</td><td class="dim">—</td><td class="flagcell"></td></tr>
-        <tr><td class="r">R28</td><td><span class="chip chip-outline">SHOP</span></td><td class="entry">left Barricade 187g</td><td class="dim">—</td><td class="flagcell"><span class="flag">F-02</span></td></tr>
-        <tr><td class="r">R29</td><td><span class="chip chip-outline">OTHER</span></td><td class="entry">upgraded Pommel Strike+</td><td class="dim">—</td><td class="flagcell"></td></tr>
-        <tr><td class="r">R30</td><td><span class="chip chip-outline">FIGHT</span></td><td class="entry dim">—</td>
+        <tr><td class="r">R26</td><td><span class="chip chip-outline rt-fight">FIGHT</span></td><td class="entry dim">—</td><td class="dim">—</td><td class="flagcell"></td></tr>
+        <tr><td class="r">R27</td><td><span class="chip chip-outline rt-shop">SHOP</span></td><td class="entry">no card gained</td><td class="dim">—</td><td class="flagcell"></td></tr>
+        <tr><td class="r">R28</td><td><span class="chip chip-outline rt-shop">SHOP</span></td><td class="entry">left Barricade 187g</td><td class="dim">—</td><td class="flagcell"><span class="flag">F-02</span></td></tr>
+        <tr><td class="r">R29</td><td><span class="chip chip-outline rt-other">OTHER</span></td><td class="entry">upgraded Pommel Strike+</td><td class="dim">—</td><td class="flagcell"></td></tr>
+        <tr><td class="r">R30</td><td><span class="chip chip-outline rt-fight">FIGHT</span></td><td class="entry dim">—</td>
           <td><span class="pk"><span class="art"><img src="https://cdn.spire-codex.com/cards/offering.webp" alt="" loading="lazy" decoding="async" onerror="this.style.display='none';this.nextElementSibling.style.display='inline-flex'"><span class="plate">OF</span></span><span class="nm">Offering</span></span></td>
           <td class="flagcell"></td></tr>
 
         <tr class="actrule"><td colspan="5"><b>ACT&nbsp;3</b>act index changed after this combat (boss inferred)</td></tr>
 
-        <tr><td class="r">R31</td><td><span class="chip chip-outline">FIGHT</span></td><td class="entry dim">—</td>
+        <tr><td class="r">R31</td><td><span class="chip chip-outline rt-fight">FIGHT</span></td><td class="entry dim">—</td>
           <td><span class="pk"><span class="art"><img src="https://cdn.spire-codex.com/cards/anger.webp" alt="" loading="lazy" decoding="async" onerror="this.style.display='none';this.nextElementSibling.style.display='inline-flex'"><span class="plate">AN</span></span><span class="nm">Anger</span></span></td>
           <td class="flagcell"></td></tr>
-        <tr><td class="r">R32</td><td><span class="chip chip-outline">FIGHT</span></td><td class="entry dim">—</td><td class="dim">—</td><td class="flagcell"></td></tr>
-        <tr><td class="r">R33</td><td><span class="chip chip-outline">EVENT</span></td><td class="entry">skipped Limit Break</td>
+        <tr><td class="r">R32</td><td><span class="chip chip-outline rt-fight">FIGHT</span></td><td class="entry dim">—</td><td class="dim">—</td><td class="flagcell"></td></tr>
+        <tr><td class="r">R33</td><td><span class="chip chip-outline rt-event">EVENT</span></td><td class="entry">skipped Limit Break</td>
           <td><span class="pk"><span class="art"><img src="https://cdn.spire-codex.com/cards/impervious.webp" alt="" loading="lazy" decoding="async" onerror="this.style.display='none';this.nextElementSibling.style.display='inline-flex'"><span class="plate">IP</span></span><span class="nm plain">Impervious</span></span></td>
           <td class="flagcell"><span class="flag">F-03</span></td></tr>
-        <tr><td class="r">R34</td><td><span class="chip chip-outline">FIGHT</span></td><td class="entry dim">—</td>
+        <tr><td class="r">R34</td><td><span class="chip chip-outline rt-fight">FIGHT</span></td><td class="entry dim">—</td>
           <td><span class="pk"><span class="art"><img src="https://cdn.spire-codex.com/cards/carnage.webp" alt="" loading="lazy" decoding="async" onerror="this.style.display='none';this.nextElementSibling.style.display='inline-flex'"><span class="plate">CA</span></span><span class="nm">Carnage</span></span></td>
           <td class="flagcell"></td></tr>
-        <tr><td class="r">R35</td><td><span class="chip chip-outline">OTHER</span></td><td class="entry">upgraded Battle Trance+</td><td class="dim">—</td><td class="flagcell"></td></tr>
-        <tr><td class="r">R36</td><td><span class="chip chip-outline">FIGHT</span></td><td class="entry">3 enemies</td><td class="dim">—</td><td class="flagcell"></td></tr>
-        <tr><td class="r">R37</td><td><span class="chip chip-outline">FIGHT</span></td><td class="entry dim">—</td><td class="dim">—</td><td class="flagcell"></td></tr>
-        <tr><td class="r">R38</td><td><span class="chip chip-outline">OTHER</span></td><td class="entry dim">—</td><td class="dim">—</td><td class="flagcell"></td></tr>
-        <tr><td class="r">R39</td><td><span class="chip chip-outline">FIGHT</span></td><td class="entry dim">—</td><td class="dim">—</td><td class="flagcell"></td></tr>
-        <tr><td class="r">R40</td><td><span class="chip chip-outline">EVENT</span></td><td class="entry dim">—</td><td class="dim">—</td><td class="flagcell"></td></tr>
-        <tr><td class="r">R41</td><td><span class="chip chip-outline">FIGHT</span></td><td class="entry dim">—</td><td class="dim">—</td><td class="flagcell"></td></tr>
-        <tr><td class="r">R42</td><td><span class="chip chip-outline">SHOP</span></td><td class="entry">no card gained</td><td class="dim">—</td><td class="flagcell"></td></tr>
-        <tr><td class="r">R43</td><td><span class="chip chip-outline">FIGHT</span></td><td class="entry dim">—</td><td class="dim">—</td><td class="flagcell"></td></tr>
-        <tr><td class="r">R44</td><td><span class="chip chip-outline">OTHER</span></td><td class="entry dim">—</td><td class="dim">—</td><td class="flagcell"></td></tr>
-        <tr class="end"><td class="r">R45</td><td><span class="chip chip-outline">FIGHT</span></td><td class="entry"><b>DEFEATED — game over</b></td><td class="dim">—</td><td class="flagcell"></td></tr>
+        <tr><td class="r">R35</td><td><span class="chip chip-outline rt-other">OTHER</span></td><td class="entry">upgraded Battle Trance+</td><td class="dim">—</td><td class="flagcell"></td></tr>
+        <tr><td class="r">R36</td><td><span class="chip chip-outline rt-fight">FIGHT</span></td><td class="entry">3 enemies</td><td class="dim">—</td><td class="flagcell"></td></tr>
+        <tr><td class="r">R37</td><td><span class="chip chip-outline rt-fight">FIGHT</span></td><td class="entry dim">—</td><td class="dim">—</td><td class="flagcell"></td></tr>
+        <tr><td class="r">R38</td><td><span class="chip chip-outline rt-other">OTHER</span></td><td class="entry dim">—</td><td class="dim">—</td><td class="flagcell"></td></tr>
+        <tr><td class="r">R39</td><td><span class="chip chip-outline rt-fight">FIGHT</span></td><td class="entry dim">—</td><td class="dim">—</td><td class="flagcell"></td></tr>
+        <tr><td class="r">R40</td><td><span class="chip chip-outline rt-event">EVENT</span></td><td class="entry dim">—</td><td class="dim">—</td><td class="flagcell"></td></tr>
+        <tr><td class="r">R41</td><td><span class="chip chip-outline rt-fight">FIGHT</span></td><td class="entry dim">—</td><td class="dim">—</td><td class="flagcell"></td></tr>
+        <tr><td class="r">R42</td><td><span class="chip chip-outline rt-shop">SHOP</span></td><td class="entry">no card gained</td><td class="dim">—</td><td class="flagcell"></td></tr>
+        <tr><td class="r">R43</td><td><span class="chip chip-outline rt-fight">FIGHT</span></td><td class="entry dim">—</td><td class="dim">—</td><td class="flagcell"></td></tr>
+        <tr><td class="r">R44</td><td><span class="chip chip-outline rt-other">OTHER</span></td><td class="entry dim">—</td><td class="dim">—</td><td class="flagcell"></td></tr>
+        <tr class="end"><td class="r">R45</td><td><span class="chip chip-outline rt-fight">FIGHT</span></td><td class="entry"><b>DEFEATED — game over</b></td><td class="dim">—</td><td class="flagcell"></td></tr>
       </tbody>
       <tfoot>
         <tr><td colspan="5">45 rooms · 16 cards taken · 2 skipped · 5 upgrades · 1 removal</td></tr>
@@ -740,8 +826,8 @@ tr.actrule:hover td{background:#1b1815}
   <div class="tbox">
     <table>
       <colgroup>
-        <col style="width:44px"><col><col style="width:74px"><col style="width:74px">
-        <col style="width:78px"><col style="width:170px"><col style="width:186px">
+        <col style="width:44px"><col><col style="width:70px"><col style="width:70px">
+        <col style="width:74px"><col style="width:64px"><col style="width:170px"><col style="width:178px">
       </colgroup>
       <thead>
         <tr>
@@ -750,6 +836,7 @@ tr.actrule:hover td{background:#1b1815}
           <th class="r">Copies</th>
           <th class="r">Drawn</th>
           <th class="r sorted">Played<span class="ar">▾</span></th>
+          <th class="r">Dead</th>
           <th class="r">Rate</th>
           <th>Verdict</th>
         </tr>
@@ -758,152 +845,152 @@ tr.actrule:hover td{background:#1b1815}
 
         <tr>
           <td class="idx">01</td>
-          <td><span class="cardcell"><span class="thumb" data-ini="DE"><img src="https://cdn.spire-codex.com/cards/defend.webp" alt="" loading="lazy" decoding="async" onerror="this.parentNode.classList.add('miss');this.style.display='none'"></span><span class="nm">Defend</span><span class="xn">×4</span></span></td>
-          <td class="r num">4</td><td class="r num dimnum">55</td><td class="r num played">47</td>
+          <td><span class="cardcell"><span class="thumb" data-ini="DE"><img src="https://cdn.spire-codex.com/cards-full/stable/defend.webp" alt="" loading="lazy" decoding="async" onerror="this.parentNode.classList.add('miss');this.style.display='none'"></span><span class="nm">Defend</span><span class="xn">×4</span></span></td>
+          <td class="r num">4</td><td class="r num dimnum">55</td><td class="r num played">47</td><td class="r num dimnum">8</td>
           <td><span class="ratewrap"><span class="ratenum num">85.5%</span><span class="rbar"><i style="width:86%"></i></span></span></td>
           <td></td>
         </tr>
 
         <tr>
           <td class="idx">02</td>
-          <td><span class="cardcell"><span class="thumb" data-ini="ST"><img src="https://cdn.spire-codex.com/cards/strike.webp" alt="" loading="lazy" decoding="async" onerror="this.parentNode.classList.add('miss');this.style.display='none'"></span><span class="nm">Strike</span><span class="xn">×4</span></span></td>
-          <td class="r num">4</td><td class="r num dimnum">52</td><td class="r num played">41</td>
+          <td><span class="cardcell"><span class="thumb" data-ini="ST"><img src="https://cdn.spire-codex.com/cards-full/stable/strike.webp" alt="" loading="lazy" decoding="async" onerror="this.parentNode.classList.add('miss');this.style.display='none'"></span><span class="nm">Strike</span><span class="xn">×4</span></span></td>
+          <td class="r num">4</td><td class="r num dimnum">52</td><td class="r num played">41</td><td class="r num dimnum">11</td>
           <td><span class="ratewrap"><span class="ratenum num">78.8%</span><span class="rbar"><i style="width:79%"></i></span></span></td>
           <td></td>
         </tr>
 
         <tr>
           <td class="idx">03</td>
-          <td><span class="cardcell"><span class="thumb" data-ini="PS"><img src="https://cdn.spire-codex.com/cards/pommel_strike.webp" alt="" loading="lazy" decoding="async" onerror="this.parentNode.classList.add('miss');this.style.display='none'"></span><span class="nm">Pommel Strike<span class="up">+</span></span></span></td>
-          <td class="r num">1</td><td class="r num dimnum">24</td><td class="r num played">22</td>
+          <td><span class="cardcell"><span class="thumb" data-ini="PS"><img src="https://cdn.spire-codex.com/cards-full/stable/pommel_strike_upg.webp" alt="" loading="lazy" decoding="async" onerror="this.parentNode.classList.add('miss');this.style.display='none'"></span><span class="nm">Pommel Strike<span class="up">+</span></span></span></td>
+          <td class="r num">1</td><td class="r num dimnum">24</td><td class="r num played">22</td><td class="r num dimnum">2</td>
           <td><span class="ratewrap"><span class="ratenum num">91.7%</span><span class="rbar"><i style="width:92%"></i></span></span></td>
           <td></td>
         </tr>
 
         <tr>
           <td class="idx">04</td>
-          <td><span class="cardcell"><span class="thumb" data-ini="BA"><img src="https://cdn.spire-codex.com/cards/bash.webp" alt="" loading="lazy" decoding="async" onerror="this.parentNode.classList.add('miss');this.style.display='none'"></span><span class="nm">Bash<span class="up">+</span></span></span></td>
-          <td class="r num">1</td><td class="r num dimnum">21</td><td class="r num played">19</td>
+          <td><span class="cardcell"><span class="thumb" data-ini="BA"><img src="https://cdn.spire-codex.com/cards-full/stable/bash_upg.webp" alt="" loading="lazy" decoding="async" onerror="this.parentNode.classList.add('miss');this.style.display='none'"></span><span class="nm">Bash<span class="up">+</span></span></span></td>
+          <td class="r num">1</td><td class="r num dimnum">21</td><td class="r num played">19</td><td class="r num dimnum">2</td>
           <td><span class="ratewrap"><span class="ratenum num">90.5%</span><span class="rbar"><i style="width:90%"></i></span></span></td>
           <td></td>
         </tr>
 
         <tr>
           <td class="idx">05</td>
-          <td><span class="cardcell"><span class="thumb" data-ini="SO"><img src="https://cdn.spire-codex.com/cards/shrug_it_off.webp" alt="" loading="lazy" decoding="async" onerror="this.parentNode.classList.add('miss');this.style.display='none'"></span><span class="nm">Shrug It Off</span></span></td>
-          <td class="r num">1</td><td class="r num dimnum">19</td><td class="r num played">18</td>
+          <td><span class="cardcell"><span class="thumb" data-ini="SO"><img src="https://cdn.spire-codex.com/cards-full/stable/shrug_it_off.webp" alt="" loading="lazy" decoding="async" onerror="this.parentNode.classList.add('miss');this.style.display='none'"></span><span class="nm">Shrug It Off</span></span></td>
+          <td class="r num">1</td><td class="r num dimnum">19</td><td class="r num played">18</td><td class="r num dimnum">1</td>
           <td><span class="ratewrap"><span class="ratenum num">94.7%</span><span class="rbar"><i style="width:95%"></i></span></span></td>
           <td></td>
         </tr>
 
         <tr>
           <td class="idx">06</td>
-          <td><span class="cardcell"><span class="thumb" data-ini="SO"><img src="https://cdn.spire-codex.com/cards/shrug_it_off.webp" alt="" loading="lazy" decoding="async" onerror="this.parentNode.classList.add('miss');this.style.display='none'"></span><span class="nm">Shrug It Off<span class="up">+</span></span></span></td>
-          <td class="r num">1</td><td class="r num dimnum">18</td><td class="r num played">16</td>
+          <td><span class="cardcell"><span class="thumb" data-ini="SO"><img src="https://cdn.spire-codex.com/cards-full/stable/shrug_it_off_upg.webp" alt="" loading="lazy" decoding="async" onerror="this.parentNode.classList.add('miss');this.style.display='none'"></span><span class="nm">Shrug It Off<span class="up">+</span></span></span></td>
+          <td class="r num">1</td><td class="r num dimnum">18</td><td class="r num played">16</td><td class="r num dimnum">2</td>
           <td><span class="ratewrap"><span class="ratenum num">88.9%</span><span class="rbar"><i style="width:89%"></i></span></span></td>
           <td></td>
         </tr>
 
         <tr>
           <td class="idx">07</td>
-          <td><span class="cardcell"><span class="thumb" data-ini="BT"><img src="https://cdn.spire-codex.com/cards/battle_trance.webp" alt="" loading="lazy" decoding="async" onerror="this.parentNode.classList.add('miss');this.style.display='none'"></span><span class="nm">Battle Trance<span class="up">+</span></span></span></td>
-          <td class="r num">1</td><td class="r num dimnum">16</td><td class="r num played">16</td>
+          <td><span class="cardcell"><span class="thumb" data-ini="BT"><img src="https://cdn.spire-codex.com/cards-full/stable/battle_trance_upg.webp" alt="" loading="lazy" decoding="async" onerror="this.parentNode.classList.add('miss');this.style.display='none'"></span><span class="nm">Battle Trance<span class="up">+</span></span></span></td>
+          <td class="r num">1</td><td class="r num dimnum">16</td><td class="r num played">16</td><td class="r num dimnum">0</td>
           <td><span class="ratewrap"><span class="ratenum num">100.0%</span><span class="rbar"><i style="width:100%"></i></span></span></td>
           <td></td>
         </tr>
 
         <tr class="is-core">
           <td class="idx">08</td>
-          <td><span class="cardcell"><span class="thumb" data-ini="IN"><img src="https://cdn.spire-codex.com/cards/inflame.webp" alt="" loading="lazy" decoding="async" onerror="this.parentNode.classList.add('miss');this.style.display='none'"></span><span class="nm">Inflame<span class="up">+</span></span></span></td>
-          <td class="r num">1</td><td class="r num dimnum">16</td><td class="r num played">15</td>
+          <td><span class="cardcell"><span class="thumb" data-ini="IN"><img src="https://cdn.spire-codex.com/cards-full/stable/inflame_upg.webp" alt="" loading="lazy" decoding="async" onerror="this.parentNode.classList.add('miss');this.style.display='none'"></span><span class="nm">Inflame<span class="up">+</span></span></span></td>
+          <td class="r num">1</td><td class="r num dimnum">16</td><td class="r num played">15</td><td class="r num dimnum">1</td>
           <td><span class="ratewrap"><span class="ratenum num">93.8%</span><span class="rbar"><i style="width:94%"></i></span></span></td>
           <td><span class="vd vd-core">CORE</span></td>
         </tr>
 
         <tr>
           <td class="idx">09</td>
-          <td><span class="cardcell"><span class="thumb" data-ini="BL"><img src="https://cdn.spire-codex.com/cards/bloodletting.webp" alt="" loading="lazy" decoding="async" onerror="this.parentNode.classList.add('miss');this.style.display='none'"></span><span class="nm">Bloodletting</span></span></td>
-          <td class="r num">1</td><td class="r num dimnum">15</td><td class="r num played">14</td>
+          <td><span class="cardcell"><span class="thumb" data-ini="BL"><img src="https://cdn.spire-codex.com/cards-full/stable/bloodletting.webp" alt="" loading="lazy" decoding="async" onerror="this.parentNode.classList.add('miss');this.style.display='none'"></span><span class="nm">Bloodletting</span></span></td>
+          <td class="r num">1</td><td class="r num dimnum">15</td><td class="r num played">14</td><td class="r num dimnum">1</td>
           <td><span class="ratewrap"><span class="ratenum num">93.3%</span><span class="rbar"><i style="width:93%"></i></span></span></td>
           <td></td>
         </tr>
 
         <tr class="is-core">
           <td class="idx">10</td>
-          <td><span class="cardcell"><span class="thumb" data-ini="UC"><img src="https://cdn.spire-codex.com/cards/uppercut.webp" alt="" loading="lazy" decoding="async" onerror="this.parentNode.classList.add('miss');this.style.display='none'"></span><span class="nm">Uppercut</span></span></td>
-          <td class="r num">1</td><td class="r num dimnum">15</td><td class="r num played">13</td>
+          <td><span class="cardcell"><span class="thumb" data-ini="UC"><img src="https://cdn.spire-codex.com/cards-full/stable/uppercut.webp" alt="" loading="lazy" decoding="async" onerror="this.parentNode.classList.add('miss');this.style.display='none'"></span><span class="nm">Uppercut</span></span></td>
+          <td class="r num">1</td><td class="r num dimnum">15</td><td class="r num played">13</td><td class="r num dimnum">2</td>
           <td><span class="ratewrap"><span class="ratenum num">86.7%</span><span class="rbar"><i style="width:87%"></i></span></span></td>
           <td><span class="vd vd-core">CORE</span></td>
         </tr>
 
         <tr>
           <td class="idx">11</td>
-          <td><span class="cardcell"><span class="thumb" data-ini="AN"><img src="https://cdn.spire-codex.com/cards/anger.webp" alt="" loading="lazy" decoding="async" onerror="this.parentNode.classList.add('miss');this.style.display='none'"></span><span class="nm">Anger</span><span class="xn">×2</span></span></td>
-          <td class="r num">2</td><td class="r num dimnum">15</td><td class="r num played">12</td>
+          <td><span class="cardcell"><span class="thumb" data-ini="AN"><img src="https://cdn.spire-codex.com/cards-full/stable/anger.webp" alt="" loading="lazy" decoding="async" onerror="this.parentNode.classList.add('miss');this.style.display='none'"></span><span class="nm">Anger</span><span class="xn">×2</span></span></td>
+          <td class="r num">2</td><td class="r num dimnum">15</td><td class="r num played">12</td><td class="r num dimnum">3</td>
           <td><span class="ratewrap"><span class="ratenum num">80.0%</span><span class="rbar"><i style="width:80%"></i></span></span></td>
           <td></td>
         </tr>
 
         <tr class="is-half">
           <td class="idx">12</td>
-          <td><span class="cardcell"><span class="thumb" data-ini="CA"><img src="https://cdn.spire-codex.com/cards/carnage.webp" alt="" loading="lazy" decoding="async" onerror="this.parentNode.classList.add('miss');this.style.display='none'"></span><span class="nm">Carnage</span><span class="xn">×2</span></span></td>
-          <td class="r num">2</td><td class="r num dimnum">17</td><td class="r num played">11</td>
+          <td><span class="cardcell"><span class="thumb" data-ini="CA"><img src="https://cdn.spire-codex.com/cards-full/stable/carnage.webp" alt="" loading="lazy" decoding="async" onerror="this.parentNode.classList.add('miss');this.style.display='none'"></span><span class="nm">Carnage</span><span class="xn">×2</span></span></td>
+          <td class="r num">2</td><td class="r num dimnum">17</td><td class="r num played">11</td><td class="r num dimnum">6</td>
           <td><span class="ratewrap"><span class="ratenum num">64.7%</span><span class="rbar"><i style="width:65%"></i></span></span></td>
           <td><span class="vd vd-half">2ND COPY DEAD</span></td>
         </tr>
 
         <tr>
           <td class="idx">13</td>
-          <td><span class="cardcell"><span class="thumb" data-ini="DI"><img src="https://cdn.spire-codex.com/cards/disarm.webp" alt="" loading="lazy" decoding="async" onerror="this.parentNode.classList.add('miss');this.style.display='none'"></span><span class="nm">Disarm</span></span></td>
-          <td class="r num">1</td><td class="r num dimnum">11</td><td class="r num played">10</td>
+          <td><span class="cardcell"><span class="thumb" data-ini="DI"><img src="https://cdn.spire-codex.com/cards-full/stable/disarm.webp" alt="" loading="lazy" decoding="async" onerror="this.parentNode.classList.add('miss');this.style.display='none'"></span><span class="nm">Disarm</span></span></td>
+          <td class="r num">1</td><td class="r num dimnum">11</td><td class="r num played">10</td><td class="r num dimnum">1</td>
           <td><span class="ratewrap"><span class="ratenum num">90.9%</span><span class="rbar"><i style="width:91%"></i></span></span></td>
           <td></td>
         </tr>
 
         <tr class="is-core">
           <td class="idx">14</td>
-          <td><span class="cardcell"><span class="thumb" data-ini="WW"><img src="https://cdn.spire-codex.com/cards/whirlwind.webp" alt="" loading="lazy" decoding="async" onerror="this.parentNode.classList.add('miss');this.style.display='none'"></span><span class="nm">Whirlwind</span></span></td>
-          <td class="r num">1</td><td class="r num dimnum">13</td><td class="r num played">9</td>
+          <td><span class="cardcell"><span class="thumb" data-ini="WW"><img src="https://cdn.spire-codex.com/cards-full/stable/whirlwind.webp" alt="" loading="lazy" decoding="async" onerror="this.parentNode.classList.add('miss');this.style.display='none'"></span><span class="nm">Whirlwind</span></span></td>
+          <td class="r num">1</td><td class="r num dimnum">13</td><td class="r num played">9</td><td class="r num dimnum">4</td>
           <td><span class="ratewrap"><span class="ratenum num">69.2%</span><span class="rbar"><i style="width:69%"></i></span></span></td>
           <td><span class="vd vd-core">CORE</span></td>
         </tr>
 
         <tr>
           <td class="idx">15</td>
-          <td><span class="cardcell"><span class="thumb" data-ini="OF"><img src="https://cdn.spire-codex.com/cards/offering.webp" alt="" loading="lazy" decoding="async" onerror="this.parentNode.classList.add('miss');this.style.display='none'"></span><span class="nm">Offering</span></span></td>
-          <td class="r num">1</td><td class="r num dimnum">9</td><td class="r num played">8</td>
+          <td><span class="cardcell"><span class="thumb" data-ini="OF"><img src="https://cdn.spire-codex.com/cards-full/stable/offering.webp" alt="" loading="lazy" decoding="async" onerror="this.parentNode.classList.add('miss');this.style.display='none'"></span><span class="nm">Offering</span></span></td>
+          <td class="r num">1</td><td class="r num dimnum">9</td><td class="r num played">8</td><td class="r num dimnum">1</td>
           <td><span class="ratewrap"><span class="ratenum num">88.9%</span><span class="rbar"><i style="width:89%"></i></span></span></td>
           <td></td>
         </tr>
 
         <tr class="is-core">
           <td class="idx">16</td>
-          <td><span class="cardcell"><span class="thumb" data-ini="DF"><img src="https://cdn.spire-codex.com/cards/demon_form.webp" alt="" loading="lazy" decoding="async" onerror="this.parentNode.classList.add('miss');this.style.display='none'"></span><span class="nm">Demon Form</span></span></td>
-          <td class="r num">1</td><td class="r num dimnum">12</td><td class="r num played">7</td>
+          <td><span class="cardcell"><span class="thumb" data-ini="DF"><img src="https://cdn.spire-codex.com/cards-full/stable/demon_form.webp" alt="" loading="lazy" decoding="async" onerror="this.parentNode.classList.add('miss');this.style.display='none'"></span><span class="nm">Demon Form</span></span></td>
+          <td class="r num">1</td><td class="r num dimnum">12</td><td class="r num played">7</td><td class="r num dimnum">5</td>
           <td><span class="ratewrap"><span class="ratenum num">58.3%</span><span class="rbar"><i style="width:58%"></i></span></span></td>
           <td><span class="vd vd-core">CORE</span></td>
         </tr>
 
         <tr>
           <td class="idx">17</td>
-          <td><span class="cardcell"><span class="thumb" data-ini="IP"><img src="https://cdn.spire-codex.com/cards/impervious.webp" alt="" loading="lazy" decoding="async" onerror="this.parentNode.classList.add('miss');this.style.display='none'"></span><span class="nm">Impervious</span></span></td>
-          <td class="r num">1</td><td class="r num dimnum">7</td><td class="r num played">5</td>
+          <td><span class="cardcell"><span class="thumb" data-ini="IP"><img src="https://cdn.spire-codex.com/cards-full/stable/impervious.webp" alt="" loading="lazy" decoding="async" onerror="this.parentNode.classList.add('miss');this.style.display='none'"></span><span class="nm">Impervious</span></span></td>
+          <td class="r num">1</td><td class="r num dimnum">7</td><td class="r num played">5</td><td class="r num dimnum">2</td>
           <td><span class="ratewrap"><span class="ratenum num">71.4%</span><span class="rbar"><i style="width:71%"></i></span></span></td>
           <td></td>
         </tr>
 
         <tr class="is-dead">
           <td class="idx">18</td>
-          <td><span class="cardcell"><span class="thumb" data-ini="TS"><img src="https://cdn.spire-codex.com/cards/twin_strike.webp" alt="" loading="lazy" decoding="async" onerror="this.parentNode.classList.add('miss');this.style.display='none'"></span><span class="nm">Twin Strike</span></span></td>
-          <td class="r num">1</td><td class="r num dimnum">11</td><td class="r num played">0</td>
+          <td><span class="cardcell"><span class="thumb" data-ini="TS"><img src="https://cdn.spire-codex.com/cards-full/stable/twin_strike.webp" alt="" loading="lazy" decoding="async" onerror="this.parentNode.classList.add('miss');this.style.display='none'"></span><span class="nm">Twin Strike</span></span></td>
+          <td class="r num">1</td><td class="r num dimnum">11</td><td class="r num played">0</td><td class="r num dimnum">11</td>
           <td><span class="ratewrap"><span class="ratenum num">0.0%</span><span class="rbar"></span></span></td>
           <td><span class="vd vd-dead">NEVER PLAYED</span></td>
         </tr>
 
         <tr class="is-dead">
           <td class="idx">19</td>
-          <td><span class="cardcell"><span class="thumb" data-ini="BS"><img src="https://cdn.spire-codex.com/cards/body_slam.webp" alt="" loading="lazy" decoding="async" onerror="this.parentNode.classList.add('miss');this.style.display='none'"></span><span class="nm">Body Slam</span></span></td>
-          <td class="r num">1</td><td class="r num dimnum">8</td><td class="r num played">0</td>
+          <td><span class="cardcell"><span class="thumb" data-ini="BS"><img src="https://cdn.spire-codex.com/cards-full/stable/body_slam.webp" alt="" loading="lazy" decoding="async" onerror="this.parentNode.classList.add('miss');this.style.display='none'"></span><span class="nm">Body Slam</span></span></td>
+          <td class="r num">1</td><td class="r num dimnum">8</td><td class="r num played">0</td><td class="r num dimnum">8</td>
           <td><span class="ratewrap"><span class="ratenum num">0.0%</span><span class="rbar"></span></span></td>
           <td><span class="vd vd-dead">NEVER PLAYED</span></td>
         </tr>
@@ -916,8 +1003,9 @@ tr.actrule:hover td{background:#1b1815}
           <td class="r total num">26</td>
           <td class="r total num">354</td>
           <td class="r total num">283</td>
+          <td class="r total num">71</td>
           <td class="r total num">79.9%</td>
-          <td>71 dead draws</td>
+          <td>3 never played</td>
         </tr>
       </tfoot>
     </table>
@@ -948,6 +1036,16 @@ tr.actrule:hover td{background:#1b1815}
   <div class="section-head">
     <h2>Journey Review</h2>
     <span class="note">4 findings · draft advice replayed for 3 offers · grades A≥40 · B≥25 · C≥15</span>
+  </div>
+
+  <div class="audit">
+    <div><div class="k">Findings</div><div class="v num">4</div></div>
+    <div><div class="k">Severe</div><div class="v num bad">1</div></div>
+    <div><div class="k">Draft errors</div><div class="v num warn">3</div></div>
+    <div><div class="k">Dead cards</div><div class="v num bad">3</div></div>
+    <div><div class="k">Dead draws</div><div class="v num warn">71</div></div>
+    <div><div class="k">Removals passed</div><div class="v num">2</div></div>
+    <div><div class="k">Grade of best pass</div><div class="v num good">A · 47</div></div>
   </div>
 
   <div class="cards">
@@ -1164,13 +1262,13 @@ tr.actrule:hover td{background:#1b1815}
           <colgroup><col class="c-r"><col class="c-t"><col class="c-e"><col class="c-p"></colgroup>
           <tbody>
             <tr class="collapsed"><td colspan="4">…R01–R18 collapsed</td></tr>
-            <tr><td class="r">R19</td><td><span class="chip chip-outline">FIGHT</span></td><td class="entry dim">—</td>
+            <tr><td class="r">R19</td><td><span class="chip chip-outline rt-fight">FIGHT</span></td><td class="entry dim">—</td>
               <td><span class="pk"><span class="art"><img src="https://cdn.spire-codex.com/cards/carnage.webp" alt="" loading="lazy" decoding="async" onerror="this.style.display='none';this.nextElementSibling.style.display='inline-flex'"><span class="plate">CA</span></span><span class="nm">Carnage</span></span></td></tr>
-            <tr><td class="r">R20</td><td><span class="chip chip-outline">OTHER</span></td><td class="entry dim">—</td><td class="dim">—</td></tr>
-            <tr><td class="r">R21</td><td><span class="chip chip-outline">FIGHT</span></td><td class="entry dim">—</td>
+            <tr><td class="r">R20</td><td><span class="chip chip-outline rt-other">OTHER</span></td><td class="entry dim">—</td><td class="dim">—</td></tr>
+            <tr><td class="r">R21</td><td><span class="chip chip-outline rt-fight">FIGHT</span></td><td class="entry dim">—</td>
               <td><span class="pk"><span class="art"><img src="https://cdn.spire-codex.com/cards/disarm.webp" alt="" loading="lazy" decoding="async" onerror="this.style.display='none';this.nextElementSibling.style.display='inline-flex'"><span class="plate">DI</span></span><span class="nm">Disarm</span></span></td></tr>
-            <tr><td class="r">R22</td><td><span class="chip chip-outline">OTHER</span></td><td class="entry">upgraded Shrug It Off+</td><td class="dim">—</td></tr>
-            <tr><td class="r">R23</td><td><span class="chip chip-outline">FIGHT</span></td><td class="entry">2 enemies</td><td class="dim">—</td></tr>
+            <tr><td class="r">R22</td><td><span class="chip chip-outline rt-other">OTHER</span></td><td class="entry">upgraded Shrug It Off+</td><td class="dim">—</td></tr>
+            <tr><td class="r">R23</td><td><span class="chip chip-outline rt-fight">FIGHT</span></td><td class="entry">2 enemies</td><td class="dim">—</td></tr>
           </tbody>
         </table>
       </div>
