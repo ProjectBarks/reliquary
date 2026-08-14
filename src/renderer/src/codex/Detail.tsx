@@ -3,7 +3,7 @@ import { useNavigate } from '@tanstack/react-router'
 import styled from 'styled-components'
 import { codexImageUrl, type CodexCard, type CodexKind, type CodexRelic } from '@shared/codex'
 import { rarityColors } from '../overlays/sts2/theme'
-import { Button, Spinner } from '../dashboard/ui'
+import { Button, ButtonGlyph, Spinner } from '../dashboard/ui'
 import { prefetchArt, trapIndex, trapVerdict, useLibraryEntries, type LibraryEntry } from './data'
 import {
   DASH,
@@ -24,11 +24,12 @@ import {
   CloseButton,
   Empty,
   ErrorState,
+  IconButton,
   Modal,
-  QuietLink,
   ScrollArea,
   Segmented,
-  Skeleton
+  Skeleton,
+  TierIcon
 } from './parts'
 import { RichText } from './RichText'
 import { Compare } from './Compare'
@@ -130,13 +131,36 @@ export function Detail({
             aria-pressed={pinned}
             title={pinned ? 'Remove from the pinned rail' : 'Keep this on the pinned rail'}
           >
-            {pinned ? '★ Pinned' : '☆ Pin'}
+            <ButtonGlyph aria-hidden>{pinned ? '★' : '☆'}</ButtonGlyph>
+            {pinned ? 'Pinned' : 'Pin'}
           </Button>
           {kind !== 'potions' ? (
             <Button type="button" onClick={() => setComparing(true)} title="Compare with another entry">
-              ⇄ Compare
+              <ButtonGlyph aria-hidden>⇄</ButtonGlyph>
+              Compare
             </Button>
           ) : null}
+          {/* The tier list is a mode of the screen this is already on, so the
+              button closes the entry rather than leaving for somewhere else:
+              same kind, same filters, mode swapped, and `highlight` telling
+              the band which entry to scroll to and ring. Icon-only — the same
+              podium glyph the browse toolbar uses for tier mode — and placed
+              with Close, where the compact square "go elsewhere" controls
+              live, rather than crowding the labelled entry actions. */}
+          <IconButton
+            type="button"
+            onClick={() =>
+              navigate({
+                to: '/codex/browse/$kind',
+                params: { kind },
+                search: { ...browseSearch, mode: 'tier', highlight: entry.id }
+              })
+            }
+            aria-label="View in tier list"
+            title="View in tier list"
+          >
+            <TierIcon />
+          </IconButton>
           {onClose ? (
             <CloseButton type="button" onClick={onClose} aria-label="Close" title="Close (Esc)">
               ✕
@@ -162,7 +186,7 @@ export function Detail({
             </Facts>
           </Top>
 
-          <MetricsBlock>
+          <MetricsBlock $mode={mode}>
             <MetricsHead>
               <TierBadge $tier={entry.tier} $size="lg" title={tierLabel(entry.tier)}>
                 {entry.tier ?? DASH}
@@ -204,25 +228,6 @@ export function Detail({
 
             <ActBars row={entry} />
           </MetricsBlock>
-
-          <Footer>
-            {/* The tier list is a mode of the screen this is already on, so the
-                link closes the entry rather than leaving for somewhere else:
-                same kind, same filters, mode swapped, and `highlight` telling
-                the band which entry to scroll to and ring. */}
-            <QuietLink
-              type="button"
-              onClick={() =>
-                navigate({
-                  to: '/codex/browse/$kind',
-                  params: { kind },
-                  search: { ...browseSearch, mode: 'tier', highlight: entry.id }
-                })
-              }
-            >
-              View in tier list →
-            </QuietLink>
-          </Footer>
         </Body>
       </ScrollArea>
 
@@ -586,7 +591,7 @@ const Upgrade = styled.div`
 
 const UpgradeHead = styled.div`
   font-family: var(--font-display);
-  font-size: 13px;
+  font-size: var(--fs-md);
   letter-spacing: 0.4px;
   color: var(--sts-color-green);
 `
@@ -600,12 +605,19 @@ const FlavorWrap = styled.div`
   }
 `
 
-const MetricsBlock = styled.section`
-  margin-top: 18px;
-  padding: 14px 14px 12px;
-  border-radius: 12px;
-  border: 1px solid var(--line);
-  background: rgba(38, 35, 33, 0.55);
+/* No box: the detail panel is already a container, and a filled, bordered
+   block inside it read as a panel-in-a-panel. The section is delimited the
+   way every other seam here is — a hairline and breathing room. The negative
+   side margins pull the hairline out through the Body's gutter so it runs the
+   full panel width, exactly like the Header's divider; the matching side
+   padding puts the content straight back on the Body's own gutter, so the
+   stats share one left/right edge with everything above them. Being the last
+   element in the body, its bottom edge is the Body's padding; none here. */
+const MetricsBlock = styled.section<{ $mode: 'modal' | 'pane' }>`
+  --gutter: ${(p) => (p.$mode === 'modal' ? '16px' : '4px')};
+  margin: 18px calc(-1 * var(--gutter)) 0;
+  padding: 14px var(--gutter) 0;
+  border-top: 1px solid var(--line);
 `
 
 const MetricsHead = styled.div`
@@ -654,7 +666,7 @@ const StatLabel = styled.div`
 `
 
 const StatValue = styled.div<{ $missing?: boolean }>`
-  font-size: 16px;
+  font-size: var(--fs-md);
   font-variant-numeric: tabular-nums;
   color: ${(p) => (p.$missing ? 'var(--ink-faint)' : 'var(--ink)')};
 `
@@ -707,15 +719,6 @@ const ActValue = styled.span<{ $missing?: boolean }>`
   color: ${(p) => (p.$missing ? 'var(--ink-faint)' : 'var(--ink-dim)')};
   min-width: 32px;
   text-align: right;
-`
-
-const Footer = styled.div`
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px 18px;
-  margin-top: 16px;
-  padding-top: 12px;
-  border-top: 1px solid var(--line);
 `
 
 const SkeletonWrap = styled.div`

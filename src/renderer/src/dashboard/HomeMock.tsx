@@ -111,7 +111,7 @@ const Toolbar = styled.div`
 const ToolButton = styled.button<{ $active: boolean }>`
   appearance: none;
   cursor: pointer;
-  font-size: 10px;
+  font-size: var(--fs-xs);
   letter-spacing: 0.1em;
   text-transform: uppercase;
   padding: 4px 9px;

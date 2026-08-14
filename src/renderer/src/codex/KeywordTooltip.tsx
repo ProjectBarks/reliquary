@@ -60,6 +60,49 @@ export function KeywordTerm({
   )
 }
 
+export interface DefinitionTipBinding {
+  onMouseEnter: (e: { currentTarget: Element }) => void
+  onMouseLeave: () => void
+  onFocus: (e: { currentTarget: Element }) => void
+  onBlur: () => void
+  'aria-describedby': string | undefined
+}
+
+/**
+ * The keyword bubble, offered to anchors that are not keywords.
+ *
+ * The metrics table's column headers need a sentence of explanation each — the
+ * definitions that used to live in a legend under the table — and a native
+ * `title` both truncates awkwardly and looks like it belongs to a different
+ * application. This hands any element the same hover/focus bubble the card
+ * text's terms use: spread `bind` onto the anchor, render `tip` beside it.
+ */
+export function useDefinitionTip(
+  term: string,
+  description: string
+): { bind: DefinitionTipBinding; tip: JSX.Element | null } {
+  const id = useId()
+  const [box, setBox] = useState<{ left: number; top: number } | null>(null)
+
+  const open = useCallback((e: { currentTarget: Element }) => {
+    setBox(place(e.currentTarget.getBoundingClientRect()))
+  }, [])
+  const close = useCallback(() => setBox(null), [])
+
+  return {
+    bind: {
+      onMouseEnter: open,
+      onMouseLeave: close,
+      onFocus: open,
+      onBlur: close,
+      'aria-describedby': box ? id : undefined
+    },
+    tip: box ? (
+      <Tip id={id} term={term} description={description} at={box} onDismiss={close} />
+    ) : null
+  }
+}
+
 /**
  * The bubble itself, as its own component so that it can claim the Escape key
  * only while it exists — the layer stack in `parts.tsx` decides which of the
@@ -130,7 +173,7 @@ const Bubble = styled.div`
 
 const BubbleTerm = styled.div`
   font-family: var(--font-display);
-  font-size: 14px;
+  font-size: var(--fs-md);
   letter-spacing: 0.3px;
   color: var(--sts-color-gold);
   margin-bottom: 3px;

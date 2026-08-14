@@ -298,7 +298,7 @@ const GemMark = styled.svg`
 const QuietButton = styled.button`
   cursor: pointer;
   font-family: inherit;
-  font-size: 12.5px;
+  font-size: var(--fs-base);
   color: oklch(1 0 0 / 70%);
   background: none;
   border: 1px solid oklch(1 0 0 / 18%);
@@ -314,7 +314,7 @@ const QuietButton = styled.button`
 const RestartButton = styled.button`
   cursor: pointer;
   font-family: inherit;
-  font-size: 12.5px;
+  font-size: var(--fs-base);
   font-weight: 600;
   color: var(--sts-color-cream);
   background: color-mix(in oklch, var(--brand) 30%, transparent);
@@ -339,7 +339,7 @@ const Keys = styled.div`
   color: oklch(1 0 0 / 72%);
   kbd {
     font-family: var(--font-mono);
-    font-size: 12px;
+    font-size: var(--fs-xs);
     color: var(--ink);
     background: oklch(1 0 0 / 8%);
     border: 1px solid var(--line-strong);

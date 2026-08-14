@@ -1,4 +1,11 @@
-import { useCallback, useMemo, useSyncExternalStore } from 'react'
+import { useCallback, useMemo } from 'react'
+import {
+  keepPreviousData,
+  useQuery,
+  type QueryKey,
+  type UseQueryResult
+} from '@tanstack/react-query'
+import { queryClient } from '../queryClient'
 import {
   catalogCacheKey,
   codexImageUrl,
@@ -10,6 +17,7 @@ import {
   type CodexCatalogKind,
   type CodexCatalogMap,
   type CodexCharacter,
+  type CodexData,
   type CodexKeyword,
   type CodexKind,
   type CodexPayload,
@@ -21,25 +29,30 @@ import {
 } from '@shared/codex'
 
 /**
- * The renderer's half of the compendium's stale-while-revalidate.
+ * The renderer's half of the compendium's stale-while-revalidate, on
+ * TanStack Query.
  *
- * Shaped after `hooks/useIpc.ts`: one module-level store keyed by the same
- * cache keys the main process uses, `useSyncExternalStore` on top, so ten
- * components asking for the card catalog share one request and one array. The
- * difference is direction — `useIpc` is fed by broadcasts, this is fed by
- * request/reply plus a revalidation push — which is why the two are separate
- * stores rather than one with a mode flag.
+ * The shared `queryClient` (see `../queryClient.ts`) is the store: one cached
+ * entry per query key, so ten components asking for the card catalog share one
+ * invoke and one array, and a table left behind by navigation stays warm for
+ * the whole session. `useIpc` remains separate on purpose — it is fed by
+ * broadcasts (push-based streams), this by request/reply plus a revalidation
+ * push.
  *
- * Two rules the rest of the tab depends on:
- *   1. A failed *revalidation* never blanks data we already have. A stale card
- *      list is worth infinitely more than an error page, so a failure lands as
- *      an `error` beside the data, not instead of it.
- *   2. `getSnapshot` returns the stored object by reference. Building a fresh
- *      `{data, loading}` on every call is the classic way to make
- *      `useSyncExternalStore` loop forever.
+ * Two contracts the rest of the tab depends on:
+ *   1. A failed *revalidation* never blanks data we already have. The service
+ *      resolves `{error}` payloads rather than rejecting; the query layer
+ *      converts those to throws AT THE QUERY BOUNDARY, which makes TanStack
+ *      Query keep the last good `data` and put the `error` beside it — a stale
+ *      card list is worth infinitely more than an error page. The resolved
+ *      error shape still reaches the UI as `Resource.error`, exactly as before.
+ *   2. Query keys mirror the main process's cache keys field-for-field
+ *      (`catalogCacheKey`/`metricsCacheKey`, character normalized the same
+ *      way), so an `IPC.CodexPush` broadcast can be folded into this cache
+ *      without inventing a second identity scheme.
  */
 
-// ── the store ───────────────────────────────────────────────────────────────
+// ── the resource shape ──────────────────────────────────────────────────────
 
 export interface Resource<T> {
   data: T | null
@@ -52,79 +65,44 @@ export interface Resource<T> {
   fetchedAt: number | null
 }
 
-type Listener = () => void
+// ── query keys ──────────────────────────────────────────────────────────────
+//
+// Stable, fully-normalized keys: `character` goes through `normalizeCharacter`
+// (lower-cased, `'all'`/empty collapsed to one spelling) before it enters a
+// key, so `useMetrics('cards', 'a10', 'Silent')` and `('cards', 'a10',
+// 'silent')` are the same cache entry. Field-for-field these mirror the main
+// process's string cache keys, which is what lets a push be matched back to a
+// query below.
 
-/** The snapshot handed out for a key nobody has fetched yet. One frozen object. */
-const PENDING: Resource<never> = Object.freeze({
-  data: null,
-  error: null,
-  loading: true,
-  stale: false,
-  fetchedAt: null
-})
+export function catalogQueryKey(kind: CodexCatalogKind): QueryKey {
+  return ['codex', 'catalog', kind]
+}
 
-const store = new Map<string, Resource<unknown>>()
-const listeners = new Map<string, Set<Listener>>()
-const inflight = new Set<string>()
+export function metricsQueryKey(
+  kind: CodexKind,
+  bracket: CodexBracket,
+  character: string | null | undefined
+): QueryKey {
+  return ['codex', 'metrics', kind, bracket, normalizeCharacter(character) ?? 'all']
+}
 
-function subscribe(key: string, l: Listener): () => void {
-  let set = listeners.get(key)
-  if (!set) {
-    set = new Set()
-    listeners.set(key, set)
+const CATALOG_KINDS: readonly string[] = ['cards', 'relics', 'potions', 'characters', 'keywords']
+
+/**
+ * Translate a main-process cache key (`catalog:cards`,
+ * `metrics:cards:a10:silent`) — the identity a `CodexPush` message carries —
+ * into the equivalent query key. Null for anything unrecognized, so a push
+ * from a newer main process is dropped rather than miscached.
+ */
+function queryKeyFromCacheKey(key: string): QueryKey | null {
+  const parts = key.split(':')
+  if (parts[0] === 'catalog' && parts.length === 2 && CATALOG_KINDS.includes(parts[1])) {
+    return catalogQueryKey(parts[1] as CodexCatalogKind)
   }
-  set.add(l)
-  return () => {
-    set?.delete(l)
+  if (parts[0] === 'metrics' && parts.length === 4 && CATALOG_KINDS.includes(parts[1])) {
+    return ['codex', 'metrics', parts[1], parts[2], parts[3]]
   }
-}
-
-function emit(key: string): void {
-  const set = listeners.get(key)
-  if (!set) return
-  for (const l of set) l()
-}
-
-function put(key: string, value: Resource<unknown>): void {
-  store.set(key, value)
-  emit(key)
-}
-
-function snapshot<T>(key: string): Resource<T> {
-  return (store.get(key) as Resource<T> | undefined) ?? (PENDING as Resource<T>)
-}
-
-/** Fold an IPC payload into the store, keeping the last good data on failure. */
-function apply(key: string, payload: CodexPayload<unknown>): void {
-  const previous = store.get(key)
-  if (payload.error !== undefined) {
-    put(key, {
-      data: previous?.data ?? null,
-      error: payload.error,
-      loading: false,
-      stale: false,
-      fetchedAt: previous?.fetchedAt ?? null
-    })
-    return
-  }
-  put(key, {
-    data: payload.data,
-    error: null,
-    loading: false,
-    stale: payload.stale,
-    fetchedAt: payload.fetchedAt
-  })
-}
-
-function fail(key: string, message: string): void {
-  const previous = store.get(key)
-  put(key, {
-    data: previous?.data ?? null,
-    error: message,
-    loading: false,
-    stale: false,
-    fetchedAt: previous?.fetchedAt ?? null
-  })
+  return null
 }
 
 /**
@@ -159,103 +137,119 @@ export function installCodexFixtures(source: FixtureSource): void {
 }
 
 let pushWired = false
+
+/**
+ * The push-invalidation path: main revalidates the compendium on its own
+ * schedule (and on `codexRefresh` nudges) and broadcasts every landing on
+ * `IPC.CodexPush`. Wired lazily on the first real fetch so a window that never
+ * opens the codex never subscribes, and only for keys some view has actually
+ * asked for — caching a push nobody wants would grow the cache with tables no
+ * view will ever read.
+ */
 function wirePush(): void {
   if (pushWired) return
   if (typeof window === 'undefined' || !window.spectra) return
   pushWired = true
   window.spectra.onCodexPush(({ key, value }) => {
-    // Only for keys something has actually asked for. Caching a push nobody
-    // wants would grow the store with tables no view will ever read.
-    if (store.has(key)) apply(key, value)
+    const queryKey = queryKeyFromCacheKey(key)
+    if (!queryKey) return
+    if (!queryClient.getQueryCache().find({ queryKey })) return
+    if (value.error === undefined) {
+      // The push carries the fresh copy itself, so write it straight into the
+      // cache — every mounted view re-renders with it, no second round-trip.
+      queryClient.setQueryData(queryKey, value)
+    } else {
+      // A failed revalidation. Invalidate so active views refetch through the
+      // normal path; the resulting `{error}` lands beside (never instead of)
+      // whatever data the cache already holds.
+      void queryClient.invalidateQueries({ queryKey })
+    }
   })
-}
-
-function load(key: string, request: () => Promise<CodexPayload<unknown>>): void {
-  if (inflight.has(key)) return
-  // The harness answers first, and answers synchronously: a canned catalog that
-  // arrived a tick later would give every mock screenshot one frame of skeleton
-  // to race against.
-  const canned = fixtures?.(key)
-  if (canned) {
-    apply(key, canned)
-    return
-  }
-  wirePush()
-  if (typeof window === 'undefined' || !window.spectra) {
-    if (!store.has(key)) fail(key, NO_BRIDGE)
-    return
-  }
-  inflight.add(key)
-  if (!store.has(key)) store.set(key, PENDING as Resource<unknown>)
-  request()
-    .then((payload) => apply(key, payload))
-    .catch((err: unknown) => fail(key, err instanceof Error ? err.message : String(err)))
-    .finally(() => inflight.delete(key))
-}
-
-function startCatalog(kind: CodexCatalogKind): void {
-  const key = catalogCacheKey(kind)
-  if (store.has(key)) return
-  load(key, () => window.spectra.codexCatalog(kind) as Promise<CodexPayload<unknown>>)
-}
-
-function startMetrics(kind: CodexKind, bracket: CodexBracket, character: string | null): void {
-  const key = metricsCacheKey({ kind, bracket, character })
-  if (store.has(key)) return
-  load(key, () =>
-    window.spectra.codexMetrics({
-      kind,
-      bracket,
-      character: normalizeCharacter(character)
-    }) as Promise<CodexPayload<unknown>>
-  )
 }
 
 /**
- * Ask for a fresh copy now. The service answers the invoke from cache and
- * pushes the fresh copy when it lands, so the retry button resolves to *some*
- * state immediately even when the network is still down.
+ * The shared queryFn body. Fixtures answer first (and `useCodexQuery` also
+ * feeds them in as `initialData`, so the mock harness still paints canned data
+ * on the very first frame with no skeleton to race a screenshot against).
+ * A resolved `{error}` payload becomes a throw here — and only here — which is
+ * what makes TanStack Query keep the previous good data next to the error.
  */
-/** Clear the last failure and show the right kind of waiting for a retry. */
-function markRefreshing(key: string): void {
-  const previous = store.get(key)
-  put(key, {
-    data: previous?.data ?? null,
-    error: null,
-    loading: !previous?.data,
-    stale: Boolean(previous?.data),
-    fetchedAt: previous?.fetchedAt ?? null
+async function fetchPayload<T>(
+  cacheKey: string,
+  invoke: () => Promise<CodexPayload<T>>
+): Promise<CodexData<T>> {
+  const canned = fixtures?.(cacheKey) as CodexPayload<T> | null | undefined
+  if (canned) {
+    if (canned.error !== undefined) throw new Error(canned.error)
+    return canned
+  }
+  wirePush()
+  if (typeof window === 'undefined' || !window.spectra) throw new Error(NO_BRIDGE)
+  const payload = await invoke()
+  if (payload.error !== undefined) throw new Error(payload.error)
+  return payload
+}
+
+/**
+ * Map a query result back onto the `Resource` shape the whole tab renders
+ * from. The old store's semantics, point for point:
+ *   - `loading` only when there is nothing to show and a request is out. With
+ *     `placeholderData: keepPreviousData`, changing bracket/character keeps the
+ *     previous table on screen, so param changes read as `stale`, not
+ *     `loading` — views never flash empty.
+ *   - `stale` when data is real but a refresh is in flight (the service's own
+ *     stale-while-revalidate flag, or a live refetch) — the whisper, not the
+ *     spinner.
+ *   - `error` is suppressed while a refetch is out, so a retry click swaps the
+ *     error card for the right kind of waiting immediately.
+ */
+function toResource<T>(q: UseQueryResult<CodexData<T>, Error>): Resource<T> {
+  const payload = q.data
+  const fetching = q.isFetching
+  return {
+    data: payload ? payload.data : null,
+    error: !fetching && q.error ? q.error.message : null,
+    loading: !payload && (q.isPending || fetching),
+    stale: Boolean(payload) && (payload!.stale || fetching),
+    fetchedAt: payload ? payload.fetchedAt : null
+  }
+}
+
+function useCodexQuery<T>(
+  cacheKey: string,
+  queryKey: QueryKey,
+  invoke: () => Promise<CodexPayload<T>>
+): UseQueryResult<CodexData<T>, Error> {
+  const canned = fixtures?.(cacheKey) as CodexPayload<T> | null | undefined
+  return useQuery<CodexData<T>, Error>({
+    queryKey,
+    queryFn: () => fetchPayload(cacheKey, invoke),
+    initialData: canned && canned.error === undefined ? canned : undefined,
+    placeholderData: keepPreviousData
   })
 }
 
+/**
+ * Ask for a fresh copy now. `codexRefresh` tells the service to revalidate
+ * against the network; the fresh copy lands via the push above. The refetch
+ * the invalidation triggers resolves immediately from main's cache (possibly
+ * stale), so the retry button always settles to *some* state even when the
+ * network is still down.
+ */
 function refreshCatalog(kind: CodexCatalogKind): void {
-  const key = catalogCacheKey(kind)
   // Canned data cannot get any fresher, and in the harness there may be no
   // bridge to ask.
   if (fixtures) return
-  if (typeof window === 'undefined' || !window.spectra) {
-    fail(key, NO_BRIDGE)
-    return
+  if (typeof window !== 'undefined' && window.spectra) {
+    // Fire-and-forget: this only tells the service to go look.
+    void window.spectra.codexRefresh(kind).catch(() => undefined)
   }
-  markRefreshing(key)
-  // Fire-and-forget: this only tells the service to go look. The answer we
-  // render comes from the invoke below (cache, possibly stale) and then from
-  // the push when the network copy lands.
-  void window.spectra.codexRefresh(kind).catch(() => undefined)
-  load(key, () => window.spectra.codexCatalog(kind) as Promise<CodexPayload<unknown>>)
+  void queryClient.invalidateQueries({ queryKey: catalogQueryKey(kind) })
 }
 
 function refreshMetrics(kind: CodexKind, bracket: CodexBracket, character: string | null): void {
-  const key = metricsCacheKey({ kind, bracket, character })
   if (fixtures) return
-  markRefreshing(key)
-  load(key, () =>
-    window.spectra.codexMetrics({
-      kind,
-      bracket,
-      character: normalizeCharacter(character)
-    }) as Promise<CodexPayload<unknown>>
-  )
+  void queryClient.invalidateQueries({ queryKey: metricsQueryKey(kind, bracket, character) })
 }
 
 // ── hooks ───────────────────────────────────────────────────────────────────
@@ -265,17 +259,11 @@ export interface CatalogResource<K extends CodexCatalogKind> extends Resource<Co
 }
 
 export function useCatalog<K extends CodexCatalogKind>(kind: K): CatalogResource<K> {
-  const key = catalogCacheKey(kind)
-  const sub = useCallback(
-    (l: Listener) => {
-      startCatalog(kind)
-      return subscribe(key, l)
-    },
-    [key, kind]
+  const q = useCodexQuery<CodexCatalogMap[K]>(catalogCacheKey(kind), catalogQueryKey(kind), () =>
+    window.spectra.codexCatalog(kind) as Promise<CatalogPayload<K>>
   )
-  const res = useSyncExternalStore(sub, () => snapshot<CodexCatalogMap[K]>(key))
   const refresh = useCallback(() => refreshCatalog(kind), [kind])
-  return useMemo(() => ({ ...res, refresh }), [res, refresh])
+  return useMemo(() => ({ ...toResource(q), refresh }), [q, refresh])
 }
 
 export interface MetricsResource extends Resource<MetricsTable> {
@@ -288,20 +276,21 @@ export function useMetrics(
   character: string | null
 ): MetricsResource {
   const normalized = normalizeCharacter(character)
-  const key = metricsCacheKey({ kind, bracket, character: normalized })
-  const sub = useCallback(
-    (l: Listener) => {
-      startMetrics(kind, bracket, normalized)
-      return subscribe(key, l)
-    },
-    [key, kind, bracket, normalized]
+  const q = useCodexQuery<MetricsTable>(
+    metricsCacheKey({ kind, bracket, character: normalized }),
+    metricsQueryKey(kind, bracket, normalized),
+    () =>
+      window.spectra.codexMetrics({
+        kind,
+        bracket,
+        character: normalized
+      }) as Promise<MetricsPayload>
   )
-  const res = useSyncExternalStore(sub, () => snapshot<MetricsTable>(key))
   const refresh = useCallback(
     () => refreshMetrics(kind, bracket, normalized),
     [kind, bracket, normalized]
   )
-  return useMemo(() => ({ ...res, refresh }), [res, refresh])
+  return useMemo(() => ({ ...toResource(q), refresh }), [q, refresh])
 }
 
 /** Keyword definitions for the dotted-underline tooltips. Never blocks a render. */

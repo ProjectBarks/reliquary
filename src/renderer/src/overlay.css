@@ -103,6 +103,21 @@
   --font-display: 'Kreon', serif;
   --font-mono: 'Cascadia Code', Consolas, ui-monospace, monospace;
 
+  /* Type scale (dashboard surfaces). The dashboard body size is --fs-base; the
+     overlay windows keep their own zoom-scaled sizes and do not use these. */
+  --fs-2xs: 10px; /* uppercase overlines, micro-labels, badge counts, glyphs — never running text */
+  --fs-xs: 11px; /* captions, metadata, kbd/code chips, static tags — informational floor */
+  --fs-sm: 12px; /* secondary body: descriptions, row meta, mono blocks, interactive chips */
+  --fs-base: 13px; /* default body + controls: buttons, selects, inputs, row names, prose */
+  --fs-md: 15px; /* minor titles: nav tabs, subsection heads, stat values, close glyphs */
+  --fs-lg: 17px; /* section titles and pane headers */
+  --fs-xl: 19px; /* card/page titles, title-bar brand, tier badge lg */
+  --fs-2xl: 22px; /* entity name in the Codex detail panel — one per view, max */
+  /* line-height companions */
+  --lh-tight: 1.2; /* overlines and tight labels */
+  --lh-body: 1.55; /* default body copy */
+  --lh-prose: 1.6; /* multi-line prose */
+
   font-family: var(--font-body);
 }
 

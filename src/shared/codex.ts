@@ -50,11 +50,6 @@ export type CodexBracket = (typeof CODEX_BRACKETS)[number]['id']
 
 export const DEFAULT_BRACKET: CodexBracket = 'all'
 
-/** Label for a bracket id, falling back to the id itself for unknown values. */
-export function bracketLabel(id: string): string {
-  return CODEX_BRACKETS.find((b) => b.id === id)?.label ?? id
-}
-
 /** Narrowing guard for values arriving from a URL search param or localStorage. */
 export function isCodexBracket(v: unknown): v is CodexBracket {
   return typeof v === 'string' && CODEX_BRACKETS.some((b) => b.id === v)

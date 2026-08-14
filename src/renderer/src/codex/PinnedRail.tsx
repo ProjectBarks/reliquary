@@ -114,10 +114,18 @@ const Unpin = styled.button`
   border: 1px solid var(--line-strong);
   background: #26221f;
   color: var(--ink-dim);
-  font-size: 9px;
+  font-size: var(--fs-2xs);
   line-height: 1;
   opacity: 0;
   transition: opacity 0.13s ease;
+  /* The visual circle stays 16px; this extends the pointer target to 24px so
+     the control meets the WCAG 2.5.8 minimum target size. */
+  &::after {
+    content: '';
+    position: absolute;
+    inset: -4px;
+    border-radius: 50%;
+  }
   &:hover {
     color: var(--sts-color-red);
   }

@@ -305,8 +305,5 @@ const RowLine = styled.div`
 `
 
 const Description = styled.div`
-  font-size: 12px;
-  div {
-    font-size: 12px;
-  }
+  font-size: var(--fs-sm);
 `

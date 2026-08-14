@@ -1411,7 +1411,7 @@ const SubLine = styled.p`
   max-width: 52ch;
   padding: 0 16px;
   font-size: 13px;
-  line-height: 1.55;
+  line-height: var(--lh-prose);
   color: oklch(1 0 0 / 72%);
   text-shadow:
     0 1px 0 oklch(0 0 0 / 70%),

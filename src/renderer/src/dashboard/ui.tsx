@@ -24,7 +24,7 @@ export const Card = styled.div`
 
 export const CardTitle = styled.h2`
   font-family: var(--font-display);
-  font-size: 19px;
+  font-size: var(--fs-xl);
   letter-spacing: 0.5px;
   color: var(--brand);
   margin: 0 0 12px;
@@ -64,14 +64,14 @@ export const SectionHead = styled.div`
 
 export const SectionTitle = styled.h2`
   font-family: var(--font-display);
-  font-size: 17px;
+  font-size: var(--fs-lg);
   letter-spacing: 0.6px;
   color: var(--ink);
   margin: 0;
 `
 
 export const SectionNote = styled.span`
-  font-size: 12px;
+  font-size: var(--fs-sm);
   color: var(--ink-faint);
 `
 
@@ -115,13 +115,13 @@ export const RowMain = styled.div`
 `
 
 export const RowLabel = styled.div`
-  font-size: 14px;
+  font-size: var(--fs-base);
   color: var(--ink);
   line-height: 1.35;
 `
 
 export const RowDesc = styled.div`
-  font-size: 12px;
+  font-size: var(--fs-sm);
   color: var(--ink-faint);
   line-height: 1.45;
   margin-top: 2px;
@@ -142,7 +142,7 @@ export const RowAside = styled.div`
 
 export const Hint = styled.p`
   margin: 0 0 10px;
-  font-size: 13px;
+  font-size: var(--fs-base);
   color: var(--ink-dim);
 `
 
@@ -150,7 +150,7 @@ export const Status = styled.div<{ ok?: boolean }>`
   display: flex;
   align-items: center;
   gap: 8px;
-  font-size: 14px;
+  font-size: var(--fs-base);
   margin: 4px 0;
   &::before {
     content: '';
@@ -165,7 +165,7 @@ export const Status = styled.div<{ ok?: boolean }>`
 
 export const Mono = styled.div`
   font-family: var(--font-mono);
-  font-size: 12px;
+  font-size: var(--fs-sm);
   color: var(--ink-dim);
   margin: 2px 0;
   &.err {
@@ -186,7 +186,7 @@ export const Pip = styled.span<{ $tone: 'ok' | 'warn' | 'bad' | 'idle' }>`
   display: inline-flex;
   align-items: center;
   gap: 7px;
-  font-size: 13px;
+  font-size: var(--fs-base);
   color: var(--ink);
   white-space: nowrap;
   &::before {
@@ -213,7 +213,7 @@ export const Button = styled.button<{ $primary?: boolean }>`
   height: 34px;
   padding: 0 13px;
   border-radius: 8px;
-  font-size: 13px;
+  font-size: var(--fs-base);
   font-weight: 600;
   font-family: inherit;
   color: ${(p) => (p.$primary ? '#1a1613' : 'var(--ink)')};
@@ -221,7 +221,9 @@ export const Button = styled.button<{ $primary?: boolean }>`
   border: 1px solid ${(p) => (p.$primary ? 'var(--brand)' : 'var(--line-strong)')};
   display: inline-flex;
   align-items: center;
+  justify-content: center;
   gap: 7px;
+  line-height: 1;
   transition:
     background 0.14s ease,
     border-color 0.14s ease,
@@ -245,6 +247,23 @@ export const Button = styled.button<{ $primary?: boolean }>`
 `
 
 /**
+ * A raw text glyph (☆, ★, ⇄, →) sitting beside a Button label.
+ *
+ * These characters come from a symbol fallback font with its own metrics, so
+ * left inline in the label's text node they ride the text baseline visibly
+ * high or low. Wrapped in this span they become their own flex item with
+ * line-height 1, and the Button's align-items centres them against the label
+ * instead of the font tables deciding.
+ */
+export const ButtonGlyph = styled.span`
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+  line-height: 1;
+`
+
+/**
  * Native select dressed as the shared Button — same 34px height, padding,
  * border, radius and type — so a picker can sit inline beside action buttons
  * and read as one row of controls. The option list is explicitly dark so the
@@ -255,7 +274,7 @@ export const Select = styled.select`
   height: 34px;
   padding: 0 30px 0 13px;
   border-radius: 8px;
-  font-size: 13px;
+  font-size: var(--fs-base);
   font-weight: 600;
   font-family: inherit;
   color: var(--ink);
@@ -447,7 +466,7 @@ export const DisclosureButton = styled.button<{ $open: boolean }>`
   border: 0;
   background: none;
   font-family: var(--font-display);
-  font-size: 15px;
+  font-size: var(--fs-md);
   letter-spacing: 0.4px;
   color: ${(p) => (p.$open ? 'var(--ink)' : 'var(--ink-dim)')};
   text-align: left;

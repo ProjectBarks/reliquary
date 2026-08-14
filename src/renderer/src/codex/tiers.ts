@@ -92,7 +92,7 @@ export const TierBadge = styled.span<{ $tier?: string | null; $size?: 'sm' | 'md
   min-width: ${(p) => (p.$size === 'lg' ? '34px' : p.$size === 'md' ? '26px' : '22px')};
   height: ${(p) => (p.$size === 'lg' ? '34px' : p.$size === 'md' ? '26px' : '20px')};
   padding: 0 ${(p) => (p.$size === 'lg' ? '9px' : '6px')};
-  font-size: ${(p) => (p.$size === 'lg' ? '20px' : p.$size === 'md' ? '15px' : '12px')};
+  font-size: ${(p) => (p.$size === 'lg' ? 'var(--fs-xl)' : p.$size === 'md' ? 'var(--fs-md)' : 'var(--fs-sm)')};
   letter-spacing: 0.4px;
   background: ${(p) => tierColor(p.$tier) ?? 'var(--fill)'};
   color: ${(p) => (tierColor(p.$tier) ? '#17140f' : 'var(--ink-faint)')};

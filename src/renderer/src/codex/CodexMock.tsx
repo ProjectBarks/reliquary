@@ -198,7 +198,8 @@ function useAutoPick(label: string): void {
         candidate.click()
         return
       }
-      if (--remaining > 0) raf = requestAnimationFrame(tick)
+      remaining -= 1
+      if (remaining > 0) raf = requestAnimationFrame(tick)
     }
     raf = requestAnimationFrame(tick)
     return () => cancelAnimationFrame(raf)

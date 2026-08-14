@@ -287,7 +287,7 @@ const SpriteArt = styled(ArtPlate)`
 `
 
 const EntryName = styled.span`
-  font-size: 10px;
+  font-size: var(--fs-xs);
   line-height: 1.25;
   text-align: center;
   overflow: hidden;

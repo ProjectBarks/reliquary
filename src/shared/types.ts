@@ -319,7 +319,8 @@ export interface CodexStatus {
   /** Number of cards in the validator vocabulary (577 when healthy). */
   cardVocab: number
   relicVocab: number
-  /** Offered-card ids seen live vs how many resolved (runtime coverage). */
+  potionVocab: number
+  /** Offered ids seen live vs how many resolved (runtime coverage, all kinds). */
   idsSeen: number
   idsResolved: number
   error: string | null

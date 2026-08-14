@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useState, type FocusEvent, type MouseEvent } from 'react'
+import { useCallback, useMemo, useRef, useState, type FocusEvent, type MouseEvent } from 'react'
 import { createPortal } from 'react-dom'
 import styled from 'styled-components'
 import { prefetchArt } from './data'
@@ -27,6 +27,8 @@ interface PreviewTarget {
   src: string
   alt: string
   rect: DOMRect
+  /** Cursor X at open time when following the cursor; null for keyboard focus. */
+  cursorX: number | null
 }
 
 export interface ArtPreviewBinding {
@@ -34,6 +36,8 @@ export interface ArtPreviewBinding {
   onMouseLeave: () => void
   onFocus: (e: FocusEvent<HTMLElement>) => void
   onBlur: () => void
+  /** Present only when the preview follows the cursor. Writes to the DOM, never to state. */
+  onMouseMove?: (e: MouseEvent<HTMLElement>) => void
 }
 
 export interface ArtPreviewApi {
@@ -43,31 +47,57 @@ export interface ArtPreviewApi {
   preview: JSX.Element | null
 }
 
-export function useArtPreview(): ArtPreviewApi {
-  const [target, setTarget] = useState<PreviewTarget | null>(null)
+export interface ArtPreviewOptions {
+  /**
+   * Keep the preview beside the cursor as it travels along the anchor, instead
+   * of parking it at the anchor's edge. The metrics table wants this: a row is
+   * the full width of the screen, and a preview pinned to the row's edge sits
+   * exactly on top of the name column the reader is trying to read. Vertical
+   * placement is unchanged — still centred on the anchor and clamped.
+   */
+  followCursorX?: boolean
+}
 
-  const open = useCallback((src: string | null | undefined, alt: string, el: HTMLElement) => {
-    if (!src) return
-    prefetchArt(src)
-    setTarget({ src, alt, rect: el.getBoundingClientRect() })
-  }, [])
+export function useArtPreview(options?: ArtPreviewOptions): ArtPreviewApi {
+  const followCursorX = options?.followCursorX ?? false
+  const [target, setTarget] = useState<PreviewTarget | null>(null)
+  /** The floating card's DOM node, moved directly on mousemove — a re-render
+   *  per pointer event would rebuild the whole owning view to move one div. */
+  const floating = useRef<HTMLDivElement | null>(null)
+
+  const open = useCallback(
+    (src: string | null | undefined, alt: string, el: HTMLElement, clientX?: number) => {
+      if (!src) return
+      prefetchArt(src)
+      setTarget({ src, alt, rect: el.getBoundingClientRect(), cursorX: clientX ?? null })
+    },
+    []
+  )
 
   const close = useCallback(() => setTarget(null), [])
 
   const bind = useCallback(
     (src: string | null | undefined, alt: string): ArtPreviewBinding => ({
-      onMouseEnter: (e) => open(src, alt, e.currentTarget),
+      onMouseEnter: (e) => open(src, alt, e.currentTarget, followCursorX ? e.clientX : undefined),
       onMouseLeave: close,
       onFocus: (e) => open(src, alt, e.currentTarget),
-      onBlur: close
+      onBlur: close,
+      ...(followCursorX
+        ? {
+            onMouseMove: (e: MouseEvent<HTMLElement>) => {
+              const node = floating.current
+              if (node) node.style.left = `${cursorLeft(e.clientX)}px`
+            }
+          }
+        : null)
     }),
-    [close, open]
+    [close, open, followCursorX]
   )
 
   const preview = useMemo(() => {
     if (!target) return null
     return createPortal(
-      <Floating style={place(target.rect)} aria-hidden>
+      <Floating ref={floating} style={place(target.rect, target.cursorX)} aria-hidden>
         <PreviewArt src={target.src} alt={target.alt} />
       </Floating>,
       document.body
@@ -82,20 +112,32 @@ export function useArtPreview(): ArtPreviewApi {
  * clamped to the window. Computed at open time from a live rect rather than
  * tracked with a listener — the anchor cannot move while it is being hovered,
  * and a scroll or resize dismisses the preview by moving the pointer anyway.
+ *
+ * With a cursor position, the X comes from the cursor instead (see
+ * `cursorLeft`); the Y placement is the same either way.
  */
-function place(rect: DOMRect): { left: number; top: number } {
+function place(rect: DOMRect, atCursorX: number | null): { left: number; top: number } {
   const vw = window.innerWidth
   const vh = window.innerHeight
   const roomRight = vw - rect.right
   const left =
-    roomRight >= WIDTH + GAP + MARGIN
-      ? rect.right + GAP
-      : Math.max(MARGIN, rect.left - WIDTH - GAP)
+    atCursorX != null
+      ? cursorLeft(atCursorX)
+      : roomRight >= WIDTH + GAP + MARGIN
+        ? rect.right + GAP
+        : Math.max(MARGIN, rect.left - WIDTH - GAP)
   const top = Math.min(
     Math.max(MARGIN, rect.top + rect.height / 2 - HEIGHT / 2),
     Math.max(MARGIN, vh - HEIGHT - MARGIN)
   )
   return { left, top }
+}
+
+/** Just to the cursor's right; to its left near the window's edge; always on screen. */
+function cursorLeft(clientX: number): number {
+  const vw = window.innerWidth
+  const left = clientX + GAP + WIDTH > vw - MARGIN ? clientX - GAP - WIDTH : clientX + GAP
+  return Math.min(Math.max(MARGIN, left), Math.max(MARGIN, vw - WIDTH - MARGIN))
 }
 
 /** Eager, unlike every other image in the tab: it was asked for by a hover. */
