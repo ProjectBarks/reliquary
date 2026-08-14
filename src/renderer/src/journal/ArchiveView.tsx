@@ -433,10 +433,16 @@ const Handle = styled.div<{ $bad: boolean }>`
   text-overflow: ellipsis;
 `
 
+/* Wrapping, not clipping: the outcome cell can carry a verdict plus a mode
+   badge plus an analysis chip, and at narrow widths a nowrap flex line was
+   shearing chips mid-glyph ("NOT REVIE…"). Rows are min-height, so a second
+   chip line grows the row instead of losing information. */
 const Chips = styled.div`
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
-  gap: 6px;
+  gap: 4px 6px;
+  padding: 6px 0;
 `
 
 const Actions = styled.div`
