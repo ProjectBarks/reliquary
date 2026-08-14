@@ -1128,3 +1128,77 @@ rather than guesses. All three are cheap PostHog queries after one evening:
 8. **Event truncation keeps the tail.** §5.4 says "coalesce room-level events
    into the snapshot"; the implementation keeps the last 2 000 events (which is
    what a recovery fold needs), sets `truncatedEvents`, and reports it.
+
+# WP6 findings (implemented 2026-08-14)
+
+`src/main/journal/AnalysisRunner.ts` — a closed run file in, the `analysis` blob
+the Journey Review renders out. Injected store, advisor, metrics source, clock
+and sleep, so the whole pipeline runs under plain node in
+`scripts/journal-analysis-selfcheck.mjs` (142 checks).
+
+## The lifecycle as implemented
+
+`close()` → `analysisStatus: 'pending'` → `onRunClosed` (new recorder callback)
+→ `AnalysisRunner.enqueue`. The queue is serialized, one run at a time. Each
+analysis writes its local half **before** the first request and re-persists after
+every network step, so a process killed mid-review leaves a `partial` file that
+names what it already fetched (`replayed`) and what it still owes (`pending`);
+`start()` re-queues those on the next launch, carrying the spent budget forward
+rather than starting the meter again. `journal:reanalyze` now clears the prior
+blob outright — including its spend, because a deliberate re-run is exactly when
+a fresh budget is warranted — and both `journal:push {kind:'analysis'}` and a
+catalog push ride every transition, so an open report live-updates.
+
+## Budget accounting (the report's "analysis 11 req / budget 12")
+
+Counted only when a request actually leaves the process: **a compendium cache hit
+costs nothing** (the answer carries `fetchedAt`, and a copy older than the
+analysis start was cached). ≤12 requests total, ≤10 draft-advice replays spaced
+≥4.5 s, replays going through the provider's own `CodexClient` — one client, one
+`codexHttp`, one cooldown map, so a replay can never outrun the live overlay's
+budget. A cooling endpoint is not asked at all.
+
+## Findings and severity rules
+
+| Case | Rule | Severity |
+|---|---|---|
+| Pick ≠ best-graded option | `gap = best − taken` on 0–100 grades (draft-advice score ×100) | `<3` none · `≥3` noted · `≥8` major · `≥15` severe |
+| Reward skipped / shop stock left | judged on the passed card's own grade — passing a mediocre card is correct play | `<45` none · `≥45` noted · `≥50` major · `≥60` severe |
+| Either of the above, where the card taken was never played all run | escalated one step | noted→major, major→severe |
+| Cards drawn and never played (local, no network) | one finding listing up to three, with the half-dead extra copies | noted, `major` at ≥5 dead cards |
+
+An offer with no advice, or a pick the model did not grade, produces **nothing** —
+a finding built on a missing number would be the pipeline inventing a verdict.
+Findings are ranked severity-then-room and re-lettered `F-01…` after ranking.
+
+## Summary strip
+
+`findings` / severe count (derived) / `draftErrors` / `deadCards` / `deadDraws` /
+`removalsPassed` / `bestPass {id, score, tier}`. Dead cards and dead draws are
+also computed locally by the renderer from the deck ledger, and the two agree by
+construction (both exclude aborted combats and both key on the base id).
+
+## Deviations
+
+1. **"Removals passed" is defined, not measured.** The removal *service* is not
+   readable; every shop sells one, so a merchant room the deck did not shrink in
+   is counted as a removal passed. Stated in the report's own `LOCAL` footnote
+   rather than presented as an observation.
+2. **Replayed advice is written back onto the `offer_shown` event** (`advice` +
+   `adviceSource: 'replay'`), exactly as the plan specifies for live-captured
+   advice. A re-review therefore costs one metrics request and no replays.
+3. **The cohort bracket is the run's player count** (user decision 4): `solo`,
+   `2p`, `3p`, `4p` — and `all` when `playerCount` was never readable, because
+   claiming "solo" for an unknown is a claim we cannot back. MP runs also carry
+   an `MP` footnote saying the community numbers are the API's bracket, not a
+   multiplayer-verified cohort.
+4. **`pick_rate` is derived from `offered`/`picked`** when the snapshot's own
+   `pick_rate` is null, which it currently is throughout — otherwise the
+   popularity proxy would be a row of dashes.
+5. **`analysis.requests` is not mirrored into `CatalogEntry`** (audit A12.3 asks
+   for it). Nothing reads it there: the report's budget line comes from the run
+   file it already has open, and the Archive shows only the status chip. Adding
+   it later is additive.
+6. **A review can be run on an unfinished run.** The `none → "Review this run"`
+   button exists on suspended runs too, and the local half is perfectly valid for
+   one (`finalDeck` falls back to the snapshot deck).

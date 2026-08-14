@@ -139,6 +139,12 @@ export interface RunRecorderOptions {
   onCurrentRun?: (value: JournalCurrentRun | null) => void
   /** Publishes a catalog push whenever the Archive's view of the world moves. */
   onCatalog?: (entries: CatalogEntry[]) => void
+  /**
+   * A run reached a terminal state and is queued for review. The post-run
+   * pipeline (WP6) hangs off this rather than off the store, because "closed"
+   * is a fact only the state machine knows — the file merely records it.
+   */
+  onRunClosed?: (id: string) => void
   menuDebounceMs?: number
   processGoneGraceMs?: number
   confirmMs?: number
@@ -184,6 +190,7 @@ export class RunRecorder {
   private readonly onEvent: (name: string, props: Record<string, unknown>) => void
   private readonly onCurrentRunCb: ((value: JournalCurrentRun | null) => void) | null
   private readonly onCatalogCb: ((entries: CatalogEntry[]) => void) | null
+  private readonly onRunClosedCb: ((id: string) => void) | null
   private readonly debug: boolean
   private readonly menuDebounceMs: number
   private readonly goneGraceMs: number
@@ -248,6 +255,7 @@ export class RunRecorder {
     this.onEvent = opts.onEvent ?? ((): void => {})
     this.onCurrentRunCb = opts.onCurrentRun ?? null
     this.onCatalogCb = opts.onCatalog ?? null
+    this.onRunClosedCb = opts.onRunClosed ?? null
     this.debug = !!(opts.env ?? process.env)['SPECTRA_DEBUG']
     this.menuDebounceMs = opts.menuDebounceMs ?? MENU_DEBOUNCE_MS
     this.goneGraceMs = opts.processGoneGraceMs ?? PROCESS_GONE_GRACE_MS
@@ -1233,6 +1241,9 @@ export class RunRecorder {
     this.pendingSupersede = []
     this.inCombat = false
     this.publishCatalog()
+    // Last, and after the file is already `pending` on disk: the pipeline reads
+    // the run back through the store, so it must never see a half-closed file.
+    this.onRunClosedCb?.(run.id)
   }
 
   // ── the ambiguity banner ───────────────────────────────────────────────────

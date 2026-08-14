@@ -14,6 +14,13 @@ import {
 import type { RawSnapshot } from './scry/readerProtocol'
 import { RunStore, resolveRunsDir, serializeRun } from './journal/RunStore'
 import { RunRecorder } from './journal/RunRecorder'
+import {
+  AnalysisRunner,
+  type AnalysisAdvisor,
+  type AnalysisMetricsSource,
+  type MetricsAnswer
+} from './journal/AnalysisRunner'
+import { codexHttp } from './codex/http'
 import { installLogCapture, setLogSink, logHistory } from './logBus'
 import {
   applyGpuCrashMitigation,
@@ -27,6 +34,7 @@ import { APP_VERSION, telemetry } from './telemetry/Telemetry'
 import { installAppTelemetry, installProcessTelemetry } from './telemetry/install'
 import {
   IPC,
+  isCodexBracket,
   type AmbiguityResolution,
   type AnalysisStatus,
   type CatalogEntry,
@@ -101,6 +109,7 @@ let scryProvider: Sts2ScryProvider | null = null
 let stub: Sts2Stub | null = null
 let runStore: RunStore | null = null
 let recorder: RunRecorder | null = null
+let analysis: AnalysisRunner | null = null
 let settingsStore: SettingsStore | null = null
 let updater: UpdateManager | null = null
 let usingScry = false
@@ -238,18 +247,81 @@ function emitSnapshot(snap: KeyedSnapshot): void {
  * on (audit A10). A held sighting costs nothing: the next poll 250 ms later
  * carries the same facts.
  */
+/**
+ * Draft-advice replays for the post-run review, on the provider's own advisor.
+ *
+ * `ready()` is the politeness gate: no provider means no client (stub mode, or
+ * a launch where scry never came up), and a cooling endpoint means the shared
+ * `codexHttp` has just been rate-limited — replaying into that would spend a
+ * request to be told no, and would do it while the live overlay needs the same
+ * endpoint. Either way the pipeline records the offer as ungraded and stays
+ * `partial`, which the user can upgrade with one click later.
+ */
+const journalAdvisor: AnalysisAdvisor = {
+  ready: () => !!scryProvider && !codexHttp.cooling('/api/draft-advice'),
+  advise: async (deck, offered) => {
+    const client = scryProvider?.codexClient
+    if (!client) return null
+    return client.advise(deck, offered)
+  }
+}
+
+/**
+ * The character-sliced metrics table, through the compendium — which means a
+ * 30-minute cache the Codex tab has usually filled already, and one shared
+ * in-flight request when it has not. `fetchedAt` travels with the answer so the
+ * pipeline can tell a real request from a cache hit and count only the former
+ * against its budget.
+ */
+const journalMetrics: AnalysisMetricsSource = {
+  cards: async ({ character, bracket }): Promise<MetricsAnswer | null> => {
+    const payload = await compendium.metrics({
+      kind: 'cards',
+      bracket: isCodexBracket(bracket) ? bracket : 'all',
+      character
+    })
+    const table = payload.data
+    if (!table) return null
+    return {
+      bracket: table.bracket,
+      character: table.character,
+      totalRuns: table.total_runs,
+      characterRuns: table.character_runs,
+      rows: table.rows,
+      apiVersion: payload.apiVersion,
+      fetchedAt: payload.fetchedAt
+    }
+  }
+}
+
 function wireJournal(): void {
   runStore = new RunStore({
     baseDir: resolveRunsDir(app.getPath('userData')),
     hasLock,
     onIssue: (key, severity, props, err) => telemetry.issue(key, severity, props, err)
   })
+  // The post-run pipeline. Both of its network legs are *adapters* onto things
+  // that already exist — the provider's advisor and the compendium's cache — so
+  // the analysis can never open a second connection to spire-codex.com or count
+  // the 15-req/min budget from its own corner.
+  analysis = new AnalysisRunner({
+    store: runStore,
+    advisor: journalAdvisor,
+    metrics: journalMetrics,
+    onIssue: (key, severity, props, err) => telemetry.issue(key, severity, props, err),
+    onEvent: (name, props) => telemetry.capture(name, props),
+    onStatus: (id, status) => pushJournal({ kind: 'analysis', id, status }),
+    onCatalog: (entries) => pushJournal({ kind: 'catalog', entries })
+  })
   recorder = new RunRecorder({
     store: runStore,
     onIssue: (key, severity, props, err) => telemetry.issue(key, severity, props, err),
     onEvent: (name, props) => telemetry.capture(name, props),
     onCurrentRun: (value) => emitSnapshot({ key: 'journal.currentRun', value }),
-    onCatalog: (entries) => pushJournal({ kind: 'catalog', entries })
+    onCatalog: (entries) => pushJournal({ kind: 'catalog', entries }),
+    // A run closes; the review starts. Queued rather than awaited: the recorder
+    // is on the poll path and must never wait for a network round trip.
+    onRunClosed: (id) => analysis?.enqueue(id)
   })
   // Seed the key so a dashboard that opens before any run still learns the
   // answer ("no run in progress") through the ordinary RequestState replay.
@@ -455,19 +527,15 @@ function wireIpc(): void {
       }),
     { error: journalUnavailable }
   )
-  // WP6 owns the pipeline itself; this queues the work and tells the Archive so
-  // its chip stops saying "done" the instant the user asks for a rerun.
+  // Clears the prior review, queues the run, and resolves the moment it is
+  // queued — the pipeline can take minutes (ten replays spaced 4.5 s apart) and
+  // its progress reaches the open report as `journal:push` instead.
   handle<[string], JournalResult<AnalysisStatus>>(
     IPC.JournalReanalyze,
     (id) =>
-      withStore(async (store) => {
-        const run = await store.getRun(id)
-        if (!run) throw new Error(`run ${id} not found`)
-        run.analysisStatus = 'pending'
-        store.save(run, { immediate: true })
-        pushJournal({ kind: 'analysis', id, status: 'pending' })
-        pushJournal({ kind: 'catalog', entries: store.list() })
-        return run.analysisStatus
+      withStore(async () => {
+        if (!analysis) throw new Error(journalUnavailable)
+        return analysis.reanalyze(id)
       }),
     { error: journalUnavailable }
   )
@@ -684,9 +752,14 @@ if (hasLock)
   const startJournal = (): void => {
     if (journalStarted) return
     journalStarted = true
-    void recorder?.start().catch((err) => {
-      telemetry.issue('journal_start_failed', 'error', {}, err)
-    })
+    void recorder
+      ?.start()
+      // Only after the scan: the pipeline's own resume sweep reads the catalog,
+      // and before the scan the catalog is whatever the last launch left.
+      .then(() => analysis?.start())
+      .catch((err) => {
+        telemetry.issue('journal_start_failed', 'error', {}, err)
+      })
   }
   if (dashboard.browserWindow) {
     dashboard.browserWindow.webContents.once('did-finish-load', startJournal)
@@ -745,6 +818,10 @@ app.on('will-quit', (e) => {
   // idempotent, because `will-quit` fires twice (the telemetry flush below
   // preventDefaults the first one). A live run ends its session honestly here
   // rather than being found as a crash orphan next launch.
+  // Stopped before the synchronous flush, so a mid-flight review cannot dirty
+  // the store after it has been written. An analysis interrupted here is
+  // `partial` on disk and resumes next launch, which is exactly the contract.
+  analysis?.dispose()
   telemetry.guard('journal_quit_flush', () => recorder?.flushSync(), undefined)
   recorder?.dispose()
   runStore?.dispose()

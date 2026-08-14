@@ -220,6 +220,17 @@ export class Sts2ScryProvider {
   get codexStatus(): ReturnType<CodexClient['status']> {
     return this.codex.status()
   }
+  /**
+   * The advisor itself, for the post-run analysis pipeline's draft-advice
+   * replays. Shared rather than duplicated on purpose: a second `CodexClient`
+   * would write the same primed-snapshot cache file and — worse — reason about
+   * the 15-req/min budget from its own corner, while the recorder's replays and
+   * the live overlay's advice hit the very same endpoint. One client, one
+   * `codexHttp`, one cooldown map.
+   */
+  get codexClient(): CodexClient {
+    return this.codex
+  }
 
   // ── reader process ──
 
