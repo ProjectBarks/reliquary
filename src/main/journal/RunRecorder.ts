@@ -516,7 +516,7 @@ export class RunRecorder {
     }
 
     this.lastFingerprint = fingerprint
-    this.openFrom(fingerprint, at)
+    this.openFrom(fingerprint, at, nGame.roomType)
   }
 
   /**
@@ -551,7 +551,7 @@ export class RunRecorder {
   }
 
   /** Runs the decision table and opens, resumes, or provisionally forks a file. */
-  private openFrom(f: RunFingerprint, at: number): void {
+  private openFrom(f: RunFingerprint, at: number, roomType: string | null): void {
     // `CatalogEntry` satisfies `MatchCandidate` structurally, which is the whole
     // point of A6: matching reads rows and opens no run file but the winner's.
     const candidates: MatchCandidate[] = this.store.candidates(f.character)
@@ -583,7 +583,7 @@ export class RunRecorder {
       })
       return
     }
-    this.openNew(verdict, f, at)
+    this.openNew(verdict, f, at, roomType)
   }
 
   /** Resume path — the same code whether the gap was 10 seconds or three days. */
@@ -594,7 +594,7 @@ export class RunRecorder {
       // The row promised a file that is not there. Rebuild-by-scan will drop
       // the row; meanwhile a new file is the only non-destructive answer.
       this.onIssue('journal_resume_file_missing', 'warn', { id })
-      this.openNew({ ...verdict, kind: 'new', candidateId: null }, f, at)
+      this.openNew({ ...verdict, kind: 'new', candidateId: null }, f, at, null)
       return
     }
     // The Q1/WP1 verification hook: what the file remembers versus what the
@@ -623,8 +623,21 @@ export class RunRecorder {
     this.settleOfferAcrossGap(run, f, at)
   }
 
-  /** New-file path, including the provisional fork the ambiguity banner needs. */
-  private openNew(verdict: MatchVerdict, f: RunFingerprint, at: number): void {
+  /**
+   * New-file path, including the provisional fork the ambiguity banner needs.
+   *
+   * `roomType` is the sighting's own room, carried in separately because the
+   * fingerprint deliberately does not hold it: the room a run is standing in is
+   * not part of its identity, but it *is* the first row of its route, and
+   * passing null here labelled every run's opening room `other` in the Route
+   * Ledger — a fight, an event and a shop all read the same.
+   */
+  private openNew(
+    verdict: MatchVerdict,
+    f: RunFingerprint,
+    at: number,
+    roomType: string | null
+  ): void {
     const ambiguous = verdict.kind === 'ambiguous' && verdict.candidateId
     const run = this.store.createRun({
       character: f.character,
@@ -652,7 +665,7 @@ export class RunRecorder {
       // The room we are standing in when a run begins. Without this the counter
       // starts at zero and every route row is off by one for the run's life —
       // the floor rising edge can only ever see the *next* room.
-      this.enterRoom(run, at, f.totalFloor, null)
+      this.enterRoom(run, at, f.totalFloor, roomType)
     } else if (f.totalFloor !== null) {
       // A mid-run attach has no observed first room, but the game's own floor
       // number does — so the header can be honest instead of starting at zero.
@@ -1190,7 +1203,9 @@ export class RunRecorder {
       const row = run.sessions.find((s) => s.sid === session.sid)
       if (row) {
         row.detachedAt = at
-        row.reason = 'process-gone'
+        // The run concluding is not the process going away — a death on screen
+        // recorded as 'process-gone' was a statement about the wrong thing.
+        row.reason = 'run-ended'
         row.activeMs += Math.max(0, Math.round(this.mono() - session.startedMono))
       }
     }

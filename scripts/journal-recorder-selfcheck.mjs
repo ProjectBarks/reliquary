@@ -591,6 +591,9 @@ await section('rooms come from the game floor, and the route follows', async () 
   eq("the game's floor is recorded", run.floorReached, 4)
   const rooms = run.events.filter((e) => e.type === 'room_enter')
   eq('one event each', rooms.length, 4)
+  // The room a run opens on is the sighting's own room, not an unknown: without
+  // it every run's first route row reads `other`, whatever it actually was.
+  eq('the opening room carries its type', rooms[0].roomType, 'combat')
   eq('same-type rooms are not merged', rooms[3].roomType, 'merchant')
   eq('the live route carries them', h.current().recentRoute.length, 4)
 

@@ -441,6 +441,11 @@ await section('capture runs and lock-less instances never write', async () => {
     resolveRunsDir('C:/ud', { SPECTRA_CAPTURE: 'C:/shots' }),
     join('C:/ud', 'runs-stub')
   )
+  eq(
+    'and so does a stub launch — the demo driver records real files there',
+    resolveRunsDir('C:/ud', { SPECTRA_STUB: '1' }),
+    join('C:/ud', 'runs-stub')
+  )
 })
 
 // ── 8. delete, debounce, synchronous quit flush ──────────────────────────────

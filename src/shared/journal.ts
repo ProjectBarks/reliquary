@@ -55,8 +55,12 @@ export type RunOutcome = 'ended' | 'death' | 'victory' | 'superseded'
 /** Whether we watched the run start, or attached to one already in progress. */
 export type ObservedFrom = 'start' | 'mid-run'
 
-/** Why an observation segment ended. */
-export type SessionEndReason = 'menu' | 'process-gone' | 'app-quit' | 'character-switch'
+/**
+ * Why an observation segment ended. `run-ended` is the run itself concluding
+ * (death or victory) — without it, a run that died on-screen recorded as
+ * `process-gone`, which is a statement about the game's process, not the run.
+ */
+export type SessionEndReason = 'menu' | 'process-gone' | 'app-quit' | 'character-switch' | 'run-ended'
 
 /** Why there is a hole in the observation: play we missed, or a restored save. */
 export type GapReason = 'unobserved-play' | 'save-restore'

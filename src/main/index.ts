@@ -5,6 +5,7 @@ import { join } from 'path'
 import { OverlayWindow } from './overlay/OverlayWindow'
 import { DashboardWindow } from './windows/DashboardWindow'
 import { Sts2Stub } from './stub/sts2Stub'
+import { DemoClock, JournalDemoDriver } from './stub/journalDemoDriver'
 import {
   Sts2ScryProvider,
   type ProcessState,
@@ -113,6 +114,24 @@ let analysis: AnalysisRunner | null = null
 let settingsStore: SettingsStore | null = null
 let updater: UpdateManager | null = null
 let usingScry = false
+let journalDemo: JournalDemoDriver | null = null
+
+/**
+ * The scripted stub run (`stub/journalDemoDriver.ts`), and whether this launch
+ * wants it.
+ *
+ * Stub mode is the only mode with no reader, so it is the only mode where the
+ * recorder would otherwise never observe anything — and a journal nobody can
+ * see working is a journal nobody can trust. `SPECTRA_JOURNAL_DEMO=0` opts out;
+ * `=1` replays it over an archive that already has runs (the default is to seed
+ * an empty one only, so ten dev launches do not leave thirty demo runs behind).
+ *
+ * Live mode never constructs the clock, so the recorder there is handed exactly
+ * what it is handed today.
+ */
+const journalDemoWanted = (): boolean =>
+  !!process.env['SPECTRA_STUB'] && process.env['SPECTRA_JOURNAL_DEMO'] !== '0'
+const demoClock: DemoClock | null = journalDemoWanted() ? new DemoClock() : null
 
 let scryLoaded = false
 let scryLoadError: string | null = null
@@ -315,6 +334,11 @@ function wireJournal(): void {
   })
   recorder = new RunRecorder({
     store: runStore,
+    // Only in stub mode, and only so the scripted demo can compress its ~20
+    // minutes into a few seconds of real time with internally consistent
+    // timestamps. Un-engaged the clock *is* `Date.now`/`hrtime`, and in live
+    // mode it is not constructed at all.
+    ...(demoClock ? { now: demoClock.now, monotonic: demoClock.monotonic } : {}),
     onIssue: (key, severity, props, err) => telemetry.issue(key, severity, props, err),
     onEvent: (name, props) => telemetry.capture(name, props),
     onCurrentRun: (value) => emitSnapshot({ key: 'journal.currentRun', value }),
@@ -373,6 +397,34 @@ function wireScry(): void {
 function wireStub(): void {
   stub = new Sts2Stub(emitSnapshot)
   stub.start()
+}
+
+/**
+ * The stub's other half: a scripted run fed to the *real* recorder through the
+ * same `observe`/`onProcess` surface the provider's raw tap uses.
+ *
+ * Started after `recorder.start()` — the rebuild-by-scan has to have finished,
+ * because sightings before it are held (audit A10) and the demo's first three
+ * polls would simply be dropped. It seeds an empty stub archive and otherwise
+ * stands down: a demo that appended a fourth copy of itself on every dev launch
+ * would be indistinguishable from a recorder bug.
+ */
+function startJournalDemo(): void {
+  if (!demoClock || !recorder || !runStore || journalDemo) return
+  const existing = runStore.list().length
+  if (existing > 0 && process.env['SPECTRA_JOURNAL_DEMO'] !== '1') {
+    console.log(
+      `[spectra] journal demo skipped — ${existing} run(s) already in ${runStore.dir} ` +
+        '(SPECTRA_JOURNAL_DEMO=1 replays it anyway)'
+    )
+    return
+  }
+  journalDemo = new JournalDemoDriver({
+    recorder,
+    clock: demoClock,
+    log: (line) => console.log(`[spectra:journal-demo] ${line}`)
+  })
+  void journalDemo.start()
 }
 
 function wireIpc(): void {
@@ -603,6 +655,21 @@ function wireIpc(): void {
  * then quits.
  */
 const delay = (ms: number): Promise<void> => new Promise((r) => setTimeout(r, ms))
+
+/**
+ * Wait for the post-run review to settle, so the report is photographed with
+ * its findings rather than mid-`pending`. In stub mode there is no advisor and
+ * usually no metrics table either, so this resolves as `partial` — the honest
+ * state, and the one the screenshot should show.
+ */
+async function journalIdle(): Promise<void> {
+  for (let i = 0; i < 40; i++) {
+    const pending = (runStore?.list() ?? []).filter((e) => e.analysisStatus === 'pending')
+    if (!pending.length) return
+    await delay(250)
+  }
+}
+
 async function captureScreens(dir: string): Promise<void> {
   const ov = overlay.browserWindow
   const dash = dashboard.browserWindow
@@ -612,6 +679,15 @@ async function captureScreens(dir: string): Promise<void> {
       ? new Promise((r) => w.webContents.once('did-finish-load', () => r()))
       : Promise.resolve()
   await Promise.all([ready(ov), ready(dash)])
+  // The Journal's views are only worth a screenshot once the scripted stub run
+  // has played out; the driver finishes in a few seconds, but "a few" is not a
+  // number this rig should guess at. Capped, so a driver that never resolves
+  // costs a late screenshot rather than a hung capture run.
+  if (journalDemo) {
+    await Promise.race([journalDemo.done, delay(90_000)])
+    await runStore?.flush()
+    await journalIdle()
+  }
   await delay(2800) // let webfonts, stub data, and intro animations settle
   mkdirSync(dir, { recursive: true })
   writeFileSync(join(dir, 'dashboard.png'), (await dash.webContents.capturePage()).toPNG())
@@ -757,6 +833,8 @@ if (hasLock)
       // Only after the scan: the pipeline's own resume sweep reads the catalog,
       // and before the scan the catalog is whatever the last launch left.
       .then(() => analysis?.start())
+      // Stub mode only, and a no-op everywhere else.
+      .then(() => startJournalDemo())
       .catch((err) => {
         telemetry.issue('journal_start_failed', 'error', {}, err)
       })
@@ -813,6 +891,7 @@ app.on('will-quit', (e) => {
   globalShortcut.unregisterAll()
   scryProvider?.stop()
   stub?.stop()
+  journalDemo?.stop()
   updater?.stop()
   // Synchronous, because the process will not be alive for a promise, and
   // idempotent, because `will-quit` fires twice (the telemetry flush below

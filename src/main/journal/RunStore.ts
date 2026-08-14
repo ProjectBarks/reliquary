@@ -738,15 +738,23 @@ export function runFileName(id: string): string {
 /**
  * Which directory a given process journals into. Real play writes `runs/`;
  * anything synthetic — a `SPECTRA_JOURNAL_STUB` UI session, a screenshot
- * capture run — writes `runs-stub/`, so a fixture can never appear in the
- * user's archive and a capture run can never touch a live catalog. Kept here
- * rather than at the call site so the rule has exactly one home.
+ * capture run, a `SPECTRA_STUB` dev launch — writes `runs-stub/`, so a fixture
+ * can never appear in the user's archive and a capture run can never touch a
+ * live catalog. Kept here rather than at the call site so the rule has exactly
+ * one home.
+ *
+ * `SPECTRA_STUB` belongs on that list for the same reason as the other two, and
+ * became load-bearing when it stopped being harmless: stub mode has no reader,
+ * so nothing was ever recorded there — until `stub/journalDemoDriver.ts` began
+ * driving the real recorder with a scripted run. Those runs are as synthetic as
+ * a fixture and must not be filed next to the user's own.
  */
 export function resolveRunsDir(
   userDataDir: string,
   env: Record<string, string | undefined> = process.env
 ): string {
-  const synthetic = !!env['SPECTRA_JOURNAL_STUB'] || !!env['SPECTRA_CAPTURE']
+  const synthetic =
+    !!env['SPECTRA_JOURNAL_STUB'] || !!env['SPECTRA_CAPTURE'] || !!env['SPECTRA_STUB']
   return join(userDataDir, synthetic ? 'runs-stub' : 'runs')
 }
 
