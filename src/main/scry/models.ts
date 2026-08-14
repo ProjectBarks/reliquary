@@ -259,12 +259,46 @@ export class MapPointRoomHistoryEntry extends ScryObject {
   }
 }
 
+/** One map point (node) the run has entered, with the rooms it contained. */
+export class MapPointHistoryEntry extends ScryObject {
+  get Rooms(): List<MapPointRoomHistoryEntry> {
+    return new List(this.object('Rooms'), MapPointRoomHistoryEntry)
+  }
+}
+
+/** `_mapPointHistory` is a List of Lists — one inner list per act. */
+export class MapPointHistoryList extends List<MapPointHistoryEntry> {
+  constructor(obj: any) {
+    super(obj, MapPointHistoryEntry)
+  }
+}
+
 export class RunState extends ScryObject {
   get _currentActIndex(): number {
     return this.number('_currentActIndex') as number
   }
   get _players(): List<Player> {
     return new List(this.object('_players'), Player)
+  }
+  /** One inner list of entered map points per act. */
+  get _mapPointHistory(): List<MapPointHistoryList> {
+    return new List(this.object('_mapPointHistory'), MapPointHistoryList)
+  }
+  /**
+   * Cumulative map points entered across all acts — the game's own floor
+   * number. Mirrors the computed `RunState.TotalFloor` (a getter, so it cannot
+   * be read directly) and the `floor_reached` metric: the sum of each act's
+   * map-point count.
+   *
+   * This is a real progress clock, and a monotonic one: the journal plan
+   * assumed none existed and derived room counts from `roomType`/`isTraveling`
+   * edges instead, which silently undercount consecutive same-type rooms.
+   */
+  getTotalFloor(): number {
+    const outer = this._mapPointHistory
+    let total = 0
+    for (let i = 0; i < outer.length; i++) total += outer.at(i)?.length ?? 0
+    return total
   }
 }
 
@@ -720,6 +754,64 @@ export class LocalContext {
   }
 }
 
+/**
+ * The run manager singleton. Only `_startTime` is ported, and it is worth more
+ * than its size suggests: it is the single value in memory that identifies
+ * *which* run this is.
+ *
+ * StS2 exposes no run seed and no save-slot id to a memory reader (verified
+ * against the full scry decomp: `RunState` carries `_currentActIndex`,
+ * `_players` and `_mapPointHistory`, and nothing else). `_startTime` is the
+ * substitute the original companion used for exactly this purpose — it keyed
+ * its per-run combat history and its "already uploaded" bookkeeping by it, and
+ * it equals the `start_time` field the game writes into
+ * `saves/current_run.save` and into the completed-run `history/*.run` log. That
+ * it lives in the save file is what makes it survive a quit-and-resume, which
+ * is the property session matching actually needs.
+ *
+ * Unverified at runtime (WP3): whether a resumed run reports the *original*
+ * start time rather than the time of the resume. Treat it as a strong identity
+ * hint that corroborates a deck match, not yet as proof on its own.
+ *
+ * A real seed does exist, just not here. The game writes it, alongside
+ * `start_time`, `ascension`, `build_id`, `game_mode`, `win`, `run_time`, the
+ * per-player `{id, character}` list and the full `map_point_history`, into
+ * plain JSON under its own user data:
+ *
+ *     …/SlayTheSpire2/steam/<steamUserId>[/modded]/profile<N>/saves/
+ *         current_run.save      ← the live singleplayer run (carries start_time)
+ *         current_run_mp.save   ← the live multiplayer run
+ *         history/*.run         ← one file per completed run (carries seed, win)
+ *
+ * Reading those files would make run identity exact and the outcome (win vs
+ * loss) unambiguous, which memory alone cannot give us. It is a different
+ * mechanism from this reader — a file watcher, plus resolving the Steam user id
+ * and active profile — so it is deliberately not attempted here; the note lives
+ * where the identity question is asked. Two facts from that layout are worth
+ * carrying into the session design regardless: the live save is a *single*
+ * file per mode (so the game keeps at most one resumable singleplayer run and
+ * one multiplayer run — not one per character), and a run's identity survives
+ * quit-and-resume precisely because `start_time` is written into it.
+ */
+export class RunManager extends ScryObject {
+  static getInstance(context: GodotContext): RunManager | null {
+    const instance = getValidOrNull(
+      context.getClass('MegaCrit.Sts2.Core.Runs.RunManager'),
+      'Instance'
+    )
+    return instance ? new RunManager(instance) : null
+  }
+  /** Run start timestamp in unix SECONDS (not ms). Equals RunHistory.start_time. */
+  get _startTime(): number {
+    return this.number('_startTime') as number
+  }
+  /** The active run's state — the same object `NRun._state` exposes. */
+  get State(): RunState | null {
+    const value = this.object('State', true)
+    return value ? new RunState(value) : null
+  }
+}
+
 export class ReleaseInfo extends ScryObject {
   get Version(): string {
     return this.string('Version') as string
@@ -747,4 +839,73 @@ export function findLocalPlayer(context: GodotContext, run: NRun): Player | null
     if (player && player.NetId === localNetId) return player
   }
   return null
+}
+
+/** Everything one walk of `RunState._players` can answer. */
+export interface RunPlayers {
+  /**
+   * The list's own `_size` — how many players this run has. 1 in singleplayer.
+   * Authoritative even when an individual slot fails to read, which is why it
+   * is taken from the list rather than from the ids collected below.
+   */
+  count: number
+  /** The player whose `NetId` matches `LocalContext`, or null if unidentifiable. */
+  local: Player | null
+  /** Character ids of the non-local players, in list order. Empty in singleplayer. */
+  otherCharacterIds: string[]
+}
+
+/**
+ * Walk `RunState._players` once for the local player, the player count and the
+ * remote players' characters. `findLocalPlayer` already walked this list for
+ * the local seat; the count and the remote ids were simply never surfaced.
+ *
+ * Returns null when the run has no `_state` (loading or tearing down) so
+ * callers can report "unknown" rather than inventing a count of 0 or 1.
+ *
+ * Deliberately *not* wrapped: the `_players` read and the `NetId` comparison
+ * throw here exactly where they threw inside `findLocalPlayer`, so a failed
+ * walk keeps costing the whole poll (and incrementing the reader's error
+ * streak) instead of quietly degrading into "no local player" — which is
+ * indistinguishable from sitting on the main menu. Only the remote character
+ * ids, which are new reads, are individually guarded.
+ *
+ * Caveat (open question Q3): whether `_players` enumerates remote players
+ * during a live multiplayer session is implied by the decomp — the local-player
+ * filter exists precisely because the list can hold more than one — but has
+ * never been verified against a running MP game. Until it is, a genuine MP run
+ * may report `count: 1`; consumers must store the count as observed rather than
+ * treat 1 as proof of solo.
+ */
+export function readPlayers(context: GodotContext, run: NRun): RunPlayers | null {
+  const state = run._state
+  if (!state) return null
+  const players = state._players
+  const localNetId = LocalContext.NetId(context)
+  // A null local NetId (the game is between sessions, or the field moved) means
+  // we cannot tell our seat from anyone else's. Report the count — which is
+  // still true — and claim nothing about who is who, rather than listing the
+  // local player as a stranger.
+  if (localNetId === null) return { count: players.length, local: null, otherCharacterIds: [] }
+
+  let local: Player | null = null
+  const otherCharacterIds: string[] = []
+  for (const player of players) {
+    if (!player) continue
+    if (!local && player.NetId === localNetId) {
+      local = player
+      continue
+    }
+    const id = safeRead(() => player.getCharacterId(), null)
+    if (id) otherCharacterIds.push(id)
+  }
+  return { count: players.length, local, otherCharacterIds }
+}
+
+function safeRead<T>(fn: () => T, fallback: T): T {
+  try {
+    return fn()
+  } catch {
+    return fallback
+  }
 }

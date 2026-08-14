@@ -16,6 +16,13 @@
  * surface reaches for.
  */
 export * from './codex'
+
+/**
+ * The run journal's on-disk model (run files, catalog, events) is likewise its
+ * own file, for the same reason and re-exported the same way.
+ */
+export * from './journal'
+
 import type {
   CatalogPayload,
   CodexCatalogKind,
@@ -120,7 +127,13 @@ export interface Sts2NGameState {
   isInspectCardScreenOpen: boolean
   isInspectRelicScreenOpen: boolean
   isGameOver: boolean
-  currentActIndex: number
+  /**
+   * 0-based act index, or null when the game has not told us yet (a run that is
+   * still loading, or a read that failed). Nullable so "act 1" and "unknown"
+   * stay distinguishable — a 0 standing in for both reads as a run that
+   * regressed. Consumers render absence as a dash, never as act 1.
+   */
+  currentActIndex: number | null
   localPlayer: { characterId: string } | null
 }
 

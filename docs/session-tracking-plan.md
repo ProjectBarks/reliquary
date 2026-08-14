@@ -567,6 +567,9 @@ Q&A; nothing else in the plan is knowingly uncertain.
    exact and collapse Â§2 to a lookup. *Default: proceed without; WP1 includes a
    30-minute decomp check of `RunState` fields (seed, save id, floor, gold, hp are all
    plausibly adjacent â€” same trip as journal-plan Phase-2 scouting).*
+   **Answered â€” see "WP1 findings" below:** no seed or save id in memory, but
+   `RunManager._startTime` is a usable run key, the game's own save files carry the real
+   seed and outcome, and a floor number *is* readable after all.
 3. **Does `RunState._players` enumerate remote players in live MP, and is
    `playerCount` stable mid-session?** (Â§1.4). *Default: ship the reader nullable;
    verify in one MP session; until verified, MP runs may read as solo â€” files keep
@@ -955,6 +958,62 @@ What must change before WP3 starts:
 No replan: every fix is local to a WP that already exists, and none of them touches Â§2's policy or
 the mockup. Phasing stands as written, with WP1 growing the `deckSize` + nullable-act reads and WP3
 growing `provider.ts` in its file list.
+
+# WP1 findings (implemented 2026-08-14)
+
+Answers to the questions WP1 was assigned, recorded where the plan asked for them. Two of
+them change what later WPs should build; both make the design *simpler*, not harder.
+
+**Q2 — run seed / save-slot id.** *Not in memory; present on disk; a usable proxy exists.*
+The full scry decomp was searched (`decomp/scry/deobfuscated.js`): no `seed`, no save id,
+no guid, nothing. `RunState` really does expose only `_currentActIndex`, `_players` and
+`_mapPointHistory`. Two things were found instead:
+
+1. **`RunManager.Instance._startTime`** (`decomp/scry:9922-9938`) — the run's start
+   timestamp in unix seconds. The original companion used it as *the run's identity key*:
+   it keyed per-run combat history by it, deduped uploads by it, and matched a completed
+   run against the live save by comparing `start_time`. Now read as
+   `RawNGameState.runStartTime`. It is a strong identity signal but not yet proof —
+   whether a *resumed* run reports its original start time is a runtime check (WP3).
+   If it does, §2's matching collapses to a lookup and content matching becomes the
+   corroborating check rather than the primary one.
+2. **The game's own save files carry everything, including the seed.** StS2 writes plain
+   JSON under `…/SlayTheSpire2/steam/<steamUserId>[/modded]/profile<N>/saves/`:
+   `current_run.save` (live singleplayer run), `current_run_mp.save` (live multiplayer
+   run), and `history/*.run` per completed run. The completed-run file carries `seed`,
+   `start_time`, `ascension`, `build_id`, `game_mode`, `win`, `run_time`, the per-player
+   `{id, character}` list and the full `map_point_history` (`decomp/core:21500-21712`).
+   That is exact identity, a real MP roster, and — the gap §1.2 calls out — an
+   unambiguous **death-vs-victory** outcome, all without a memory read. Out of WP1's
+   scope (it is a file watcher plus Steam-id/profile resolution, not a scry reader), but
+   it deserves its own WP rather than being forgotten. Two facts from that layout apply
+   to the design as it stands: the live save is **one file per mode**, so the game keeps
+   at most one resumable singleplayer run and one multiplayer run — *not* one per
+   character (Q1 is stronger than assumed, and supersession should sweep per mode, not
+   per character); and a run's `start_time` is written into the save, which is why it can
+   survive quit-and-resume at all.
+
+**Q3 — `_players` in live MP.** Unchanged: still decomp-implied, not runtime-verified.
+`playerCount` and `otherCharacterIds` ship nullable/empty exactly as planned, and the
+reader's own doc comment carries the caveat so the next reader of that code sees it.
+
+**Q11 — is `Player.Deck` populated *during* combat? — ANSWERED: yes.** Queried the
+existing `deck_read` telemetry (390 shape-change events, 2026-08-06 → 08-14):
+`owned_deck = 0 && combat_piles > 0` occurred **0 times**; 346 events had both populated,
+41 had the owned deck outside combat, 3 had neither (transitions). The "readable anywhere
+in a run" claim (`models.ts`) holds in the field. **Sightings do not need to be deferred
+until `isCombatInProgress === false`** — drop that contingency from WP3.
+
+**New: the game has a floor counter, and §1.5 gap 5 is wrong.** `RunState._mapPointHistory`
+is a list-of-lists (one inner list of entered map points per act) and the decomp's
+`getTotalFloor()` sums it into the game's own cumulative floor number — the same value as
+the `floor_reached` metric. Now read as `RawNGameState.totalFloor`. This matters for **A7**:
+room counting no longer has to be inferred from `roomType`/`isTraveling` edges that
+undercount consecutive same-type rooms. WP3 should count rooms from the rising edge of
+`totalFloor` and keep the travel edge only as a corroborating signal. It also gives an
+honest floor for a *mid-run attach*, where our own counter starts at zero by construction.
+Room-level detail is available on the same walk if it is ever wanted
+(`_mapPointHistory.at(act).last().Rooms.last().RoomType`).
 
 # User decisions (final, 2026-08-14)
 

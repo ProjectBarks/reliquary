@@ -20,7 +20,9 @@ import {
   NMerchantRoom,
   NRun,
   ReleaseInfoManager,
+  RunManager,
   findLocalPlayer,
+  readPlayers,
   type CardModel
 } from './models'
 
@@ -66,8 +68,33 @@ export interface RawPileState {
   /**
    * The owned deck, read from the player rather than assembled from combat
    * piles. Present outside combat too, which is exactly when card offers appear.
+   *
+   * May be SHORT — see `deckSize`/`deckPartial` before treating it as the deck.
    */
   deck: RawCard[]
+  /**
+   * The owned deck list's own `_size`, captured before the cards were
+   * materialised, or null when the deck could not be reached at all this poll
+   * (no local player, no `Deck` object, or the read threw).
+   *
+   * `deck.length` alone cannot be trusted as the deck size: `List.map` walks
+   * `0..length-1` over a `_version`-keyed `_items` array and the mapper above
+   * drops slots that read back empty, so a read racing a game-side mutation
+   * returns a short list of *real* cards. Carrying the size lets a consumer
+   * tell a 9-card read of a 12-card deck from a genuine 9-card deck.
+   */
+  deckSize: number | null
+  /**
+   * True when this deck read is known to be incomplete — either nothing was
+   * readable (`deckSize === null`, where the empty array is an absence rather
+   * than an empty deck) or fewer cards materialised than `_size` promised.
+   *
+   * Anything deriving run identity from the deck must discard such a poll
+   * outright: a truncated deck hashes to a plausible-looking wrong value, and a
+   * failed read that fell back to `[]` looks like a deck that was emptied.
+   * A genuinely empty deck reads as `deckSize: 0, deckPartial: false`.
+   */
+  deckPartial: boolean
 }
 
 /** Returns null only when there is no run at all. Piles are empty outside combat. */
@@ -87,24 +114,36 @@ export function readPileState(context: GodotContext): RawPileState | null {
   // Read the owned deck first and unconditionally: it is the thing advice needs,
   // and card offers happen outside combat where the piles below do not exist.
   let deck: RawCard[] = []
+  let deckSize: number | null = null
   try {
     const player = findLocalPlayer(context, run)
     const pile = player?.Deck
-    deck = cards(pile?._cards)
+    // Take the list's `_size` BEFORE materialising, so a mutation that lands
+    // between the two shows up as a mismatch instead of passing silently.
+    const list = pile?._cards ?? null
+    if (list) {
+      deckSize = list.length
+      deck = cards(list)
+    }
     if (process.env['SPECTRA_DEBUG']) {
       console.log(
-        `[reader] deck read: player=${player ? 'yes' : 'NO'} pile=${pile ? 'yes' : 'NO'} cards=${deck.length}`
+        `[reader] deck read: player=${player ? 'yes' : 'NO'} pile=${pile ? 'yes' : 'NO'} ` +
+          `cards=${deck.length} size=${deckSize ?? '?'}`
       )
     }
   } catch (err) {
+    // The fallback stays `[]` so existing consumers (which ignore empty deck
+    // reads) are unaffected; `deckSize: null` is what tells the new consumers
+    // that this emptiness is a failure rather than an answer.
     if (process.env['SPECTRA_DEBUG']) {
       console.log(`[reader] deck read failed: ${err instanceof Error ? err.message : String(err)}`)
     }
   }
+  const deckPartial = deckSize === null || deck.length !== deckSize
 
   const currentRoom = run.getCurrentRoom()
   if (!currentRoom || (currentRoom as any).className !== NCombatRoom.ClassName) {
-    return { draw: [], discard: [], hand: [], exhaust: [], deck }
+    return { draw: [], discard: [], hand: [], exhaust: [], deck, deckSize, deckPartial }
   }
 
   const combatRoom = currentRoom as NCombatRoom
@@ -119,7 +158,9 @@ export function readPileState(context: GodotContext): RawPileState | null {
     discard: cards(discard),
     hand: cards(hand),
     exhaust: cards(exhaust),
-    deck
+    deck,
+    deckSize,
+    deckPartial
   }
 }
 
@@ -165,8 +206,43 @@ export interface RawNGameState {
   capstoneScreen: boolean
   isInspectCardScreenOpen: boolean
   isInspectRelicScreenOpen: boolean
-  currentActIndex: number
+  /**
+   * 0-based act index, or null when the run has no `_state` yet (loading, or
+   * tearing down) or the read failed.
+   *
+   * Nullable on purpose: this used to fall back to 0, which made "act 1" and
+   * "we don't know" the same value. Anything that compares acts across time —
+   * "has this run progressed?", "is this the same run?" — reads a load-time 0
+   * as a run that went backwards. Null cannot be mistaken for progress.
+   */
+  currentActIndex: number | null
   characterId: string | null
+  /**
+   * How many players this run has, from `RunState._players`, or null when the
+   * run state was unreadable. 1 in singleplayer.
+   *
+   * Nullable rather than defaulted to 1 because "we could not read the list"
+   * and "this is a solo run" have to stay distinguishable: a run recorded as
+   * solo on a bad poll would be compared against the wrong cohort forever.
+   * See `readPlayers` for the standing caveat about MP enumeration (Q3).
+   */
+  playerCount: number | null
+  /** Character ids of the other players in the run; empty in singleplayer. */
+  otherCharacterIds: string[]
+  /**
+   * The run's start timestamp in unix SECONDS, from `RunManager.Instance`, or
+   * null when it could not be read. The nearest thing to a run id that exists
+   * in memory — see `RunManager` in models.ts for what it is, what it is worth,
+   * and what still has to be verified before it can be trusted as identity.
+   */
+  runStartTime: number | null
+  /**
+   * The game's own cumulative floor number (map points entered across all
+   * acts), or null when unreadable. Monotonic within a run, and unlike a
+   * counter of our own it does not depend on us having watched the run from
+   * its first room.
+   */
+  totalFloor: number | null
 }
 
 /** Top-level UI/room state used to gate which overlays are visible. */
@@ -200,7 +276,13 @@ export function readNGameState(context: GodotContext): RawNGameState | null {
     false
   )
 
-  const localPlayer = findLocalPlayer(context, run)
+  // One walk of the player list answers three questions at once: who we are,
+  // how many of us there are, and who the others are. Unguarded, exactly as the
+  // bare findLocalPlayer call it replaces — a throw here must keep costing the
+  // whole nGame read (and raising the reader's error streak) rather than
+  // degrading into a state that looks identical to standing on the main menu.
+  const players = readPlayers(context, run)
+  const localPlayer = players?.local ?? null
 
   return {
     roomType,
@@ -211,8 +293,12 @@ export function readNGameState(context: GodotContext): RawNGameState | null {
     capstoneScreen: safe(() => globalUi.CapstoneContainer.CurrentCapstoneScreen !== null, false),
     isInspectCardScreenOpen: inspectCard,
     isInspectRelicScreenOpen: inspectRelic,
-    currentActIndex: safe(() => run._state?._currentActIndex ?? 0, 0),
-    characterId: localPlayer ? safe(() => localPlayer.getCharacterId(), null) : null
+    currentActIndex: safe(() => run._state?._currentActIndex ?? null, null),
+    characterId: localPlayer ? safe(() => localPlayer.getCharacterId(), null) : null,
+    playerCount: players?.count ?? null,
+    otherCharacterIds: players?.otherCharacterIds ?? [],
+    runStartTime: safe(() => RunManager.getInstance(context)?._startTime ?? null, null),
+    totalFloor: safe(() => run._state?.getTotalFloor() ?? null, null)
   }
 }
 
