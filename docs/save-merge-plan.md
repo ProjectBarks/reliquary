@@ -456,3 +456,12 @@ runs of history immediately); Steam-cloud discovery fallback; `modded\`
 profiles. *Acceptance:* Archive shows imported runs distinctly ("from save file
 only", no pace/combat data), toggling the setting hides/re-imports cleanly, and
 cohort baselines ("your 2P average") update to include them.
+
+# User decisions (2026-08-14)
+
+- **No automatic import of pre-Reliquary history runs.** The retroactive import of
+  the ~60 existing save-only runs ships as a manual **button in Settings**
+  ("Import past runs from the game's save history") — user-triggered, idempotent,
+  reporting how many were imported/skipped. Merging saves into runs the journal
+  itself recorded (close-time + watcher + startup sweep for journal-known runs)
+  stays automatic as planned.
