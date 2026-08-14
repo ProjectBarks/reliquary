@@ -1,10 +1,16 @@
 import { contextBridge, ipcRenderer } from 'electron'
 import {
   IPC,
+  type AmbiguityResolution,
+  type AnalysisStatus,
+  type CatalogEntry,
   type CatalogPayload,
   type CodexCatalogKind,
   type CodexPushMessage,
   type DiagnosticsState,
+  type JournalPushMessage,
+  type JournalResult,
+  type RunFile,
   type MetricsPayload,
   type MetricsQuery,
   type KeyedSnapshot,
@@ -98,6 +104,42 @@ const api: SpectraApi = {
     const listener = (_e: unknown, message: CodexPushMessage): void => cb(message)
     ipcRenderer.on(IPC.CodexPush, listener)
     return () => ipcRenderer.removeListener(IPC.CodexPush, listener)
+  },
+
+  // The run journal, on the same spine as the codex block above: invoke for the
+  // Archive's questions, one push for the answers that change under it, and the
+  // live run on the keyed snapshot channel rather than here.
+  journalList(): Promise<JournalResult<CatalogEntry[]>> {
+    return ipcRenderer.invoke(IPC.JournalList)
+  },
+
+  journalGet(id: string): Promise<JournalResult<RunFile>> {
+    return ipcRenderer.invoke(IPC.JournalGet, id)
+  },
+
+  journalDelete(id: string): Promise<JournalResult<boolean>> {
+    return ipcRenderer.invoke(IPC.JournalDelete, id)
+  },
+
+  journalReanalyze(id: string): Promise<JournalResult<AnalysisStatus>> {
+    return ipcRenderer.invoke(IPC.JournalReanalyze, id)
+  },
+
+  journalExport(id: string): Promise<JournalResult<{ path: string; bytes: number }>> {
+    return ipcRenderer.invoke(IPC.JournalExport, id)
+  },
+
+  journalResolveAmbiguity(
+    id: string,
+    resolution: AmbiguityResolution
+  ): Promise<JournalResult<{ id: string; merged: boolean }>> {
+    return ipcRenderer.invoke(IPC.JournalResolveAmbiguity, { id, resolution })
+  },
+
+  onJournalPush(cb: (message: JournalPushMessage) => void): () => void {
+    const listener = (_e: unknown, message: JournalPushMessage): void => cb(message)
+    ipcRenderer.on(IPC.JournalPush, listener)
+    return () => ipcRenderer.removeListener(IPC.JournalPush, listener)
   },
 
   onUpdate(cb: (state: UpdateState) => void): () => void {

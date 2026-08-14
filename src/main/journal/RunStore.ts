@@ -142,6 +142,8 @@ export interface NewRunInit {
   observedFrom: ObservedFrom
   /** Null when we joined mid-run — we did not see the start. */
   startedAt: number | null
+  /** The game's own run key (`RunManager._startTime`, seconds), when readable. */
+  runStartTime?: number | null
   firstSeenAt?: number
   gameVersion?: string | null
   playerCount?: number | null
@@ -798,6 +800,7 @@ export function newRunFile(id: string, init: NewRunInit): RunFile {
     outcome: null,
     observedFrom: init.observedFrom,
     startedAt: init.startedAt,
+    runStartTime: init.runStartTime ?? null,
     firstSeenAt: at,
     lastSeenAt: at,
     endedAt: null,
@@ -858,6 +861,10 @@ export function catalogEntryFromRun(
     // run pays the ~1 KB the multiset costs.
     deck: resumable ? [...run.snapshot.deck] : null,
     core: [...run.signature.core],
+    // Unlike `deck` this is kept for terminal runs too: it costs one number,
+    // and a closed run's start time is what tells a false close (a run that
+    // reappears with the same start time) from an honest new run.
+    runStartTime: run.runStartTime ?? null,
     playerCount: run.playerCount,
     activeMs: run.sessions.reduce((sum, s) => sum + (s.activeMs || 0), 0),
     analysisStatus: run.analysisStatus,
@@ -895,6 +902,7 @@ export function unreadableEntry(
     deckHash: '',
     deck: null,
     core: [],
+    runStartTime: null,
     playerCount: null,
     activeMs: 0,
     analysisStatus: 'none',
@@ -958,6 +966,7 @@ export function parseRunFile(text: string): RunParseResult {
     outcome: outcomeOf(raw['outcome']),
     observedFrom: raw['observedFrom'] === 'start' ? 'start' : 'mid-run',
     startedAt: nullableNum(raw['startedAt']),
+    runStartTime: nullableNum(raw['runStartTime']),
     firstSeenAt,
     lastSeenAt: num(raw['lastSeenAt'], firstSeenAt),
     endedAt: nullableNum(raw['endedAt']),

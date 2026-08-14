@@ -133,6 +133,7 @@ function baseNGameState(): Sts2NGameState {
     isInspectRelicScreenOpen: false,
     isGameOver: false,
     currentActIndex: 0,
+    playerCount: 1,
     localPlayer: { characterId: 'ironclad' }
   }
 }

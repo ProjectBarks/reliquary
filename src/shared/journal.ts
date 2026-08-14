@@ -86,6 +86,13 @@ export interface RunSession {
   activeMs: number
   /** Players seen in `RunState._players`; null when the read was unavailable. */
   playerCount: number | null
+  /**
+   * The other players' character ids, as seen during this segment. Per-session
+   * rather than per-run because drop-in/drop-out is a real possibility the
+   * multiplayer reader cannot yet rule out (Q3/Q4) — a run whose roster changed
+   * should say so rather than average itself into one wrong answer.
+   */
+  otherCharacterIds?: string[]
   gameVersion: string | null
 }
 
@@ -293,6 +300,15 @@ export interface RunFile {
   observedFrom: ObservedFrom
   /** Null when `observedFrom === 'mid-run'` — we did not see the start. */
   startedAt: number | null
+  /**
+   * The game's own run start timestamp (`RunManager._startTime`, unix SECONDS),
+   * or null when it was never readable. Unlike `startedAt` this is not our
+   * observation — it is the value the game wrote into its save, which is why it
+   * survives a quit and is the matcher's primary identity anchor. Stored on the
+   * file *and* mirrored into the catalog row so matching an exact resume never
+   * has to open a run file.
+   */
+  runStartTime: number | null
   firstSeenAt: number
   /** Clamped monotonically non-decreasing; a backwards wall clock never rewinds it. */
   lastSeenAt: number
@@ -382,6 +398,13 @@ export interface CatalogEntry {
    */
   deck: string[] | null
   core: string[]
+  /**
+   * The game's own run start time (seconds), mirrored from the run file. It is
+   * the matcher's *primary* anchor — an exact match resumes regardless of deck
+   * state — so it has to be answerable from the catalog alone, for the same
+   * reason `deck` is here (audit A6).
+   */
+  runStartTime: number | null
 
   playerCount: number | null
   activeMs: number
@@ -435,3 +458,74 @@ export function runCohort(playerCount: number | null | undefined): RunCohort {
 export function cohortLabel(cohort: RunCohort): string {
   return cohort === 'solo' ? 'Solo' : cohort.toUpperCase()
 }
+
+/**
+ * Which of the game's two live saves a run occupies. StS2 keeps exactly one
+ * `current_run.save` and one `current_run_mp.save` (WP1 findings, Q2), so a new
+ * run supersedes the previous run *of the same mode* — not of the same
+ * character, which is what the plan body assumed before the save layout was
+ * known. Cohorts split further (2P/3P/4P); supersession does not care how many.
+ */
+export type RunMode = 'sp' | 'mp'
+
+export function runMode(playerCount: number | null | undefined): RunMode {
+  return playerCount != null && playerCount > 1 ? 'mp' : 'sp'
+}
+
+// ── live "current run" key + push channel ────────────────────────────────────
+
+/** One row of the route-so-far strip; the Route Ledger renders the same shape. */
+export interface JournalRouteRow {
+  t: number
+  roomIndex: number
+  /** The game's own floor number, when readable; ours is `roomIndex`. */
+  floor: number | null
+  act: number | null
+  roomType: string | null
+}
+
+/**
+ * The `journal.currentRun` keyed snapshot: everything the Current Run header
+ * and its mini-route need, and nothing that already rides another key. Deck and
+ * pile contents come from `sts2.pileState` / `sts2.cardData` as they always
+ * have — duplicating them here would double the push volume for no reader.
+ *
+ * `null` while no run is being recorded.
+ */
+export interface JournalCurrentRun {
+  runId: string
+  state: RunLifecycleState
+  character: string
+  act: number | null
+  roomIndex: number
+  floor: number | null
+  roomType: string | null
+  deckSize: number
+  /** Monotonic-clock ms of observation, the pace denominator. */
+  paceActiveMs: number
+  elapsedActiveMs: number
+  /** Last six route rows — the LIVE view's route-so-far panel. */
+  recentRoute: JournalRouteRow[]
+  playerCount: number | null
+  cohort: RunCohort
+  observedFrom: ObservedFrom
+  countsArePartial: boolean
+  /** Non-null while this run is the provisional answer awaiting the banner. */
+  ambiguity: RunAmbiguity | null
+  startedAt: number | null
+  lastSeenAt: number
+  inCombat: boolean
+}
+
+/**
+ * Pushed on `IPC.JournalPush` whenever the Archive's view of the world moves.
+ * Shaped like `CodexPushMessage` on purpose — same spine, same discipline: the
+ * renderer never polls, and a change made while a view is open arrives without
+ * a refocus.
+ */
+export type JournalPushMessage =
+  | { kind: 'catalog'; entries: CatalogEntry[] }
+  | { kind: 'analysis'; id: string; status: AnalysisStatus }
+
+/** Every journal invoke resolves one of these; none of them ever rejects. */
+export type JournalResult<T> = { data: T } | { error: string }

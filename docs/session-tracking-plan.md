@@ -1040,3 +1040,91 @@ These override any conflicting defaults in the plan body or audit:
    archive average yet") instead of borrowing another cohort's baseline.
    Community cohorts matched per player count where the API supports it
    (2p/3p/4p brackets exist).
+
+# WP3 + WP4 findings (implemented 2026-08-14)
+
+## The decision table as implemented
+
+`src/main/journal/SessionMatcher.ts`, pure and I/O-free. `F` = the sighting's
+fingerprint (refused outright unless a poll carries a non-null act, a non-null
+`deckSize`, `deck.length === deckSize` and `!deckPartial`, held stable for 3
+consecutive polls). `C` = the best-ranked catalog row.
+
+| Row | Condition | Verdict |
+|---|---|---|
+| **D0** *(new — WP1's `runStartTime`)* | `F.runStartTime === C.runStartTime`, both non-null | **Resume**, whatever the deck says. Gap recorded from the deck relation. Candidates whose non-null key *contradicts* F's are dropped from the candidate set entirely. |
+| D1 | no viable candidate | **New file.** `observedFrom = starter-shaped ? 'start' : 'mid-run'`. Sweeps the mode. |
+| D2 | EXACT (`deckHash` equal) | **Resume.** Gap `unobserved-play` only if the act advanced. |
+| D3 | EVOLVED | **Resume** + gap `unobserved-play`. Sweeps the mode except C. |
+| **D3R** | REGRESSED | **Resume** + gap `save-restore`, **regardless of act**, and **sweeps nothing**. |
+| **D4** | starter-shaped ∧ C starter-shaped ∧ same act ∧ decks contained ∧ no run-key evidence | **`ambiguous`** — new *provisional* file, `ambiguity.candidateId`, banner. Sweeps nothing. (User decision; replaces the plan body's "pick, the cost is ~0".) |
+| D5 | starter-shaped, `C.deckSize > 12` | **New file** (`'start'`), sweeps the mode. |
+| D6 | DIVERGED | **New file** (`'mid-run'` unless starter-shaped), sweeps the mode. |
+| D7 | EXACT deck, `F.act < C.act` | **New file** + `journal_match_anomaly`. **Sweeps nothing** (a contradicted model is the worst moment to retire a file). |
+| D8 | several candidates | Not an outcome — the ranking. Run key ≫ EXACT ≫ REGRESSED ≫ EVOLVED retention ≫ recency; the rows above are applied to the winner. Reported via `ranked`/`considered`. |
+| D9 | `isGameOver` for 2 consecutive polls | Recorder closes the run (`'ended'`), then **refuses to reopen the same deck** — a false close costs a lost tail, never a duplicate mid-run file. |
+| D10 | character change across a stable sighting | Recorder suspends (`'character-switch'`), then runs this table for the new character. |
+
+Predicate corrections carried in: **A2** — EVOLVED/REGRESSED run over the
+**base-id** multiset with a separate upgrade-monotonicity test, so three campfire
+upgrades resume instead of superseding, and a deck that *loses* upgrade levels is
+refused. **A5** — REGRESSED precedes DIVERGED, and every `supersede` list is
+*deferred*: the recorder holds it until the new run is confirmed by a deck
+mutation, a room boundary, or 60 s of continuous recording. **WP1** —
+supersession sweeps **per mode** (one `current_run.save`, one
+`current_run_mp.save`), not per character; rooms come from `totalFloor`'s rising
+edge, retiring **A7** (the travel edge survives only as a reported corroborator).
+
+## Runtime verifications: instrumented, answers still pending
+
+None of Q1/Q3/Q8 can be answered without a live game, so WP3 shipped the probes
+rather than guesses. All three are cheap PostHog queries after one evening:
+
+- **Q1 / run-key stability (the load-bearing one).** Every resume emits
+  `journal_runstart_verify { matched, stored, observed, rule, gap, elapsed_ms }`,
+  and every poll of a live run compares the key against the file's, raising
+  `journal_runstart_changed` if it moves without an intervening suspension.
+  `matched: true` on a genuine quit-and-resume is the evidence that collapses §2
+  to a lookup; `journal_runstart_changed` is the observation that would falsify
+  it. Also `journal_match { rule, has_run_key, considered, mode }` per sighting.
+- **Q3 / multiplayer.** `playerCount` now reaches the renderer through
+  `Sts2NGameState` and the provider logs every change under `SPECTRA_DEBUG`;
+  sessions store `playerCount` + `otherCharacterIds` as observed.
+- **Q8 / combat restart.** Aborted rows are excluded from the aggregates as
+  planned; `journal_closed` reports `rooms_by_floor` vs `rooms_by_travel` so the
+  room rule and the abort rule can both be checked against one real run.
+- **Q9 / false close.** `journal_close_then_exact_sighting` fires when a closed
+  run's deck reappears — and, unlike the plan, the recorder *acts* on it by
+  refusing to open the duplicate.
+
+## Deviations from the plan, and why
+
+1. **`runStartTime` added to `RunFile` *and* `CatalogEntry`** (additive, no
+   schema bump). WP1 made the run key the primary anchor; without it on the row,
+   evaluating D0 would mean opening every candidate file, breaking §3.4's
+   "matching opens no run file but the winner's" (the same argument as A6's
+   `deck`). Kept for terminal rows too — it is one number, and it is what tells a
+   false close from an honest new run.
+2. **`RunSession.otherCharacterIds`** added (optional). The MP tagging WP3 was
+   asked for is per-session, and `RunSession` had nowhere to put the roster.
+3. **STARTER-SHAPED uses distinct-id count, not a basic-id vocabulary.** The
+   main process has no card vocabulary (the codex catalogs are async and
+   optional), so `act === 0 ∧ size ≤ 12 ∧ distinct ids ≤ 6` stands in for
+   "≥ 80 % basic ids". It errs toward *not* calling a deck starter-shaped, and
+   the cost of that error is a new file rather than a wrong merge.
+4. **A merge deletes the provisional file** rather than leaving it as a ghost
+   row. "Merge" means the candidate now holds every event, session and combat
+   the provisional held; keeping both would show the user two rows for one run,
+   which is exactly what the banner exists to prevent.
+5. **An opening `room_enter` is written for `observedFrom: 'start'`.** A floor
+   *rising edge* can only ever see the second room; without this every route row
+   is off by one for the run's life. It is deliberately not counted as the
+   confirmation that unlocks supersession.
+6. **`journal:reanalyze` only queues.** It sets `analysisStatus: 'pending'` and
+   pushes; the pipeline itself is WP6.
+7. **`journal:export` writes a copy to the user's Downloads folder** and returns
+   the path. The plan says "resolve the file's absolute path copy"; the run file
+   lives inside `userData`, where nobody browses.
+8. **Event truncation keeps the tail.** §5.4 says "coalesce room-level events
+   into the snapshot"; the implementation keeps the last 2 000 events (which is
+   what a recovery fold needs), sets `truncatedEvents`, and reports it.

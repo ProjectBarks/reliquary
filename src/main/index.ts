@@ -1,10 +1,19 @@
 import { app, ipcMain, globalShortcut, Menu, shell, type BrowserWindow } from 'electron'
 import { mkdirSync, writeFileSync } from 'fs'
+import { writeFile } from 'fs/promises'
 import { join } from 'path'
 import { OverlayWindow } from './overlay/OverlayWindow'
 import { DashboardWindow } from './windows/DashboardWindow'
 import { Sts2Stub } from './stub/sts2Stub'
-import { Sts2ScryProvider, type ProcessState } from './scry/provider'
+import {
+  Sts2ScryProvider,
+  type ProcessState,
+  type RawTapContext,
+  type RawTapSignal
+} from './scry/provider'
+import type { RawSnapshot } from './scry/readerProtocol'
+import { RunStore, resolveRunsDir, serializeRun } from './journal/RunStore'
+import { RunRecorder } from './journal/RunRecorder'
 import { installLogCapture, setLogSink, logHistory } from './logBus'
 import {
   applyGpuCrashMitigation,
@@ -18,7 +27,13 @@ import { APP_VERSION, telemetry } from './telemetry/Telemetry'
 import { installAppTelemetry, installProcessTelemetry } from './telemetry/install'
 import {
   IPC,
+  type AmbiguityResolution,
+  type AnalysisStatus,
+  type CatalogEntry,
   type CodexCatalogKind,
+  type JournalPushMessage,
+  type JournalResult,
+  type RunFile,
   type MetricsQuery,
   type RendererTelemetryEvent,
   type UpdateCommand,
@@ -84,6 +99,8 @@ let overlayHidden = false
 
 let scryProvider: Sts2ScryProvider | null = null
 let stub: Sts2Stub | null = null
+let runStore: RunStore | null = null
+let recorder: RunRecorder | null = null
 let settingsStore: SettingsStore | null = null
 let updater: UpdateManager | null = null
 let usingScry = false
@@ -181,7 +198,11 @@ function emitSnapshot(snap: KeyedSnapshot): void {
     () => {
       const v = snap.value as Record<string, unknown> | null
       if (v == null) {
-        telemetry.issue('snapshot_null', 'warn', { key: snap.key })
+        // `journal.currentRun` is null whenever no run is being recorded, which
+        // is most of the time and is the answer, not a missing one.
+        if (snap.key !== 'journal.currentRun') {
+          telemetry.issue('snapshot_null', 'warn', { key: snap.key })
+        }
       } else if (snap.key === 'sts2.cardData' && Object.keys(v).length === 0) {
         telemetry.issue('carddata_empty', 'warn', { key: snap.key })
       }
@@ -205,10 +226,49 @@ function emitSnapshot(snap: KeyedSnapshot): void {
   broadcast(IPC.Data, snap)
 }
 
+/**
+ * The run journal. The store owns persistence, the recorder owns meaning, and
+ * both are constructed here because both need things only the app can answer:
+ * the userData directory, the single-instance lock (a second process must never
+ * write the same catalog), and the real clocks.
+ *
+ * Constructed eagerly but *idle*: `recorder.start()` — which runs the
+ * rebuild-by-scan — is deliberately deferred to after the dashboard has
+ * painted, and sightings observed before it finishes are held rather than acted
+ * on (audit A10). A held sighting costs nothing: the next poll 250 ms later
+ * carries the same facts.
+ */
+function wireJournal(): void {
+  runStore = new RunStore({
+    baseDir: resolveRunsDir(app.getPath('userData')),
+    hasLock,
+    onIssue: (key, severity, props, err) => telemetry.issue(key, severity, props, err)
+  })
+  recorder = new RunRecorder({
+    store: runStore,
+    onIssue: (key, severity, props, err) => telemetry.issue(key, severity, props, err),
+    onEvent: (name, props) => telemetry.capture(name, props),
+    onCurrentRun: (value) => emitSnapshot({ key: 'journal.currentRun', value }),
+    onCatalog: (entries) => pushJournal({ kind: 'catalog', entries })
+  })
+  // Seed the key so a dashboard that opens before any run still learns the
+  // answer ("no run in progress") through the ordinary RequestState replay.
+  emitSnapshot({ key: 'journal.currentRun', value: null })
+}
+
+function pushJournal(message: JournalPushMessage): void {
+  broadcast(IPC.JournalPush, message)
+}
+
 function wireScry(): void {
   scryProvider = new Sts2ScryProvider({
     emit: emitSnapshot,
+    // The journal's real input: every poll, as read. Guarded inside the
+    // provider, so a throw in here cannot cost the overlay a frame.
+    onRaw: (raw: RawSnapshot, ctx: RawTapContext) => recorder?.observe(raw, ctx),
+    onRawSignal: (signal: RawTapSignal) => recorder?.onSignal(signal),
     onProcess: (state: ProcessState) => {
+      recorder?.onProcess(state)
       const was = processState
       processState = state
       if (was.detected !== state.detected) {
@@ -352,6 +412,95 @@ function wireIpc(): void {
     error: 'compendium unavailable'
   })
   handle(IPC.CodexRefresh, (kind: CodexCatalogKind) => compendium.refresh(kind), undefined)
+
+  // ── the run journal ──
+  // Same contract as the codex block: resolve `{data}` or `{error}`, never
+  // reject. The fallbacks below are what a renderer sees if the guard itself
+  // trips, which is why they are messages rather than empty successes — an
+  // Archive that cannot tell "no runs" from "the journal is broken" lies.
+  const journalUnavailable = 'journal unavailable'
+  const withStore = async <T>(
+    fn: (store: RunStore) => Promise<T> | T
+  ): Promise<JournalResult<T>> => {
+    if (!runStore) return { error: journalUnavailable }
+    try {
+      return { data: await fn(runStore) }
+    } catch (err) {
+      return { error: err instanceof Error ? err.message : String(err) }
+    }
+  }
+
+  handle<[], JournalResult<CatalogEntry[]>>(
+    IPC.JournalList,
+    () => withStore((store) => store.list()),
+    { error: journalUnavailable }
+  )
+  handle<[string], JournalResult<RunFile>>(
+    IPC.JournalGet,
+    (id) =>
+      withStore(async (store) => {
+        const run = await store.getRun(id)
+        if (!run) throw new Error(`run ${id} not found`)
+        return run
+      }),
+    { error: journalUnavailable }
+  )
+  handle<[string], JournalResult<boolean>>(
+    IPC.JournalDelete,
+    (id) =>
+      withStore(async (store) => {
+        const deleted = await store.delete(id)
+        if (deleted) pushJournal({ kind: 'catalog', entries: store.list() })
+        return deleted
+      }),
+    { error: journalUnavailable }
+  )
+  // WP6 owns the pipeline itself; this queues the work and tells the Archive so
+  // its chip stops saying "done" the instant the user asks for a rerun.
+  handle<[string], JournalResult<AnalysisStatus>>(
+    IPC.JournalReanalyze,
+    (id) =>
+      withStore(async (store) => {
+        const run = await store.getRun(id)
+        if (!run) throw new Error(`run ${id} not found`)
+        run.analysisStatus = 'pending'
+        store.save(run, { immediate: true })
+        pushJournal({ kind: 'analysis', id, status: 'pending' })
+        pushJournal({ kind: 'catalog', entries: store.list() })
+        return run.analysisStatus
+      }),
+    { error: journalUnavailable }
+  )
+  // "Export JSON" in the report header. The run file itself is inside userData
+  // where nobody browses, so this writes a copy where the user actually looks
+  // and hands back the path for the confirmation line.
+  handle<[string], JournalResult<{ path: string; bytes: number }>>(
+    IPC.JournalExport,
+    (id) =>
+      withStore(async (store) => {
+        const run = await store.getRun(id)
+        if (!run) throw new Error(`run ${id} not found`)
+        const text = serializeRun(run)
+        const path = join(app.getPath('downloads'), `reliquary-run-${id}.json`)
+        await writeFile(path, text, 'utf8')
+        telemetry.capture('journal_exported', { bytes: text.length })
+        return { path, bytes: Buffer.byteLength(text) }
+      }),
+    { error: journalUnavailable }
+  )
+  handle<[{ id: string; resolution: AmbiguityResolution }], JournalResult<{ id: string; merged: boolean }>>(
+    IPC.JournalResolveAmbiguity,
+    (payload) =>
+      withStore(async () => {
+        if (!recorder) throw new Error(journalUnavailable)
+        if (!payload || typeof payload.id !== 'string') throw new Error('bad payload')
+        if (payload.resolution !== 'fresh' && payload.resolution !== 'resumed') {
+          throw new Error('resolution must be "fresh" or "resumed"')
+        }
+        return recorder.resolveAmbiguity(payload.id, payload.resolution)
+      }),
+    { error: journalUnavailable }
+  )
 
   // Deliberately an allow-list, not a generic opener: a compromised renderer
   // must not be able to launch arbitrary URLs (or file paths) via the shell.
@@ -518,9 +667,33 @@ if (hasLock)
     pushDiagnostics()
   })
 
+  // Before the provider, so the raw tap has something to hand its polls to.
+  wireJournal()
   if (usingScry) wireScry()
   else wireStub()
   wireIpc()
+
+  // The rebuild-by-scan runs off the startup path (audit A10): parsing every
+  // run file before the first window paints is how a journal feature becomes a
+  // launch regression. Nothing is lost by waiting — the game cannot start a run
+  // faster than this, and a sighting arriving early is simply held.
+  //
+  // Held, though, means *not recorded*, so this must not depend on a window
+  // that might never finish loading: the backstop fires regardless.
+  let journalStarted = false
+  const startJournal = (): void => {
+    if (journalStarted) return
+    journalStarted = true
+    void recorder?.start().catch((err) => {
+      telemetry.issue('journal_start_failed', 'error', {}, err)
+    })
+  }
+  if (dashboard.browserWindow) {
+    dashboard.browserWindow.webContents.once('did-finish-load', startJournal)
+    setTimeout(startJournal, 20_000).unref?.()
+  } else {
+    startJournal()
+  }
 
   // Seed the renderer with persisted settings (single owner; both modes).
   emitSnapshot({ key: 'sts2.settings', value: settingsStore.get() })
@@ -568,6 +741,13 @@ app.on('will-quit', (e) => {
   scryProvider?.stop()
   stub?.stop()
   updater?.stop()
+  // Synchronous, because the process will not be alive for a promise, and
+  // idempotent, because `will-quit` fires twice (the telemetry flush below
+  // preventDefaults the first one). A live run ends its session honestly here
+  // rather than being found as a crash orphan next launch.
+  telemetry.guard('journal_quit_flush', () => recorder?.flushSync(), undefined)
+  recorder?.dispose()
+  runStore?.dispose()
   // Hold the quit briefly so the final batch — including the exit-time issue
   // summaries, which are the only record of failures that never crossed a
   // report threshold — actually leaves the process.

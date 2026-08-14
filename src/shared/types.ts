@@ -30,6 +30,15 @@ import type {
   MetricsPayload,
   MetricsQuery
 } from './codex'
+import type {
+  AmbiguityResolution,
+  AnalysisStatus,
+  CatalogEntry,
+  JournalCurrentRun,
+  JournalPushMessage,
+  JournalResult,
+  RunFile
+} from './journal'
 
 /** Screen-space rectangle the overlay is pinned to. */
 export interface WindowBounds {
@@ -134,6 +143,13 @@ export interface Sts2NGameState {
    * regressed. Consumers render absence as a dash, never as act 1.
    */
   currentActIndex: number | null
+  /**
+   * How many players are in this run (`RunState._players`), or null when the
+   * run state was unreadable. Nullable rather than defaulted to 1 for the same
+   * reason the reader keeps it nullable: a run mis-recorded as solo would be
+   * compared against the wrong archive cohort forever.
+   */
+  playerCount: number | null
   localPlayer: { characterId: string } | null
 }
 
@@ -230,6 +246,12 @@ export interface Sts2StateMap {
   'sts2.enemiesState': Sts2EnemiesState
   'sts2.layoutState': Sts2LayoutState
   'sts2.settings': Sts2Settings
+  /**
+   * The run being recorded, or null when there is none. It rides the keyed
+   * snapshot channel rather than a push of its own so `RequestState` replays it
+   * to a freshly-opened dashboard for free, exactly like every other key.
+   */
+  'journal.currentRun': JournalCurrentRun | null
 }
 
 export type Sts2Key = keyof Sts2StateMap
@@ -344,7 +366,24 @@ export const IPC = {
   /** renderer -> main: `(kind) => void` — force a revalidation now */
   CodexRefresh: 'spectra:codex-refresh',
   /** main -> renderer: a background revalidation landed ({ key, value }) */
-  CodexPush: 'spectra:codex-push'
+  CodexPush: 'spectra:codex-push',
+  // ── Run journal (invoke/response, plus one push) ──
+  // Same reasoning as the codex block: the Archive needs the *answer*, and the
+  // live run rides the keyed-snapshot channel instead of appearing here.
+  /** renderer -> main: `() => JournalResult<CatalogEntry[]>` — the Archive index */
+  JournalList: 'spectra:journal-list',
+  /** renderer -> main: `(id) => JournalResult<RunFile>` — one whole run file */
+  JournalGet: 'spectra:journal-get',
+  /** renderer -> main: `(id) => JournalResult<boolean>` — the Archive's Delete */
+  JournalDelete: 'spectra:journal-delete',
+  /** renderer -> main: `(id) => JournalResult<AnalysisStatus>` — re-kick analysis */
+  JournalReanalyze: 'spectra:journal-reanalyze',
+  /** renderer -> main: `(id) => JournalResult<{path}>` — write the Export JSON copy */
+  JournalExport: 'spectra:journal-export',
+  /** renderer -> main: `({id, resolution}) => JournalResult<…>` — answer the banner */
+  JournalResolveAmbiguity: 'spectra:journal-resolve-ambiguity',
+  /** main -> renderer: catalog or analysis progress changed */
+  JournalPush: 'spectra:journal-push'
 } as const
 
 /** One installable release, as listed on GitHub. */
@@ -451,4 +490,29 @@ export interface SpectraApi {
   codexRefresh(kind: CodexCatalogKind): Promise<void>
   /** main -> renderer: a revalidation landed. Returns unsubscribe. */
   onCodexPush(cb: (message: CodexPushMessage) => void): () => void
+
+  // ── Run journal ──
+  // Every one of these resolves `{data}` or `{error}` and never rejects, so the
+  // Archive renders a state instead of catching one. The *live* run is not
+  // here: it arrives on the keyed snapshot channel as `journal.currentRun`.
+  /** The Archive index, newest first. */
+  journalList(): Promise<JournalResult<CatalogEntry[]>>
+  /** One whole run file — the report and the review both render from it. */
+  journalGet(id: string): Promise<JournalResult<RunFile>>
+  /** The Archive's per-run Delete. Nothing else prunes. */
+  journalDelete(id: string): Promise<JournalResult<boolean>>
+  /** Queue a closed run for (re)analysis; progress arrives on the push channel. */
+  journalReanalyze(id: string): Promise<JournalResult<AnalysisStatus>>
+  /** Write a copy of the run file somewhere the user can find it. */
+  journalExport(id: string): Promise<JournalResult<{ path: string; bytes: number }>>
+  /**
+   * Answer the ambiguity banner. `'resumed'` merges the provisional run into
+   * its candidate and returns the surviving id; `'fresh'` just clears the flag.
+   */
+  journalResolveAmbiguity(
+    id: string,
+    resolution: AmbiguityResolution
+  ): Promise<JournalResult<{ id: string; merged: boolean }>>
+  /** main -> renderer: catalog / analysis changed. Returns unsubscribe. */
+  onJournalPush(cb: (message: JournalPushMessage) => void): () => void
 }

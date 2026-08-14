@@ -3,7 +3,7 @@
 import { get as httpsGet } from 'https'
 import { telemetry } from '../telemetry/Telemetry'
 import { ReaderHost } from './ReaderHost'
-import type { ReaderToHost } from './readerProtocol'
+import type { RawSnapshot, ReaderToHost } from './readerProtocol'
 import { CodexClient, type DeckAdvice } from '../codex/CodexClient'
 // Types only: the reads themselves now happen in the forked reader process.
 import type {
@@ -49,9 +49,54 @@ export interface ProcessState {
   active: boolean
 }
 
+/**
+ * What a raw-tap consumer needs to know about the poll it is being handed, over
+ * and above the reads themselves.
+ *
+ * `seq` exists because the emitted snapshots are change-deduplicated and the
+ * raw tap is not: "the same value for 3 consecutive polls" is a real question
+ * for the recorder and an unanswerable one downstream of `emitSnapshot`.
+ * `errorStreak` is here because a dead-pointer streak inside a live run reads
+ * exactly like quit-to-menu (`nGame: null` either way), and only the streak
+ * tells them apart.
+ */
+export interface RawTapContext {
+  /** Monotonic poll counter for this provider. */
+  seq: number
+  /** Whether the game window is currently detected. */
+  detected: boolean
+  /** Consecutive failed reads, from the reader's own counter. 0 when healthy. */
+  errorStreak: number
+  gameVersion: string | null
+}
+
+/**
+ * Lifecycle facts the raw snapshot stream cannot carry, because they arrive
+ * *instead* of a snapshot. `processGone` is deliberately not treated as gospel
+ * by consumers: the reader synthesises one after 40 consecutive failed polls
+ * with the game still running, so it means "we lost the game" no more reliably
+ * than a long error streak does.
+ */
+export type RawTapSignal =
+  | { type: 'processGone'; errorStreak: number }
+  | { type: 'readFailed'; errorStreak: number; transient: boolean }
+  | { type: 'gameVersion'; version: string | null }
+
 export interface ScryProviderCallbacks {
   emit(snap: KeyedSnapshot): void
   onProcess(state: ProcessState): void
+  /**
+   * Every poll, undeduplicated and underived — the run recorder's input.
+   *
+   * The emitted keyed snapshots are the *renderer* contract and drop nearly
+   * everything run capture needs: the owned deck, the exhaust pile, per-card
+   * instance addresses, offered ids and prices, and the polls themselves. This
+   * tap is what journal-plan §2.2 asked for ("the provider exposes a tap") and
+   * it is additive: nothing above it changes shape or cadence.
+   */
+  onRaw?(raw: RawSnapshot, ctx: RawTapContext): void
+  /** The out-of-band half of the same tap. */
+  onRawSignal?(signal: RawTapSignal): void
 }
 
 export class Sts2ScryProvider {
@@ -61,6 +106,12 @@ export class Sts2ScryProvider {
   private moduleLoaded = false
   private errorStreak = 0
   private running = false
+  // Raw-tap bookkeeping. Kept here rather than in the consumer so every tap
+  // sees the same poll numbering and the same detection/version facts.
+  private pollSeq = 0
+  private detected = false
+  private gameVersion: string | null = null
+  private lastPlayerCount: number | null = null
 
   // Change-detection caches so we only emit when something actually changed.
   private lastNGame = ''
@@ -185,6 +236,7 @@ export class Sts2ScryProvider {
         break
 
       case 'process':
+        this.detected = msg.detected
         this.cb.onProcess({
           detected: msg.detected,
           pid: msg.pid,
@@ -209,11 +261,39 @@ export class Sts2ScryProvider {
         break
 
       case 'gameVersion':
+        this.gameVersion = msg.version
+        this.cb.onRawSignal?.({ type: 'gameVersion', version: msg.version })
         this.fetchCardData(msg.version)
         break
 
       case 'snapshot':
         this.errorStreak = 0
+        // Before the poll* calls, exactly as the audit's A1 fix specifies: the
+        // recorder sees the reads as read, not as the renderer's projection of
+        // them, and it sees every poll rather than every change. Guarded so a
+        // throw in the journal can never cost the overlay its snapshot.
+        if (this.cb.onRaw) {
+          const ctx: RawTapContext = {
+            seq: ++this.pollSeq,
+            detected: this.detected,
+            errorStreak: this.errorStreak,
+            gameVersion: this.gameVersion
+          }
+          telemetry.guard(
+            'journal_raw_tap',
+            () =>
+              this.cb.onRaw?.(
+                {
+                  nGame: msg.nGame,
+                  pile: msg.pile,
+                  enemies: msg.enemies,
+                  items: msg.items
+                },
+                ctx
+              ),
+            undefined
+          )
+        }
         telemetry.guard('poll_ngame', () => this.pollNGame(msg.nGame), undefined)
         telemetry.guard('poll_pile', () => this.pollPile(msg.pile), undefined)
         telemetry.guard('poll_enemies', () => this.pollEnemies(msg.enemies), undefined)
@@ -222,6 +302,11 @@ export class Sts2ScryProvider {
 
       case 'readFailed':
         this.errorStreak = msg.errorStreak
+        this.cb.onRawSignal?.({
+          type: 'readFailed',
+          errorStreak: msg.errorStreak,
+          transient: msg.transient
+        })
         telemetry.issue(
           msg.transient ? 'poll_read_transient' : 'poll_read_failed',
           msg.transient ? 'warn' : 'error',
@@ -270,6 +355,7 @@ export class Sts2ScryProvider {
 
   private handleProcessGone(): void {
     telemetry.capture('scry_process_gone', { error_streak: this.errorStreak })
+    this.cb.onRawSignal?.({ type: 'processGone', errorStreak: this.errorStreak })
     this.resetRunState()
     this.lastNGame = this.lastPile = this.lastEnemies = this.lastLayout = ''
     this.cb.emit({ key: 'sts2.nGameState', value: idleNGameState() })
@@ -296,9 +382,18 @@ export class Sts2ScryProvider {
           isInspectRelicScreenOpen: raw.isInspectRelicScreenOpen,
           isGameOver: raw.isGameOver,
           currentActIndex: raw.currentActIndex,
+          playerCount: raw.playerCount,
           localPlayer: raw.characterId ? { characterId: raw.characterId } : null
         }
       : idleNGameState()
+    // A count change is either a multiplayer session starting/ending or the
+    // read going unavailable, and the two are worth telling apart in a log from
+    // a live game — Q3 (does `_players` enumerate remote players at all?) is
+    // still open, and this line is how the answer arrives.
+    if (value.playerCount !== this.lastPlayerCount) {
+      this.dbg(`players: ${this.lastPlayerCount ?? '?'} → ${value.playerCount ?? '?'}`)
+      this.lastPlayerCount = value.playerCount
+    }
     // Detect a real character change (a new run) and reset run-scoped state so
     // the first reward isn't scored against the previous run's deck. Ignore the
     // transient '' the game reports on menus/transitions (don't reset or clobber).
@@ -780,6 +875,7 @@ function idleNGameState(): Sts2NGameState {
     isInspectRelicScreenOpen: false,
     isGameOver: false,
     currentActIndex: 0,
+    playerCount: null,
     localPlayer: null
   }
 }
