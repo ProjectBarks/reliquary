@@ -3,23 +3,33 @@ import styled from 'styled-components'
 import { useMaximized } from '../hooks/useIpc'
 import { UpdateBanner } from './UpdateBanner'
 
-/** The three top-level dashboard tabs. */
-export type TabId = 'home' | 'codex' | 'settings'
+/** The four top-level dashboard tabs. */
+export type TabId = 'home' | 'codex' | 'journal' | 'settings'
 
+/**
+ * Journal sits between Codex and Settings on purpose: the first three are
+ * places you go to *read* — the app, the compendium, your own runs — and
+ * Settings is the one that changes the program. Ordering it last keeps that
+ * boundary where readers already expect it.
+ */
 const TABS = [
   { id: 'home', label: 'Home', to: '/' },
   { id: 'codex', label: 'Codex', to: '/codex' },
+  { id: 'journal', label: 'Journal', to: '/journal' },
   { id: 'settings', label: 'Settings', to: '/settings' }
 ] as const satisfies readonly { id: TabId; label: string; to: string }[]
 
 /**
  * Which tab owns a URL, from its first path segment — the tabs are the roots of
- * the shell's route subtrees, so `/codex/browse/cards` is still the Codex tab.
- * Anything unrecognised reads as Home, which is where the router sends it.
+ * the shell's route subtrees, so `/codex/browse/cards` is still the Codex tab
+ * and `/journal/run/<id>` is still the Journal. Anything unrecognised reads as
+ * Home, which is where the router sends it.
  */
 export function tabForPath(pathname: string): TabId {
   const segment = pathname.split('/')[1] ?? ''
-  return segment === 'codex' || segment === 'settings' ? segment : 'home'
+  return segment === 'codex' || segment === 'journal' || segment === 'settings'
+    ? segment
+    : 'home'
 }
 
 /**

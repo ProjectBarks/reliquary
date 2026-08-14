@@ -10,10 +10,12 @@ import { Shell } from './dashboard/Shell'
 import { Home } from './dashboard/Home'
 import { Settings } from './dashboard/Settings'
 import { codexRouteTree } from './codex/routes'
+import { journalRouteTree } from './journal/routes'
 import { Sts2Overlay } from './overlays/sts2/Sts2Overlay'
 import { TrackerMock } from './overlays/sts2/TrackerMock'
 import { HomeMock } from './dashboard/HomeMock'
 import { CodexMock } from './codex/CodexMock'
+import { JournalMock } from './journal/JournalMock'
 
 /**
  * One React bundle, several screens, selected by the window's hash route
@@ -21,6 +23,7 @@ import { CodexMock } from './codex/CodexMock'
  *   #/             -> Shell > Home
  *   #/settings     -> Shell > Settings
  *   #/codex        -> Shell > Codex
+ *   #/journal      -> Shell > Journal
  *   #/overlay/sts2 -> Sts2Overlay (transparent, click-through overlay window)
  *
  * The tree is code-based on purpose: file-based routing would need a Vite
@@ -66,6 +69,12 @@ const settingsRoute = createRoute({
  */
 const codexRoute = codexRouteTree(shellRoute)
 
+/**
+ * The run journal's subtree — report, archive, current run — owned the same
+ * way; see `journal/routes.tsx`.
+ */
+const journalRoute = journalRouteTree(shellRoute)
+
 const overlayRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: '/overlay/sts2',
@@ -99,12 +108,17 @@ const devRoutes = import.meta.env.DEV
         getParentRoute: () => rootRoute,
         path: '/mock/codex/$view',
         component: CodexMock
+      }),
+      createRoute({
+        getParentRoute: () => rootRoute,
+        path: '/mock/journal/$view',
+        component: JournalMock
       })
     ]
   : []
 
 const routeTree = rootRoute.addChildren([
-  shellRoute.addChildren([indexRoute, settingsRoute, codexRoute]),
+  shellRoute.addChildren([indexRoute, settingsRoute, codexRoute, journalRoute]),
   overlayRoute,
   ...devRoutes
 ])
