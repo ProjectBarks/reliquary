@@ -404,6 +404,14 @@ export class JournalDemoDriver {
     await this.polls(4)
 
     await this.fight(2, 2)
+    // A card taken, *after* the sighting has already been judged. D4 turns on
+    // the two decks being indistinguishable at the moment of the sighting, and
+    // that moment has passed — so this changes nothing about the ambiguity and
+    // gives the run that is left live at the end of the script the one thing
+    // the Current Run view exists to show: a pickup, derived from the deck
+    // delta, in the run file the live view renders.
+    await this.offer('cardReward', [{ id: 'CLEAVE' }, { id: 'ANGER' }, { id: 'FLEX' }], 'CLEAVE')
+
     await this.travelTo(2, 'event')
     await this.polls(6)
     this.log('run C — left recording, ambiguity unanswered')

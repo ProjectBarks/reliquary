@@ -833,7 +833,10 @@ export function newRunFile(id: string, init: NewRunInit): RunFile {
     potions: [],
     pace: { elapsedMs: 0, roomsEntered: 0, perRoomAvgMs: null },
     analysisStatus: 'none',
-    analysis: null
+    analysis: null,
+    // Null, not absent: a fresh file states that no history file has been
+    // merged, rather than leaving the reader to guess which it is.
+    saveData: null
   }
 }
 
@@ -882,7 +885,10 @@ export function catalogEntryFromRun(
     unreadable: false,
     file: runFileName(run.id),
     fileBytes: meta.size,
-    fileMtimeMs: meta.mtimeMs
+    fileMtimeMs: meta.mtimeMs,
+    // One boolean rather than the section itself: the Archive needs to know a
+    // row is merged, and the ~20 KB that proves it belongs in the run file.
+    hasSaveData: !!run.saveData
   }
 }
 
@@ -997,7 +1003,8 @@ export function parseRunFile(text: string): RunParseResult {
     potions: strings(raw['potions']),
     pace: paceOf(raw['pace']),
     analysisStatus: analysisStatusOf(raw['analysisStatus']),
-    analysis: (raw['analysis'] ?? null) as RunFile['analysis']
+    analysis: (raw['analysis'] ?? null) as RunFile['analysis'],
+    saveData: saveDataOf(raw['saveData'])
   }
   return { ok: true, run }
 }
@@ -1227,8 +1234,22 @@ function lifecycleState(v: unknown): RunLifecycleState {
   return LIFECYCLE.includes(v as RunLifecycleState) ? (v as RunLifecycleState) : 'suspended'
 }
 
+const OUTCOMES: readonly string[] = ['ended', 'death', 'victory', 'superseded', 'abandoned']
+
 function outcomeOf(v: unknown): RunFile['outcome'] {
-  return v === 'ended' || v === 'death' || v === 'victory' || v === 'superseded' ? v : null
+  return typeof v === 'string' && OUTCOMES.includes(v) ? (v as RunFile['outcome']) : null
+}
+
+/**
+ * The merged save section, round-tripped rather than validated field by field.
+ * `SaveScribe` is its only writer and normalises on the way in; re-deriving the
+ * shape here would only give two places to disagree. The one thing this must do
+ * is refuse a non-object, so a hand-edited file cannot make `saveData` a string
+ * that every consumer then has to defend against.
+ */
+function saveDataOf(v: unknown): RunFile['saveData'] {
+  if (!isRecord(v)) return null
+  return v as unknown as NonNullable<RunFile['saveData']>
 }
 
 const ANALYSIS: readonly AnalysisStatus[] = ['none', 'pending', 'partial', 'done', 'failed']

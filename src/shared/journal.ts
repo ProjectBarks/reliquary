@@ -49,8 +49,14 @@ export type RunLifecycleState = 'recording' | 'suspended' | 'closed' | 'abandone
  * label until the game-over screen variant reader lands and can say death vs
  * victory; `'superseded'` means the game itself invalidated the save when a new
  * run started on the same character.
+ *
+ * `'death'`, `'victory'` and `'abandoned'` are what the game's own history file
+ * proves once `SaveScribe` merges it (save-merge-plan §3.4) — the only source
+ * that can tell those three apart. `'abandoned'` is additive: a consumer that
+ * predates it must fall through to its unknown-outcome branch rather than
+ * assume the run is unfinished.
  */
-export type RunOutcome = 'ended' | 'death' | 'victory' | 'superseded'
+export type RunOutcome = 'ended' | 'death' | 'victory' | 'superseded' | 'abandoned'
 
 /** Whether we watched the run start, or attached to one already in progress. */
 export type ObservedFrom = 'start' | 'mid-run'
@@ -271,6 +277,235 @@ export interface RunAmbiguity {
   resolvedAt: number | null
 }
 
+// ── the game's own save file, merged in ──────────────────────────────────────
+
+/**
+ * Everything below is normalised from `…\SlayTheSpire2\…\saves\history\<start_time>.run`
+ * — the game's own end-of-run ledger — by `main/journal/SaveScribe.ts`
+ * (save-merge-plan §3.4).
+ *
+ * It is a **separate section rather than synthetic events** on purpose. The
+ * header's first rule is that events are history *we observed*; interleaving
+ * save-derived pseudo-events would forge observations, break `eventCount`
+ * folding, and make every event consumer guess at provenance. A section keeps
+ * the union honest: the event log stays what the overlay saw, `saveData` stays
+ * what the game wrote, and the ledger UI joins them at render time.
+ *
+ * Nullability follows the same rule as the rest of this file: a field the save
+ * did not carry is `null`, never `0`. The shapes are the game's, renamed to the
+ * journal's camelCase and nothing more — no derivation, no interpretation.
+ */
+
+/** `win` / `was_abandoned` / `killed_by_*` collapsed to the one fact they encode. */
+export type SaveResult = 'victory' | 'death' | 'abandoned'
+
+/**
+ * How the save file was tied to this run. `'run-key'` is the exact join
+ * (`RunFile.runStartTime === start_time === the file's own name`); `'window+deck'`
+ * is the fallback for journal runs recorded before the run-key reader landed.
+ */
+export type SaveMatchedBy = 'run-key' | 'window+deck'
+
+/** A card as the save lists it: id, when it joined the deck, upgrade level. */
+export interface SaveCardRef {
+  id: string
+  /** The game's floor number, not our room index. Null when absent. */
+  floorAdded: number | null
+  upgradeLevel: number | null
+}
+
+/** A relic with its obtain floor and whatever per-relic counters it carries. */
+export interface SaveRelicRef {
+  id: string
+  floorAdded: number | null
+  /** `props.ints` flattened (`{ CombatsSeen: 4 }`); null when the relic has none. */
+  props: Record<string, number> | null
+}
+
+export interface SavePotionRef {
+  id: string
+  slotIndex: number | null
+}
+
+/** An end-of-run accolade (`{ id: 'DAMAGE_LEADER', rarity: 'bronze' }`). */
+export interface SaveBadge {
+  id: string
+  rarity: string | null
+}
+
+/**
+ * One player's end state.
+ *
+ * `playerKey` is **opaque and local**. In multiplayer the game writes each
+ * player's SteamID64 into `players[].id`, which is a personal identifier: it is
+ * kept only as the string that joins a roster row to its `SaveFloorRow`
+ * per-player stats, it never leaves the machine, and telemetry carries counts
+ * and booleans about this roster, never its contents (save-merge-plan §3.6).
+ */
+export interface SavePlayer {
+  playerKey: string
+  /**
+   * True when this row is the local player — solo (`id: 1`), or an id equal to
+   * the SteamID64 naming the save directory. Null rather than a guess when the
+   * roster cannot be attributed (save-merge-plan Q3).
+   */
+  isLocal: boolean | null
+  /** Normalised the journal's way: `CHARACTER.IRONCLAD` → `IRONCLAD`. */
+  character: string
+  maxPotionSlots: number | null
+  finalDeck: SaveCardRef[]
+  relics: SaveRelicRef[]
+  /** Held at the end of the run, not everything ever owned. */
+  potions: SavePotionRef[]
+  badges: SaveBadge[]
+}
+
+/** One card offer, picked **or skipped** — the gap backfill the log cannot have. */
+export interface SaveCardChoice {
+  id: string
+  wasPicked: boolean
+  floorAdded: number | null
+}
+
+/** A relic or potion offer, picked or skipped. */
+export interface SaveChoiceRef {
+  id: string
+  wasPicked: boolean
+}
+
+export interface SaveTransform {
+  from: string
+  to: string
+}
+
+/** A card enchanted at a rest site or event: which card, which enchantment. */
+export interface SaveEnchant {
+  id: string
+  enchantment: string
+  amount: number | null
+}
+
+/** The start-node (Neow-equivalent) offer, one row per option. */
+export interface SaveAncientChoice {
+  id: string
+  wasChosen: boolean
+}
+
+/**
+ * An event option as taken, by localisation key
+ * (`DENSE_VEGETATION.pages.INITIAL.options.TRUDGE_ON.title`), with the dynamic
+ * text bag flattened to scalars when the save carried one.
+ */
+export interface SaveEventChoice {
+  key: string
+  variables: Record<string, string | number | boolean> | null
+}
+
+/** Everything one player did, gained and lost on one floor. */
+export interface SaveFloorPlayerStats {
+  /** Joins to `SavePlayer.playerKey`. */
+  playerKey: string
+
+  currentHp: number | null
+  maxHp: number | null
+  damageTaken: number | null
+  hpHealed: number | null
+  maxHpGained: number | null
+  maxHpLost: number | null
+
+  currentGold: number | null
+  goldGained: number | null
+  goldLost: number | null
+  goldSpent: number | null
+  goldStolen: number | null
+  stolenLoot: number | null
+
+  cardChoices: SaveCardChoice[]
+  cardsGained: SaveCardRef[]
+  cardsRemoved: SaveCardRef[]
+  cardsTransformed: SaveTransform[]
+  cardsUpgraded: string[]
+  cardsDowngraded: string[]
+  cardsEnchanted: SaveEnchant[]
+
+  relicChoices: SaveChoiceRef[]
+  relicsRemoved: string[]
+
+  potionChoices: SaveChoiceRef[]
+  potionsUsed: string[]
+  potionsDiscarded: string[]
+
+  /** Shop purchases. Bought *cards* arrive in `cardsGained`, as the game files them. */
+  boughtRelics: string[]
+  boughtColorless: string[]
+  boughtPotions: string[]
+
+  restChoices: string[]
+  ancientChoices: SaveAncientChoice[]
+  eventChoices: SaveEventChoice[]
+  completedQuests: string[]
+}
+
+/** What a map node actually resolved into, which is not always what it looked like. */
+export interface SaveRoom {
+  /** The concrete encounter or event: `ENCOUNTER.FOGMOG_NORMAL`, `EVENT.NEOW`. */
+  modelId: string | null
+  /** `monster | elite | boss | event | shop | rest_site | treasure`. */
+  roomType: string | null
+  monsterIds: string[]
+  turnsTaken: number | null
+}
+
+/** One entered map point, flattened out of `map_point_history[act][floor]`. */
+export interface SaveFloorRow {
+  /** 0-based act index — the position in `map_point_history`. */
+  act: number
+  /** `acts[act]` (`ACT.OVERGROWTH`), null when the save listed fewer acts. */
+  actId: string | null
+  /** 0-based position within the act. */
+  floorInAct: number
+  /** 1-based across the whole run — the game's own floor number. */
+  globalFloor: number
+  /** As drawn on the map: `ancient | monster | elite | boss | shop | rest_site | treasure | unknown`. */
+  mapPointType: string | null
+  /** Usually one; kept as a list because the save models it as one. */
+  rooms: SaveRoom[]
+  players: SaveFloorPlayerStats[]
+}
+
+/**
+ * The merged section on a `RunFile`. Null (or absent, on files written before
+ * this shipped) until a history file for this run is found and merged.
+ */
+export interface RunSaveData {
+  mergedAt: number
+  /** Absolute path of the `.run` file, so a profile switch never mixes ledgers. */
+  sourceFile: string
+  sourceMtimeMs: number
+  sourceBytes: number
+  matchedBy: SaveMatchedBy
+  /** The save's own `schema_version` (9 at time of writing). */
+  schemaVersion: number
+  /** The run's exact identity, and the one thing that survives everything. */
+  seed: string
+  /** Unix **seconds**, `== RunFile.runStartTime == the file's name`. */
+  startTime: number
+  /** Raw `run_time`; units unconfirmed (save-merge-plan Q2), so nothing displays it. */
+  runTimeS: number | null
+  result: SaveResult
+  /** `ENCOUNTER.FOGMOG_NORMAL`; null when the save said `NONE.NONE`. */
+  killedByEncounter: string | null
+  killedByEvent: string | null
+  ascension: number | null
+  gameMode: string | null
+  buildId: string | null
+  modifiers: string[]
+  /** The act *route* — always all three, regardless of how far the run got. */
+  acts: string[]
+  players: SavePlayer[]
+  floors: SaveFloorRow[]
+}
+
 // ── the run file ─────────────────────────────────────────────────────────────
 
 /** Deck/relic signature, versioned by presence: old files compare on deck only. */
@@ -350,6 +585,15 @@ export interface RunFile {
   analysisStatus: AnalysisStatus
   /** Written by the post-run pipeline; null = not yet run. */
   analysis: JournalJson | null
+
+  /**
+   * The game's own history file for this run, merged in by `SaveScribe`. Null
+   * until that happens, and **absent** on every file written before the merge
+   * shipped — which is why it is optional rather than required: an additive
+   * field must not make a year of existing run files invalid. Read it as
+   * `run.saveData ?? null`.
+   */
+  saveData?: RunSaveData | null
 }
 
 /**
@@ -429,6 +673,14 @@ export interface CatalogEntry {
   file: string
   fileBytes: number
   fileMtimeMs: number
+
+  /**
+   * True once the run's own history file has been merged (`RunFile.saveData`).
+   * Mirrored here so the Archive can mark a row — and the unmatched-saves
+   * footer can count — without opening a run file. Optional for the same
+   * reason as `RunFile.saveData`: rows predating the merge simply lack it.
+   */
+  hasSaveData?: boolean
 }
 
 export interface RunCatalog {
@@ -478,45 +730,43 @@ export function runMode(playerCount: number | null | undefined): RunMode {
 
 // ── live "current run" key + push channel ────────────────────────────────────
 
-/** One row of the route-so-far strip; the Route Ledger renders the same shape. */
-export interface JournalRouteRow {
-  t: number
-  roomIndex: number
-  /** The game's own floor number, when readable; ours is `roomIndex`. */
-  floor: number | null
-  act: number | null
-  roomType: string | null
-}
-
 /**
- * The `journal.currentRun` keyed snapshot: everything the Current Run header
- * and its mini-route need, and nothing that already rides another key. Deck and
- * pile contents come from `sts2.pileState` / `sts2.cardData` as they always
- * have — duplicating them here would double the push volume for no reader.
+ * The `journal.currentRun` keyed snapshot: **liveness only**.
+ *
+ * It used to be a second description of the run — character, act, deck size, a
+ * `recentRoute` of bare room rows — published beside the run file that already
+ * held all of it. Two descriptions of one run is two derivations, and they
+ * drifted: the file's events carry pickups, skips and deck deltas, and the
+ * keyed rows structurally could not, so the live view showed a route with an
+ * empty pickup column while the report of the same run showed the cards
+ * (observed live, 2026-08-14).
+ *
+ * So the run FILE is the single source of truth and `derive.ts` is the single
+ * derivation — the Current Run view fetches the file by `runId` and folds it
+ * with the very functions the report uses. What is left here is the handful of
+ * facts a file on disk legitimately cannot carry:
+ *
+ *   - `runId` — *which* archived run is the live one. Everything else is looked
+ *     up from it, which is what makes drift impossible rather than unlikely.
+ *   - `elapsedActiveMs` — observed play time including the session in progress,
+ *     which only the recorder's monotonic clock knows. `run.pace` is not
+ *     written until the run closes.
+ *   - `inCombat` / `lastSeenAt` — the heartbeat. A file cannot say "right now".
+ *
+ * Nothing derived belongs here. Anything added back becomes a second engine.
  *
  * `null` while no run is being recorded.
  */
 export interface JournalCurrentRun {
+  /** The live run's id — the key to its file, and to everything derived. */
   runId: string
-  state: RunLifecycleState
-  character: string
-  act: number | null
-  roomIndex: number
-  floor: number | null
-  roomType: string | null
-  deckSize: number
-  /** Monotonic-clock ms of observation, the pace denominator. */
-  paceActiveMs: number
+  /**
+   * Monotonic-clock ms of observation, closed sessions plus the live one. Both
+   * the elapsed readout and the pace denominator; the file's own `pace` block
+   * is only filled in at close.
+   */
   elapsedActiveMs: number
-  /** Last six route rows — the LIVE view's route-so-far panel. */
-  recentRoute: JournalRouteRow[]
-  playerCount: number | null
-  cohort: RunCohort
-  observedFrom: ObservedFrom
-  countsArePartial: boolean
-  /** Non-null while this run is the provisional answer awaiting the banner. */
-  ambiguity: RunAmbiguity | null
-  startedAt: number | null
+  /** Wall clock of the last poll that saw this run. */
   lastSeenAt: number
   inCombat: boolean
 }

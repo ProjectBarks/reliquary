@@ -339,6 +339,48 @@ export function deriveRoute(run: RunFile): DerivedRoute {
   return { lines, rooms, census, totals, sightings, empty: census.total === 0 }
 }
 
+// ── the live view's tail of the same ledger ─────────────────────────────────
+
+/** The Current Run panel's slice of a `DerivedRoute`, ready for `RouteLedger`. */
+export interface RecentRoute extends Pick<DerivedRoute, 'lines' | 'totals' | 'empty'> {
+  /** Rooms hidden above the strip — "…R01–R18 collapsed". Null when none are. */
+  collapsedBefore: number | null
+  /** How many rooms the strip is actually showing. */
+  shown: number
+}
+
+/**
+ * The last few rooms of a run in progress.
+ *
+ * This is the *only* thing the Current Run view is allowed to do differently
+ * from the report, and it is presentation, not derivation: same `deriveRoute`
+ * over the same run file, sliced. It lives here rather than in the view for the
+ * reason the whole unification exists — a route row assembled anywhere but this
+ * module is a second engine, and the last one shipped with `pickup: null`
+ * hard-coded into it, so the live view showed no pickups for runs whose report
+ * listed every card.
+ *
+ * The slice is taken over *rooms* and then widened back to `lines`, so an act
+ * break or a gap that falls inside the tail travels with it — cutting `lines`
+ * directly would drop the act divider that explains the rows under it.
+ */
+export function recentRoute(route: DerivedRoute, limit = 6): RecentRoute {
+  const kept = limit > 0 ? route.rooms.slice(-limit) : []
+  const first = kept[0]
+  if (!first) {
+    return { lines: [], totals: route.totals, empty: true, collapsedBefore: null, shown: 0 }
+  }
+  const from = route.lines.indexOf(first)
+  const lines = from === -1 ? kept : route.lines.slice(from)
+  return {
+    lines,
+    totals: route.totals,
+    empty: false,
+    collapsedBefore: first.roomIndex > 1 ? first.roomIndex - 1 : null,
+    shown: kept.length
+  }
+}
+
 /**
  * A note, in words.
  *

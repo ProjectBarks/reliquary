@@ -16,6 +16,7 @@
     "journal:selfcheck": "node scripts/journal-selfcheck.mjs",
     "journal:selfcheck:recorder": "node scripts/journal-recorder-selfcheck.mjs",
     "journal:selfcheck:analysis": "node scripts/journal-analysis-selfcheck.mjs",
+    "journal:selfcheck:savescribe": "node scripts/journal-savescribe-selfcheck.mjs",
     "dist": "electron-vite build && electron-builder",
     "dist:dir": "electron-vite build && electron-builder --dir"
   },

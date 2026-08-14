@@ -15,6 +15,7 @@ import {
 import type { RawSnapshot } from './scry/readerProtocol'
 import { RunStore, resolveRunsDir, serializeRun } from './journal/RunStore'
 import { RunRecorder } from './journal/RunRecorder'
+import { SaveScribe } from './journal/SaveScribe'
 import {
   AnalysisRunner,
   type AnalysisAdvisor,
@@ -111,6 +112,7 @@ let stub: Sts2Stub | null = null
 let runStore: RunStore | null = null
 let recorder: RunRecorder | null = null
 let analysis: AnalysisRunner | null = null
+let saveScribe: SaveScribe | null = null
 let settingsStore: SettingsStore | null = null
 let updater: UpdateManager | null = null
 let usingScry = false
@@ -345,7 +347,33 @@ function wireJournal(): void {
     onCatalog: (entries) => pushJournal({ kind: 'catalog', entries }),
     // A run closes; the review starts. Queued rather than awaited: the recorder
     // is on the poll path and must never wait for a network round trip.
-    onRunClosed: (id) => analysis?.enqueue(id)
+    onRunClosed: (id) => {
+      analysis?.enqueue(id)
+      // The game writes its history file within seconds of the run ending; the
+      // debounce inside `schedule` is what turns "closed, then a watch event,
+      // then another" into one sweep.
+      saveScribe?.schedule('run-closed')
+    },
+    // A quit to menu looks exactly like an abandon until the save file says
+    // which it was, so the sweep runs on both.
+    onRunSuspended: () => saveScribe?.schedule('run-suspended')
+  })
+  // Read-only toward `SlayTheSpire2\`, and pointed at nothing at all in a stub
+  // or capture process — the same rule `resolveRunsDir` applies to the archive
+  // itself, for the same reason: a synthetic journal must never end up holding
+  // a real run's ledger.
+  saveScribe = new SaveScribe({
+    store: runStore,
+    appDataDir: app.getPath('appData'),
+    steamDir: process.env['ProgramFiles(x86)']
+      ? join(process.env['ProgramFiles(x86)']!, 'Steam')
+      : null,
+    onIssue: (key, severity, props, err) => telemetry.issue(key, severity, props, err),
+    onEvent: (name, props) => telemetry.capture(name, props),
+    onCatalog: (entries) => pushJournal({ kind: 'catalog', entries }),
+    // A merged run's review is out of date by construction: it just gained an
+    // outcome, a floor ledger and a relic list it did not have.
+    onMerged: (id) => analysis?.enqueue(id)
   })
   // Seed the key so a dashboard that opens before any run still learns the
   // answer ("no run in progress") through the ordinary RequestState replay.
@@ -683,6 +711,14 @@ async function captureScreens(dir: string): Promise<void> {
   // has played out; the driver finishes in a few seconds, but "a few" is not a
   // number this rig should guess at. Capped, so a driver that never resolves
   // costs a late screenshot rather than a hung capture run.
+  // The demo is started by `startJournalDemo()`, which runs after the deferred
+  // `recorder.start()` — i.e. *after* this function has already begun. Reading
+  // `journalDemo` here once therefore found null and photographed the Journal
+  // mid-script, whichever run happened to be live at second seven. Wait for the
+  // driver to exist before waiting for it to finish.
+  if (journalDemoWanted()) {
+    for (let i = 0; i < 80 && !journalDemo; i++) await delay(250)
+  }
   if (journalDemo) {
     await Promise.race([journalDemo.done, delay(90_000)])
     await runStore?.flush()
@@ -833,6 +869,11 @@ if (hasLock)
       // Only after the scan: the pipeline's own resume sweep reads the catalog,
       // and before the scan the catalog is whatever the last launch left.
       .then(() => analysis?.start())
+      // Last, and deliberately: the first sweep reads the whole history
+      // directory and matches it against a catalog that has to exist first.
+      // Nothing awaits its result — a merge that lands a second later reaches
+      // an open Archive as a `journal:push` like any other change.
+      .then(() => saveScribe?.start())
       // Stub mode only, and a no-op everywhere else.
       .then(() => startJournalDemo())
       .catch((err) => {
@@ -901,6 +942,10 @@ app.on('will-quit', (e) => {
   // the store after it has been written. An analysis interrupted here is
   // `partial` on disk and resumes next launch, which is exactly the contract.
   analysis?.dispose()
+  // Before the flush for the same reason as the analysis runner: a sweep that
+  // landed a merge after the synchronous write would be lost, and its file is
+  // still parked `retry-later` for the next launch either way.
+  saveScribe?.dispose()
   telemetry.guard('journal_quit_flush', () => recorder?.flushSync(), undefined)
   recorder?.dispose()
   runStore?.dispose()

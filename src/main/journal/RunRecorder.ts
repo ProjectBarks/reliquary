@@ -7,7 +7,6 @@ import {
   type DeckGroupRow,
   type GapReason,
   type JournalCurrentRun,
-  type JournalRouteRow,
   type RunCombat,
   type RunEvent,
   type RunEventBase,
@@ -97,6 +96,15 @@ const HEARTBEAT_MS = 60_000
 /** Continuous recording after which a new run is confirmed and may sweep. */
 const CONFIRM_MS = 60_000
 
+/**
+ * Floor on catalog pushes made *because the ledger moved* (rooms, offers, deck
+ * changes). It is the freshness budget of the Current Run view: the file is
+ * already flushed on those boundaries, this is only how often the renderer is
+ * told to come and read it again. Below a second the trailing edge of a fight
+ * would push per poll; much above it and a pickup takes visibly long to appear.
+ */
+const LEDGER_PUBLISH_MS = 1_200
+
 /** A runaway event count is a bug, not a run (§5.4). */
 const MAX_EVENTS = 20_000
 const KEEP_EVENTS = 2_000
@@ -145,6 +153,16 @@ export interface RunRecorderOptions {
    * is a fact only the state machine knows — the file merely records it.
    */
   onRunClosed?: (id: string) => void
+  /**
+   * A run stopped being observed without ending: quit to menu, the process went
+   * away, the app is quitting. Separate from `onRunClosed` because the two mean
+   * opposite things to the journal — but the same thing to `SaveScribe`, which
+   * hangs off both: the game writes its history file when a run *ends*, and
+   * from here we cannot tell a quit-to-menu from an abandon confirmed one
+   * screen later. Sweeping on both is what makes that distinction the save
+   * file's problem instead of ours.
+   */
+  onRunSuspended?: (id: string, reason: SessionEndReason) => void
   menuDebounceMs?: number
   processGoneGraceMs?: number
   confirmMs?: number
@@ -191,6 +209,7 @@ export class RunRecorder {
   private readonly onCurrentRunCb: ((value: JournalCurrentRun | null) => void) | null
   private readonly onCatalogCb: ((entries: CatalogEntry[]) => void) | null
   private readonly onRunClosedCb: ((id: string) => void) | null
+  private readonly onRunSuspendedCb: ((id: string, reason: SessionEndReason) => void) | null
   private readonly debug: boolean
   private readonly menuDebounceMs: number
   private readonly goneGraceMs: number
@@ -232,7 +251,6 @@ export class RunRecorder {
   private combat: OpenCombat | null = null
   private offerKey = ''
   private offerStreak = 0
-  private route: JournalRouteRow[] = []
   private inCombat = false
 
   // Deferred supersession (audit A5).
@@ -247,6 +265,16 @@ export class RunRecorder {
 
   private lastPublished = ''
 
+  /**
+   * The ledger-moved throttle. A room entered, an offer resolved or a deck
+   * change means the *run file* now says something new, and the renderer only
+   * refetches a held run file when a catalog row advances — so the ledger
+   * boundaries publish one. Throttled, because a fight is a deck change every
+   * few polls and a refetch per poll is not a live view, it is a poll loop.
+   */
+  private ledgerTimer: ReturnType<typeof setTimeout> | null = null
+  private lastLedgerPublishMono = -Infinity
+
   constructor(opts: RunRecorderOptions) {
     this.store = opts.store
     this.now = opts.now ?? Date.now
@@ -256,6 +284,7 @@ export class RunRecorder {
     this.onCurrentRunCb = opts.onCurrentRun ?? null
     this.onCatalogCb = opts.onCatalog ?? null
     this.onRunClosedCb = opts.onRunClosed ?? null
+    this.onRunSuspendedCb = opts.onRunSuspended ?? null
     this.debug = !!(opts.env ?? process.env)['SPECTRA_DEBUG']
     this.menuDebounceMs = opts.menuDebounceMs ?? MENU_DEBOUNCE_MS
     this.goneGraceMs = opts.processGoneGraceMs ?? PROCESS_GONE_GRACE_MS
@@ -319,6 +348,8 @@ export class RunRecorder {
     this.disposed = true
     if (this.goneTimer) clearTimeout(this.goneTimer)
     this.goneTimer = null
+    if (this.ledgerTimer) clearTimeout(this.ledgerTimer)
+    this.ledgerTimer = null
   }
 
   /**
@@ -693,7 +724,6 @@ export class RunRecorder {
     this.nullSince = null
     this.travelRooms = 0
     this.floorRooms = 0
-    this.route = routeFromEvents(run.events)
     if (run.snapshot.openCombat) {
       // A combat we were inside when we lost sight of the run. The game restarts
       // it from the top on resume (Q8), so its tallies are excluded rather than
@@ -838,13 +868,6 @@ export class RunRecorder {
     run.roomsEntered++
     this.floorRooms++
     run.floorReached = maxOrNull(run.floorReached, floor)
-    const row: JournalRouteRow = {
-      t: at,
-      roomIndex: run.roomsEntered,
-      floor,
-      act: this.lastAct,
-      roomType
-    }
     pushEvent(run.events, {
       t: at,
       type: 'room_enter',
@@ -853,13 +876,12 @@ export class RunRecorder {
       actIndex: this.lastAct,
       floor
     })
-    this.route.push(row)
-    if (this.route.length > 12) this.route.shift()
     // A room boundary also closes any open offer's inference window: whatever
     // the deck did before we left the room is the answer.
     this.resolveOffer(run, at, 'room-change')
     this.confirmNow(at, 'room_enter')
     this.commit(run, at, true)
+    this.publishLedgerMoved()
   }
 
   /**
@@ -1034,6 +1056,7 @@ export class RunRecorder {
     // the one being played: no other run could have produced it.
     this.confirmNow(at, 'deck-mutation')
     this.commit(run, at)
+    this.publishLedgerMoved()
   }
 
   /**
@@ -1114,6 +1137,7 @@ export class RunRecorder {
       reason
     })
     this.commit(run, at)
+    this.publishLedgerMoved()
   }
 
   // ── deferred supersession (audit A5) ───────────────────────────────────────
@@ -1181,6 +1205,10 @@ export class RunRecorder {
     this.commit(run, at, true)
     this.dbg(`suspended ${run.id} (${reason})`)
     this.onEvent('journal_suspend', { reason, rooms: run.roomsEntered, act: run.actReached })
+    // After the file is already `suspended` on disk, for the same reason the
+    // close path defers its callback: the listener reads the run back through
+    // the store and must never see a half-detached file.
+    this.onRunSuspendedCb?.(run.id, reason)
     this.run = null
     this.session = null
     this.pending = null
@@ -1333,6 +1361,15 @@ export class RunRecorder {
     this.onCurrentRunCb(value)
   }
 
+  /**
+   * Liveness, and nothing else.
+   *
+   * Everything the Current Run view prints about the run — character, act,
+   * rooms, deck, and above all the route with its pickups — is read from the
+   * run *file* by `runId` and folded by the renderer's one derivation. This
+   * publishes only what a file cannot say: which run is live, how long we have
+   * been watching it, and whether a fight is on screen right now.
+   */
   currentRun(): JournalCurrentRun | null {
     const run = this.run
     if (!run) return null
@@ -1341,22 +1378,7 @@ export class RunRecorder {
       (this.session ? Math.max(0, Math.round(this.mono() - this.session.startedMono)) : 0)
     return {
       runId: run.id,
-      state: run.state,
-      character: run.character,
-      act: run.actReached,
-      roomIndex: run.roomsEntered,
-      floor: run.floorReached,
-      roomType: run.snapshot.roomType,
-      deckSize: run.snapshot.deckSize,
-      paceActiveMs: activeMs,
       elapsedActiveMs: activeMs,
-      recentRoute: this.route.slice(-6),
-      playerCount: run.playerCount,
-      cohort: runCohort(run.playerCount),
-      observedFrom: run.observedFrom,
-      countsArePartial: run.countsArePartial,
-      ambiguity: run.ambiguity ? { ...run.ambiguity } : null,
-      startedAt: run.startedAt,
       lastSeenAt: run.lastSeenAt,
       inCombat: this.inCombat
     }
@@ -1364,6 +1386,36 @@ export class RunRecorder {
 
   private publishCatalog(): void {
     this.onCatalogCb?.(this.store.list())
+  }
+
+  /**
+   * "The run file just gained something a reader can see."
+   *
+   * Every catalog row carries `lastSeenAt`, and the renderer's push handler
+   * already refetches any run file it is holding whose row advanced — so the
+   * live Route Ledger needs no channel of its own, only a reason to be told.
+   * This is that reason, throttled to `LEDGER_PUBLISH_MS` with a trailing edge
+   * so the last change in a burst is never the one that goes unannounced.
+   *
+   * Called from the boundaries where the ledger's *rendered* content changes —
+   * a room, an offer resolving, a deck delta — and nowhere else. Combat tallies
+   * and pace do not move a row and do not push.
+   */
+  private publishLedgerMoved(): void {
+    if (this.ledgerTimer) return
+    const since = this.mono() - this.lastLedgerPublishMono
+    if (since >= LEDGER_PUBLISH_MS) {
+      this.lastLedgerPublishMono = this.mono()
+      this.publishCatalog()
+      return
+    }
+    this.ledgerTimer = setTimeout(() => {
+      this.ledgerTimer = null
+      this.lastLedgerPublishMono = this.mono()
+      this.publishCatalog()
+    }, LEDGER_PUBLISH_MS - since)
+    // Never hold the process open for a freshness hint.
+    ;(this.ledgerTimer as unknown as { unref?: () => void }).unref?.()
   }
 
   // ── small internals ────────────────────────────────────────────────────────
@@ -1621,23 +1673,6 @@ export function foldTrailingEvents(run: RunFile): void {
     eventCount: run.events.length
   }
   run.actReached = act === null ? run.actReached : maxOrNull(run.actReached, act)
-}
-
-/** The last few room rows, rebuilt from the log when a run is resumed. */
-export function routeFromEvents(events: readonly RunEvent[]): JournalRouteRow[] {
-  const rowsOut: JournalRouteRow[] = []
-  for (const event of events) {
-    if (event.type !== 'room_enter') continue
-    const e = event as RunEvent & Record<string, unknown>
-    rowsOut.push({
-      t: e.t,
-      roomIndex: typeof e['roomIndex'] === 'number' ? e['roomIndex'] : rowsOut.length + 1,
-      floor: typeof e['floor'] === 'number' ? e['floor'] : null,
-      act: typeof e['actIndex'] === 'number' ? e['actIndex'] : null,
-      roomType: typeof e['roomType'] === 'string' ? e['roomType'] : null
-    })
-  }
-  return rowsOut.slice(-12)
 }
 
 /**

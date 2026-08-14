@@ -283,6 +283,7 @@ async function harness(tag, opts = {}) {
   const issues = []
   const events = []
   const pushed = []
+  const catalogs = []
   let current = null
   const store = new RunStore({
     baseDir: dir,
@@ -302,7 +303,7 @@ async function harness(tag, opts = {}) {
       current = value
       pushed.push(value)
     },
-    onCatalog: () => {},
+    onCatalog: (entries) => catalogs.push(entries),
     ...opts
   })
   let seq = 0
@@ -331,6 +332,7 @@ async function harness(tag, opts = {}) {
     issues,
     events,
     pushed,
+    catalogs,
     feed,
     advance,
     current: () => current,
@@ -570,7 +572,15 @@ await section('a run opens once the sighting is stable', async () => {
   ok('session_attach written', types(run).includes('session_attach'))
   eq('the opening room is counted', run.roomsEntered, 1)
   eq('the live key is published', h.current().runId, run.id)
-  eq('…with the cohort', h.current().cohort, 'solo')
+  // The key is liveness and nothing else: everything the Current Run view
+  // prints is derived from the run FILE this id names. A field added back here
+  // is a second derivation waiting to drift from `derive.ts`, which is exactly
+  // the bug this shape was cut down to prevent.
+  eq(
+    '…and carries nothing derived',
+    Object.keys(h.current()).sort().join(','),
+    'elapsedActiveMs,inCombat,lastSeenAt,runId'
+  )
 
   // A torn read never becomes a sighting, and never disturbs a live one.
   await h.feed({ floor: 1, deckPartial: true }, 3)
@@ -595,11 +605,50 @@ await section('rooms come from the game floor, and the route follows', async () 
   // it every run's first route row reads `other`, whatever it actually was.
   eq('the opening room carries its type', rooms[0].roomType, 'combat')
   eq('same-type rooms are not merged', rooms[3].roomType, 'merchant')
-  eq('the live route carries them', h.current().recentRoute.length, 4)
+  // The route lives in the file's events and nowhere else — the live view folds
+  // these very rows with the same `deriveRoute` the report uses.
+  eq('the live key names the file that carries them', h.current().runId, run.id)
 
   // A floor jump while we were not looking still produces one row per floor.
   await h.feed({ floor: 7, roomType: 'combat' })
   eq('a skipped floor range is filled in', (await h.run()).roomsEntered, 7)
+})
+
+await section('a moved ledger announces itself so the live view can refetch', async () => {
+  // The Current Run view renders the run FILE, and `data.ts` only refetches a
+  // held file when its catalog row advances. So the boundaries that change what
+  // the ledger *shows* — a room, an offer resolving, a deck delta — publish a
+  // catalog. Without this the live route froze at whatever it was when the tab
+  // was opened, while the file underneath it filled up.
+  const h = await harness('ledger-push', { pickDeadlineMs: 3000 })
+  await h.recorder.start()
+  await h.feed({ floor: 1 }, 3)
+
+  const afterOpen = h.catalogs.length
+  h.advance(5000) // past the freshness floor
+  await h.feed({ floor: 2, roomType: 'event' })
+  ok('a new room publishes one', h.catalogs.length > afterOpen)
+  const row = h.catalogs.at(-1).find((e) => e.id === h.recorder.activeRunId)
+  eq('carrying the room it just entered', row.roomsEntered, 2)
+
+  // The throttle is the other half: a fight is a deck change every few polls,
+  // and a refetch per poll is a poll loop with extra steps.
+  const afterRoom = h.catalogs.length
+  await h.feed({ floor: 3, roomType: 'combat' })
+  await h.feed({ floor: 4, roomType: 'combat' })
+  eq('a burst inside the window does not', h.catalogs.length, afterRoom)
+
+  // …but the trailing edge does: the last change in a burst must never be the
+  // one that goes unannounced, or the live view stops one room short forever.
+  await new Promise((r) => setTimeout(r, 1400))
+  ok('the trailing edge still lands', h.catalogs.length > afterRoom)
+
+  // A pick is a ledger change too — it is the one this whole unification is
+  // about — so it announces itself once the window is open again.
+  h.advance(5000)
+  const afterBurst = h.catalogs.length
+  await h.feed({ floor: 4, deck: [...STARTER, 'CARNAGE#0'] })
+  ok('a deck change publishes one', h.catalogs.length > afterBurst)
 })
 
 await section('offers: pick inference from deck deltas', async () => {
@@ -918,7 +967,8 @@ await section('an ambiguous sighting forks provisionally and raises the banner',
   ok('the question is in the log', types(provisional).includes('ambiguity_raised'))
   eq('the candidate is untouched', (await h.store.getRun(older.id)).state, 'suspended')
   eq('the banner has something to show', h.store.pendingResolutions().length, 1)
-  eq('and the live key carries it', h.current().ambiguity.candidateId, older.id)
+  // The banner reads the catalog row, not the live key — one place, one answer.
+  eq('and the row carries it', h.store.list().find((e) => e.id === provisionalId).ambiguity.candidateId, older.id)
 })
 
 await section("answering 'fresh' leaves the provisional standing", async () => {

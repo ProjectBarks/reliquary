@@ -340,6 +340,37 @@ function buildEvents(SCRIPT: RoomSpec[]): { events: RunEvent[]; combats: RunComb
   return { events, combats }
 }
 
+/** What an Ironclad opens with, in the fingerprint's `"<ID>#<level>"` form. */
+function starterDeck(): string[] {
+  return [
+    ...Array.from({ length: 5 }, () => 'STRIKE#0'),
+    ...Array.from({ length: 5 }, () => 'DEFEND#0'),
+    'BASH#0'
+  ]
+}
+
+/**
+ * The deck a partial event log leaves behind — the live fixture's snapshot.
+ * Folding the log is how the recorder's own snapshot stays in step with the
+ * events beside it, so the fixture is built the same way rather than by hand.
+ */
+function deckAfter(events: readonly RunEvent[]): string[] {
+  const deck = starterDeck()
+  for (const event of events) {
+    const e = event as RunEvent & { id?: string; upgradeLevel?: number }
+    if (!e.id) continue
+    if (event.type === 'deck_add') deck.push(`${e.id}#${e.upgradeLevel ?? 0}`)
+    else if (event.type === 'deck_remove') {
+      const at = deck.indexOf(`${e.id}#${e.upgradeLevel ?? 0}`)
+      if (at !== -1) deck.splice(at, 1)
+    } else if (event.type === 'deck_upgrade') {
+      const at = deck.indexOf(`${e.id}#0`)
+      if (at !== -1) deck[at] = `${e.id}#${e.upgradeLevel ?? 1}`
+    }
+  }
+  return deck.sort()
+}
+
 // ── the analysis blob (the shape WP6 must emit; see analysis.ts) ─────────────
 
 const ANALYSIS: JournalJson = {
@@ -451,6 +482,8 @@ const FUTURE_ID = '2026-08-13T21-14-00Z-necrobinder-ff01aa'
 interface Bundle {
   deathRun: RunFile
   mpRun: RunFile
+  /** The run in progress. The Current Run view derives its whole screen from it. */
+  liveRunFile: RunFile
   base: CatalogEntry[]
   provisional: CatalogEntry
   candidate: CatalogEntry
@@ -564,6 +597,83 @@ function build(): Bundle {
     pace: { elapsedMs: 22 * 63_000, roomsEntered: 22, perRoomAvgMs: 63_000 }
   }
 
+  /**
+   * The run in progress, as a *file*.
+   *
+   * The Current Run view derives everything it prints from this — the same
+   * `deriveRoute` the report runs, over the same shape the recorder writes — so
+   * a fixture that was only a keyed snapshot could not exercise the view any
+   * more. It is the death run's own log, cut mid-flight: the events up to (but
+   * not including) room 24, no `finalDeck`, no analysis, `recording`.
+   *
+   * Cutting the real log rather than writing a second script is the point: the
+   * live view and the report are then demonstrably reading the *same* rooms,
+   * pickups and skips, and a mock screenshot of one can be checked against the
+   * other.
+   */
+  const LIVE_ROOMS = 23
+  const liveCut = BUILT.events.findIndex(
+    (e) =>
+      e.type === 'room_enter' &&
+      (e as RunEvent & { roomIndex?: number }).roomIndex === LIVE_ROOMS + 1
+  )
+  const liveEvents = BUILT.events.slice(0, liveCut === -1 ? BUILT.events.length : liveCut)
+  const liveDeck = deckAfter(liveEvents)
+  const LIVE_ELAPSED_MS = LIVE_ROOMS * 63_000
+
+  const liveRunFile: RunFile = {
+    ...deathRun,
+    id: PROVISIONAL_ID,
+    state: 'recording',
+    outcome: null,
+    startedAt: NOW - 1_500_000,
+    runStartTime: null,
+    firstSeenAt: NOW - 1_500_000,
+    lastSeenAt: NOW,
+    endedAt: null,
+    ambiguity: {
+      candidateId: CANDIDATE_ID,
+      raisedAt: NOW - 1_500_000,
+      resolution: null,
+      resolvedAt: null
+    },
+    actReached: 1,
+    roomsEntered: LIVE_ROOMS,
+    floorReached: LIVE_ROOMS,
+    sessions: [
+      {
+        sid: 1,
+        attachedAt: NOW - 1_500_000,
+        detachedAt: null,
+        reason: null,
+        activeMs: LIVE_ELAPSED_MS,
+        playerCount: 1,
+        otherCharacterIds: [],
+        gameVersion: '1.3.0.123'
+      }
+    ],
+    snapshot: {
+      ...deathRun.snapshot,
+      at: NOW,
+      act: 1,
+      roomIndex: LIVE_ROOMS,
+      roomType: 'combat',
+      deck: liveDeck,
+      deckSize: liveDeck.length,
+      eventCount: liveEvents.length,
+      // The aggregate is written at close, so a live run has none yet — empty
+      // tallies rather than a made-up total.
+      combatAgg: { plays: {}, drawn: {} }
+    },
+    events: liveEvents,
+    combats: BUILT.combats.filter((c) => c.roomIndex <= LIVE_ROOMS),
+    // No final deck and no review: this run has not ended.
+    finalDeck: null,
+    pace: { elapsedMs: LIVE_ELAPSED_MS, roomsEntered: LIVE_ROOMS, perRoomAvgMs: 63_000 },
+    analysisStatus: 'none',
+    analysis: null
+  }
+
   // ── the catalog ─────────────────────────────────────────────────────────────
 
   function entryFor(
@@ -642,20 +752,8 @@ function build(): Bundle {
     analysisStatus: 'none'
   })
 
-  const provisional: CatalogEntry = entryFor(deathRun, {
-    id: PROVISIONAL_ID,
-    state: 'recording',
-    outcome: null,
-    startedAt: NOW - 1_500_000,
-    firstSeenAt: NOW - 1_500_000,
-    lastSeenAt: NOW,
-    actReached: 1,
-    roomsEntered: 23,
-    deckSize: 19,
-    activeMs: 1_458_000,
-    analysisStatus: 'none',
-    ambiguity: { candidateId: CANDIDATE_ID, raisedAt: NOW - 1_500_000, resolution: null, resolvedAt: null }
-  })
+  /** The live run's row. Derived from its own file, so the two cannot disagree. */
+  const provisional: CatalogEntry = entryFor(liveRunFile)
 
   /** A file from a newer build: listed, dimmed, and honest about why. */
   const future: CatalogEntry = entryFor(deathRun, {
@@ -683,30 +781,14 @@ function build(): Bundle {
 
   // ── the live keys ───────────────────────────────────────────────────────────
 
+  /**
+   * Liveness only — everything else on the Current Run screen comes from
+   * `liveRunFile`, which is what makes the mock a real exercise of the view
+   * rather than a second, prettier description of the same run.
+   */
   const liveRun: JournalCurrentRun = {
     runId: PROVISIONAL_ID,
-    state: 'recording',
-    character: 'IRONCLAD',
-    act: 1,
-    roomIndex: 23,
-    floor: 23,
-    roomType: 'combat',
-    deckSize: 19,
-    paceActiveMs: 23 * 63_000,
-    elapsedActiveMs: 23 * 63_000,
-    recentRoute: [19, 20, 21, 22, 23].map((roomIndex, i) => ({
-      t: NOW - (5 - i) * 63_000,
-      roomIndex,
-      floor: roomIndex,
-      act: 1,
-      roomType: ['combat', 'other', 'combat', 'other', 'combat'][i] ?? 'combat'
-    })),
-    playerCount: 1,
-    cohort: runCohort(1),
-    observedFrom: 'start',
-    countsArePartial: false,
-    ambiguity: null,
-    startedAt: NOW - 1_500_000,
+    elapsedActiveMs: LIVE_ELAPSED_MS,
     lastSeenAt: NOW,
     inCombat: true
   }
@@ -737,6 +819,7 @@ function build(): Bundle {
   return {
     deathRun,
     mpRun,
+    liveRunFile,
     base: BASE_CATALOG,
     provisional,
     candidate,
@@ -774,7 +857,14 @@ export type JournalMockView =
  */
 export function journalFixtures(view: JournalMockView): JournalFixtures {
   const data = (cached ??= build())
-  const runs = { [DEATH_ID]: data.deathRun, [MP_ID]: data.mpRun }
+  // The live run's file rides along in every set that has a live run: the
+  // Current Run view fetches it by the id on the snapshot, exactly as it does
+  // against the real bridge.
+  const runs = {
+    [DEATH_ID]: data.deathRun,
+    [MP_ID]: data.mpRun,
+    [PROVISIONAL_ID]: data.liveRunFile
+  }
   if (view === 'empty') {
     // A first launch: the archive exists and is genuinely empty, which is not
     // the same screen as "the archive could not be read" and has to be
@@ -785,9 +875,11 @@ export function journalFixtures(view: JournalMockView): JournalFixtures {
   }
   if (view === 'ambiguity') {
     return {
+      // The banner reads the *catalog* row's `ambiguity`, not the live key — so
+      // the provisional row being present is the whole of what raises it.
       catalog: [data.provisional, data.candidate, ...data.base],
       runs,
-      currentRun: { ...data.liveRun, ambiguity: data.provisional.ambiguity },
+      currentRun: data.liveRun,
       piles: data.livePiles,
       enemies: data.liveEnemies
     }

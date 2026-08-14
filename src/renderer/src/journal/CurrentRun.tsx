@@ -1,23 +1,23 @@
 import { useMemo } from 'react'
 import { createLink } from '@tanstack/react-router'
 import styled from 'styled-components'
-import type { JournalCurrentRun } from '@shared/types'
-import { cohortLabel } from '@shared/types'
+import type { JournalCurrentRun, RunFile } from '@shared/types'
+import { cohortLabel, runCohort } from '@shared/types'
 import { Section, SectionHead, SectionNote, SectionTitle } from '../dashboard/ui'
 import { DASH } from '../codex/format'
+import { ErrorState, Loading } from '../codex/parts'
 import { AmbiguityBanner } from './AmbiguityBanner'
-import { useCurrentRun, useJournalCatalog, useLiveEnemies, useLivePiles } from './data'
-import type { RouteRoom } from './derive'
-import { RouteLedger } from './RouteLedger'
 import {
-  characterName,
-  characterTint,
-  fmtDuration,
-  fmtPace,
-  paceFrom,
-  roomKind,
-  runStamp
-} from './format'
+  useCurrentRun,
+  useJournalCatalog,
+  useLiveEnemies,
+  useLivePiles,
+  useRunFile,
+  type RunResource
+} from './data'
+import { deriveRoute, isPartial, recentRoute } from './derive'
+import { RouteLedger } from './RouteLedger'
+import { characterName, characterTint, fmtDuration, fmtPace, paceFrom, runStamp } from './format'
 import {
   Banner,
   CellGrid,
@@ -40,11 +40,29 @@ import {
 /**
  * The run happening right now.
  *
- * It is the mockup's LIVE band, opened out into a whole view, and it is fed
- * entirely by pushes: `journal.currentRun` for the run's own state and
- * `sts2.pileState` / `sts2.enemiesState` for what the combat looks like — the
- * same keyed snapshots the overlay has always lived on. Nothing here polls,
- * and nothing here asks main a question.
+ * It is the mockup's LIVE band, opened out into a whole view, and it reads from
+ * exactly two places:
+ *
+ *   - **The run file**, by the id on `journal.currentRun`, folded by the same
+ *     `deriveRoute` the Run Report uses. Every room, pickup, skip, upgrade and
+ *     removal on this screen is that one derivation over that one file.
+ *   - **The live keys** — `journal.currentRun` for liveness, `sts2.pileState`
+ *     and `sts2.enemiesState` for what the combat looks like — the same keyed
+ *     snapshots the overlay has always lived on.
+ *
+ * That split is the whole design of this file, and it is a repair. The snapshot
+ * used to carry its own `recentRoute` of bare room rows, and this view mapped
+ * them into ledger rows with `pickup: null` and `notes: []` written in by hand,
+ * because the wire shape had nowhere to put a card. So a live run showed a
+ * route with an empty Pickup column while the report of that same run — folded
+ * from the same events, one click away — listed every card taken. Two
+ * derivations, one of them a stub. There is one now, and it is `derive.ts`.
+ *
+ * The file is authoritative and it does not go stale: main flushes it on every
+ * room, offer and deck change and publishes a catalog row on those same
+ * boundaries, which is what makes `data.ts` refetch the copy this view holds.
+ *
+ * Nothing here polls, and the only question it asks main is "give me that run".
  *
  * The idle state is the one that had to be designed rather than defaulted.
  * "No run in progress" is the *normal* condition of this screen — most of the
@@ -61,8 +79,11 @@ import {
  */
 
 export function CurrentRun(): JSX.Element {
-  const run = useCurrentRun()
+  const live = useCurrentRun()
   const catalog = useJournalCatalog()
+  // Hooks are unconditional: `useRunFile(null)` is the "nothing asked for"
+  // resource, so the idle state costs no request and no rule-of-hooks dance.
+  const file = useRunFile(live?.runId ?? null)
 
   const latest = useMemo(() => {
     const rows = (catalog.data ?? []).filter((e) => e.state === 'closed' && !e.unreadable)
@@ -72,7 +93,7 @@ export function CurrentRun(): JSX.Element {
   return (
     <>
       <AmbiguityBanner />
-      {run ? <Live run={run} /> : <Idle latestId={latest?.id ?? null} />}
+      {live ? <Live live={live} file={file} /> : <Idle latestId={latest?.id ?? null} />}
     </>
   )
 }
@@ -93,38 +114,48 @@ function Idle({ latestId }: { latestId: string | null }): JSX.Element {
   )
 }
 
-function Live({ run }: { run: JournalCurrentRun }): JSX.Element {
+/**
+ * The live run, waiting on its own file.
+ *
+ * The snapshot names the run; the file *is* the run. Until it lands there is
+ * genuinely nothing truthful to print — the alternative is a plaque of dashes
+ * that resolves into numbers a frame later — so this is the report's own
+ * "opening the run file…" for one round trip, and the store keeps the last good
+ * copy on every refresh after that, so it is shown exactly once per run.
+ */
+function Live({ live, file }: { live: JournalCurrentRun; file: RunResource }): JSX.Element {
+  if (!file.data) {
+    if (file.error) {
+      return (
+        <ErrorState
+          title="The live run's file could not be read"
+          message={file.error}
+          onRetry={file.refresh}
+        />
+      )
+    }
+    return <Loading label="Opening the run file…" />
+  }
+  return <LiveRun live={live} run={file.data} />
+}
+
+function LiveRun({ live, run }: { live: JournalCurrentRun; run: RunFile }): JSX.Element {
   const piles = useLivePiles()
   const enemies = useLiveEnemies()
   const tint = characterTint(run.character)
-  const stamp = runStamp({ id: run.runId, firstSeenAt: run.lastSeenAt, startedAt: run.startedAt })
-  const pace = paceFrom(run.paceActiveMs, run.roomIndex)
+  const stamp = runStamp(run)
+  const pace = paceFrom(live.elapsedActiveMs, run.roomsEntered)
 
-  const inCombat = run.inCombat || (enemies?.isCombatInProgress ?? false)
+  const inCombat = live.inCombat || (enemies?.isCombatInProgress ?? false)
   const enemyCount = enemies?.enemies.length ?? null
   const yourTurn = enemies?.currentSide === 1
 
-  // The live route panel reuses the report's row component — same grammar, same
-  // chips — with the fields the snapshot carries and the ones it does not
-  // (pickups, deck deltas) simply absent rather than faked.
-  const lines = useMemo<RouteRoom[]>(
-    () =>
-      run.recentRoute.map((row) => ({
-        kind: 'room' as const,
-        key: `live-${row.roomIndex}-${row.t}`,
-        roomIndex: row.roomIndex,
-        floor: row.floor,
-        act: row.act,
-        room: roomKind(row.roomType),
-        notes: [],
-        pickup: null,
-        passed: [],
-        end: false,
-        flag: null
-      })),
-    [run.recentRoute]
-  )
-  const firstShown = lines.length ? lines[0].roomIndex : 0
+  // The one derivation, over the one source of truth — the same call the Run
+  // Report makes. `recentRoute` only slices the tail off it; it does not build
+  // a row, which is precisely why the pickup column can no longer be empty here
+  // and full there.
+  const route = useMemo(() => deriveRoute(run), [run])
+  const recent = useMemo(() => recentRoute(route), [route])
 
   return (
     <>
@@ -168,31 +199,34 @@ function Live({ run }: { run: JournalCurrentRun }): JSX.Element {
               <CharValue $edge={tint.edge}>{characterName(run.character)}</CharValue>
               <div className="w">
                 {run.playerCount && run.playerCount > 1
-                  ? `${cohortLabel(run.cohort)} · ${run.playerCount} players`
+                  ? `${cohortLabel(runCohort(run.playerCount))} · ${run.playerCount} players`
                   : 'solo'}
               </div>
             </PCell>
             <PCell>
               <div className="k">Act</div>
               <div className="v">
-                <Num>{run.act === null ? DASH : run.act + 1}</Num> <small>of 3</small>
+                <Num>{run.actReached === null ? DASH : run.actReached + 1}</Num> <small>of 3</small>
               </div>
               <div className="w">as read</div>
             </PCell>
             <PCell>
               <div className="k">Deck</div>
               <div className="v">
-                <Num>{run.deckSize}</Num>
+                <Num>{run.snapshot.deckSize}</Num>
               </div>
               <div className="w">owned now</div>
             </PCell>
             <PCell>
               <div className="k">Rooms</div>
               <div className="v">
-                <Num>{run.roomIndex}</Num>
+                <Num>
+                  {isPartial(run) ? '≈' : ''}
+                  {run.roomsEntered}
+                </Num>
               </div>
               <div className="w">
-                {run.floor === null ? 'entered' : `entered · floor ${run.floor}`}
+                {run.floorReached === null ? 'entered' : `entered · floor ${run.floorReached}`}
               </div>
             </PCell>
             <PCell>
@@ -205,7 +239,7 @@ function Live({ run }: { run: JournalCurrentRun }): JSX.Element {
             <PCell>
               <div className="k">Elapsed</div>
               <div className="v" style={{ fontSize: 18 }}>
-                {fmtDuration(run.elapsedActiveMs)}
+                {fmtDuration(live.elapsedActiveMs)}
               </div>
               <div className="w">observed this run</div>
             </PCell>
@@ -240,21 +274,17 @@ function Live({ run }: { run: JournalCurrentRun }): JSX.Element {
           <div>
             <SectionHead>
               <SectionTitle as="h3">Route so far</SectionTitle>
-              <SectionNote>last {lines.length || 0} rooms</SectionNote>
+              <SectionNote>last {recent.shown} rooms</SectionNote>
             </SectionHead>
-            {lines.length ? (
+            {recent.empty ? (
+              <Note>No rooms entered yet this run.</Note>
+            ) : (
               <RouteLedger
-                route={{
-                  lines,
-                  totals: { rooms: run.roomIndex, taken: 0, skipped: 0, upgrades: 0, removals: 0 },
-                  empty: false
-                }}
+                route={recent}
                 outcomeWord="ENDED"
                 compact
-                collapsedBefore={firstShown > 1 ? firstShown - 1 : null}
+                collapsedBefore={recent.collapsedBefore}
               />
-            ) : (
-              <Note>No rooms entered yet this run.</Note>
             )}
           </div>
         </Duo>
