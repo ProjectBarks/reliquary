@@ -97,6 +97,15 @@ export default defineConfig({
         input: { index: resolve('src/renderer/index.html') }
       }
     },
-    plugins: [react()]
+    plugins: [
+      // React Compiler, targeting React 18: `target: '18'` makes the emitted
+      // memo cache go through the `react-compiler-runtime` polyfill package
+      // instead of React 19's built-in `react/compiler-runtime` entry.
+      react({
+        babel: {
+          plugins: [['babel-plugin-react-compiler', { target: '18' }]]
+        }
+      })
+    ]
   }
 })

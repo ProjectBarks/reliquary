@@ -11,7 +11,7 @@ import styled from 'styled-components'
 import type { CodexKind } from '@shared/codex'
 import { rarityColors } from '../overlays/sts2/theme'
 import { prefetchArt, useLibraryEntries, type LibraryEntry } from './data'
-import { DASH, compareNullable, fmtInt } from './format'
+import { DASH, compareNullable } from './format'
 import {
   DEFAULT_LIBRARY_SORT,
   DEFAULT_TABLE_COLUMN,
@@ -40,7 +40,6 @@ import {
   PopoverGroup,
   PopoverNote,
   QuietLink,
-  ResultCount,
   SearchAffordance,
   SearchIcon,
   SearchInput,
@@ -365,8 +364,8 @@ export function LibraryView({ kind, detailId }: { kind: CodexKind; detailId?: st
         </>
       ) : null}
 
-      {/* A count of nothing and an italic "No matches." under an error panel
-          would be three ways of saying the same failure. */}
+      {/* An italic "No matches." under an error panel would be two ways of
+          saying the same failure. */}
       {!error && (!waiting || !blank) ? (
         mode === 'table' ? (
           <MetricsTableView
@@ -374,43 +373,31 @@ export function LibraryView({ kind, detailId }: { kind: CodexKind; detailId?: st
             entries={filtered}
             filtersActive={filtersActive}
             table={table}
-            bracket={scope.bracket}
-            character={scope.character}
             variant={variant}
             col={col}
             dir={dir}
             onChange={(patch) => go(patch)}
             onOpen={openEntry}
           />
+        ) : !shown.length && !waiting ? (
+          <Empty>No matches.</Empty>
+        ) : mode === 'tier' ? (
+          <TierListView
+            kind={kind}
+            entries={shown}
+            highlight={search.highlight}
+            onOpen={openEntry}
+          />
+        ) : mode === 'grid' ? (
+          <GridMode entries={shown} kind={kind} onOpen={openEntry} />
         ) : (
-          <>
-            <ResultCount aria-live="polite">
-              {shown.length === entries.length
-                ? `${fmtInt(entries.length)} ${kind}`
-                : `${fmtInt(shown.length)} of ${fmtInt(entries.length)} ${kind}`}
-            </ResultCount>
-
-            {!shown.length && !waiting ? (
-              <Empty>No matches.</Empty>
-            ) : mode === 'tier' ? (
-              <TierListView
-                kind={kind}
-                entries={shown}
-                highlight={search.highlight}
-                onOpen={openEntry}
-              />
-            ) : mode === 'grid' ? (
-              <GridMode entries={shown} kind={kind} onOpen={openEntry} />
-            ) : (
-              <ListMode
-                entries={shown}
-                kind={kind}
-                detailId={detailId}
-                onOpen={openEntry}
-                onClose={closeDetail}
-              />
-            )}
-          </>
+          <ListMode
+            entries={shown}
+            kind={kind}
+            detailId={detailId}
+            onOpen={openEntry}
+            onClose={closeDetail}
+          />
         )
       ) : null}
 
@@ -824,9 +811,18 @@ function ListSkeleton(): JSX.Element {
 
 // ── styling ─────────────────────────────────────────────────────────────────
 
+/**
+ * Cards get a fixed five per row. A card is recognised by its art, not read
+ * like a sprite tile, and at four-up the renders were bigger than recognition
+ * needs — five keeps a whole rarity's worth on screen at once and simply
+ * scales with the window instead of reflowing between column counts. Sprites
+ * (relics, potions) keep the packing behaviour; a 64px icon has a floor below
+ * which it stops being legible, so their column count stays width-derived.
+ */
 const Grid = styled.div<{ $cards: boolean }>`
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(${(p) => (p.$cards ? '190px' : '116px')}, 1fr));
+  grid-template-columns: ${(p) =>
+    p.$cards ? 'repeat(5, minmax(0, 1fr))' : 'repeat(auto-fill, minmax(116px, 1fr))'};
   gap: ${(p) => (p.$cards ? '14px' : '10px')};
   padding-bottom: 10px;
 `
@@ -850,7 +846,7 @@ const Tile = styled.button<{ $cards: boolean }>`
   font-family: inherit;
   color: var(--ink-dim);
   content-visibility: auto;
-  contain-intrinsic-size: auto ${(p) => (p.$cards ? '260px' : '150px')};
+  contain-intrinsic-size: auto ${(p) => (p.$cards ? '220px' : '150px')};
   transition:
     transform 0.15s cubic-bezier(0.16, 1, 0.3, 1),
     filter 0.15s ease;
@@ -1064,7 +1060,7 @@ const RecentChip = styled.button`
   background: var(--fill);
   color: var(--ink-dim);
   font-family: inherit;
-  font-size: 11px;
+  font-size: var(--fs-sm);
   img {
     width: 20px;
     height: 20px;

@@ -266,7 +266,7 @@ export function Settings(): JSX.Element {
               <RowLabel>Draft advisor</RowLabel>
               <RowDesc>
                 {diag?.codex?.state === 'ready'
-                  ? `${diag.codex.cardVocab ?? 0} cards and ${diag.codex.relicVocab ?? 0} relics loaded.`
+                  ? `${diag.codex.cardVocab ?? 0} cards, ${diag.codex.relicVocab ?? 0} relics and ${diag.codex.potionVocab ?? 0} potions loaded.`
                   : 'Win-rate data from Spire Codex.'}
               </RowDesc>
               {diag?.codex?.error ? <Mono className="err">{diag.codex.error}</Mono> : null}

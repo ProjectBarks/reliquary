@@ -11,10 +11,10 @@ import type { RawItem } from '../scry/readers'
  * Spire Codex advisor client (spire-codex.com).
  *
  * Two jobs, split by the API's 15-req/min-per-endpoint limit:
- *   1. PRIME — fetch whole-table artifacts (scores/metrics/cards, scores/relics,
- *      the card/relic vocabularies) once per API snapshot version and cache them
- *      to a flat JSON file in userData. These power synchronous "context stats"
- *      lookups with zero per-pick network cost.
+ *   1. PRIME — fetch whole-table artifacts (the metrics table and vocabulary for
+ *      each of cards, relics and potions) once per API snapshot version and cache
+ *      them to a flat JSON file in userData. These power synchronous "context
+ *      stats" lookups with zero per-pick network cost.
  *   2. ADVISE — deck-conditioned scoring via POST /api/draft-advice, called only
  *      when a *new* offer set is stable (see provider's ScoreCache), never per
  *      poll.
@@ -26,32 +26,49 @@ import type { RawItem } from '../scry/readers'
 
 // ── primed snapshot shape ────────────────────────────────────────────────────
 
-interface ScoreRow {
-  score: number
-  elo: number
-  win_rate: number
-  picks: number
-}
+/**
+ * Cache format version, independent of the API's data version.
+ *
+ * The prime path short-circuits when the cached `apiVersion` still matches the
+ * API — which is exactly right for data, and exactly wrong after a shape change:
+ * a v1 cache holding cards only would keep satisfying that check and the new
+ * relic/potion tables would never be fetched. Bump this whenever `Snapshot`
+ * changes so old caches are discarded rather than trusted.
+ */
+const SNAPSHOT_SCHEMA = 2
 
+/** The three entity families the runs API scores. Also the URL segment. */
+type MetricKind = 'cards' | 'relics' | 'potions'
+
+const METRIC_KINDS: MetricKind[] = ['cards', 'relics', 'potions']
+
+/**
+ * One row of /api/runs/metrics/{kind}.
+ *
+ * `elo` and `pick_rate` are nullable and, in practice, populated for cards only —
+ * relics and potions come back with both null across every row, because neither
+ * is drafted from a ranked offer set the way cards are. Rendering must omit them
+ * rather than print a zero that reads as "rated 0".
+ */
 interface MetricRow {
   tier: string
   score: number
-  elo: number
+  elo: number | null
   win_rate: number
-  pick_rate: number
+  pick_rate: number | null
   picks: number
 }
 
 interface Snapshot {
+  schema: number
   apiVersion: number
   builtAt: number
   baselineWinRate: number
-  cardIds: string[]
-  relicIds: string[]
+  /** Vocabulary per kind — the ids the API will actually answer for. */
+  ids: Record<MetricKind, string[]>
   names: Record<string, string>
-  scoresCards: Record<string, ScoreRow>
-  metricsCards: Record<string, MetricRow>
-  scoresRelics: Record<string, ScoreRow>
+  /** Non-upgraded metric rows, keyed by kind then id. */
+  metrics: Record<MetricKind, Record<string, MetricRow>>
   /** population mean/std of card elo & score, for the TRAP z-scores (phase 3). */
   eloMean: number
   eloStd: number
@@ -84,8 +101,9 @@ export class CodexClient {
     return {
       state: this.state,
       apiVersion: this.snap?.apiVersion ?? null,
-      cardVocab: this.snap?.cardIds.length ?? 0,
-      relicVocab: this.snap?.relicIds.length ?? 0,
+      cardVocab: this.snap?.ids.cards.length ?? 0,
+      relicVocab: this.snap?.ids.relics.length ?? 0,
+      potionVocab: this.snap?.ids.potions.length ?? 0,
       idsSeen: this.idsSeen.size,
       idsResolved: this.idsResolved.size,
       error: this.error
@@ -105,7 +123,7 @@ export class CodexClient {
       if (this.snap && this.snap.apiVersion === wantVersion) {
         this.state = building ? 'stale' : 'ready'
         this.error = null
-        this.log(`prime skip: cache fresh (v${wantVersion}, ${this.snap.cardIds.length} cards)`)
+        this.log(`prime skip: cache fresh (v${wantVersion}, ${this.snap.ids.cards.length} cards)`)
         return
       }
       if (building) {
@@ -117,62 +135,63 @@ export class CodexClient {
 
       this.log(`prime: fetching aggregates for v${wantVersion}…`)
       this.state = 'priming'
-      const [cards, relics, scoresCards, metricsCards, scoresRelics] = await Promise.all([
-        this.get('/api/cards'),
-        this.get('/api/relics'),
-        this.get('/api/runs/scores/cards'),
-        this.get('/api/runs/metrics/cards?bracket=all'),
-        this.get('/api/runs/scores/relics')
+      // Six requests, two per kind: the catalog for display names and the metrics
+      // table for tier/score/win-rate. The metrics table is a strict superset of
+      // /api/runs/scores/{kind} (verified: every scored id appears in metrics, and
+      // metrics additionally carries `tier`), so the scores endpoints are not
+      // fetched at all — they were costing a request per prime and being written
+      // to the cache without ever being read back.
+      const [catalogs, tables] = await Promise.all([
+        Promise.all(METRIC_KINDS.map((k) => this.get(`/api/${k}`))),
+        Promise.all(METRIC_KINDS.map((k) => this.get(`/api/runs/metrics/${k}?bracket=all`)))
       ])
 
       const names: Record<string, string> = {}
-      const cardIds: string[] = []
-      for (const c of asArray(cards)) {
-        if (!c?.id) continue
-        cardIds.push(c.id)
-        if (c.name) names[c.id] = c.name
-      }
-      const relicIds: string[] = []
-      for (const r of asArray(relics)) {
-        if (!r?.id) continue
-        relicIds.push(r.id)
-        if (r.name) names[r.id] = r.name
-      }
+      const ids = {} as Record<MetricKind, string[]>
+      METRIC_KINDS.forEach((kind, i) => {
+        const list: string[] = []
+        for (const e of asArray(catalogs[i])) {
+          if (!e?.id) continue
+          list.push(e.id)
+          if (e.name) names[e.id] = e.name
+        }
+        ids[kind] = list
+      })
 
-      const sc: Record<string, ScoreRow> = {}
-      for (const e of scoreEntries(scoresCards)) sc[e.id] = e
-      const sr: Record<string, ScoreRow> = {}
-      for (const e of scoreEntries(scoresRelics)) sr[e.id] = e
-
-      const mc: Record<string, MetricRow> = {}
+      const metrics = {} as Record<MetricKind, Record<string, MetricRow>>
       const elos: number[] = []
       const scores: number[] = []
-      for (const row of metricsCards?.rows ?? []) {
-        if (!row?.id || row.upgraded) continue // non-upgraded baseline only
-        mc[row.id] = {
-          tier: row.tier,
-          score: row.score,
-          elo: row.elo,
-          win_rate: row.win_rate,
-          pick_rate: row.pick_rate,
-          picks: row.picks
+      METRIC_KINDS.forEach((kind, i) => {
+        const table: Record<string, MetricRow> = {}
+        for (const row of tables[i]?.rows ?? []) {
+          if (!row?.id || row.upgraded) continue // non-upgraded baseline only
+          table[row.id] = {
+            tier: row.tier,
+            score: row.score,
+            elo: numOrNull(row.elo),
+            win_rate: row.win_rate,
+            pick_rate: numOrNull(row.pick_rate),
+            picks: row.picks
+          }
+          // The TRAP z-scores compare an item against the population it was
+          // drafted from, so only cards contribute to the moments.
+          if (kind !== 'cards') continue
+          if (Number.isFinite(row.elo)) elos.push(row.elo)
+          if (Number.isFinite(row.score)) scores.push(row.score)
         }
-        if (Number.isFinite(row.elo)) elos.push(row.elo)
-        if (Number.isFinite(row.score)) scores.push(row.score)
-      }
+        metrics[kind] = table
+      })
 
       const eloM = moments(elos)
       const scoreM = moments(scores)
       const snap: Snapshot = {
+        schema: SNAPSHOT_SCHEMA,
         apiVersion: wantVersion,
         builtAt: ss?.built_at ?? 0,
-        baselineWinRate: metricsCards?.baseline_win_rate ?? 0,
-        cardIds,
-        relicIds,
+        baselineWinRate: tables[0]?.baseline_win_rate ?? 0,
+        ids,
         names,
-        scoresCards: sc,
-        metricsCards: mc,
-        scoresRelics: sr,
+        metrics,
         eloMean: eloM.mean,
         eloStd: eloM.std,
         scoreMean: scoreM.mean,
@@ -183,8 +202,11 @@ export class CodexClient {
       this.state = 'ready'
       this.error = null
       this.log(
-        `prime OK v${wantVersion}: ${cardIds.length} cards, ${relicIds.length} relics, ` +
-          `${Object.keys(mc).length} metric rows, baselineWR=${snap.baselineWinRate}`
+        `prime OK v${wantVersion}: ` +
+          METRIC_KINDS.map(
+            (k) => `${ids[k].length} ${k} (${Object.keys(metrics[k]).length} rated)`
+          ).join(', ') +
+          `, baselineWR=${snap.baselineWinRate}`
       )
     } catch (e: any) {
       this.error = e?.message ?? String(e)
@@ -200,7 +222,7 @@ export class CodexClient {
   }
 
   isKnownCard(id: string): boolean {
-    return !!this.snap && id in this.snap.metricsCards
+    return !!this.snap && id in this.snap.metrics.cards
   }
 
   displayName(id: string): string | null {
@@ -222,53 +244,52 @@ export class CodexClient {
   } | null {
     if (!this.snap || !item.id) return null
     const id = item.id
-    const firstSee = item.kind === 'card' && !this.idsSeen.has(id)
-    if (item.kind === 'card') this.idsSeen.add(id)
+    const kind = METRIC_KIND_OF[item.kind]
 
-    if (item.kind === 'relic') {
-      const s = this.snap.scoresRelics[id]
-      const rows: Array<[string, string]> = []
-      if (item.cost != null) rows.push(['Cost', `${item.cost}g`])
-      if (!s) return { rows, tier: null, score: null, confidence: 'low', known: false, trap: null }
-      rows.push(['Score', String(s.score)], ['Win rate', `${s.win_rate.toFixed(0)}%`], ['Sample', fmtCount(s.picks)])
-      return { rows, tier: null, score: s.score, confidence: confidenceFor(s.picks), known: true, trap: null }
-    }
-
-    if (item.kind === 'card') {
-      const m = this.snap.metricsCards[id]
-      if (!m) {
-        if (firstSee) {
-          const upper = id.toUpperCase()
-          const hint = upper !== id && upper in this.snap.metricsCards ? ` (uppercase "${upper}" WOULD match — case mismatch!)` : ''
-          this.log(`UNRESOLVED card id "${id}" — not in ${this.snap.cardIds.length}-card vocab${hint}`)
-        }
-        return { rows: [], tier: null, score: null, confidence: 'low', known: false, trap: null }
-      }
-      if (firstSee) this.log(`resolved card "${id}" → tier ${m.tier}, score ${m.score}`)
-      this.idsResolved.add(id)
-      const rows: Array<[string, string]> = []
-      if (item.cost != null) rows.push(['Cost', `${item.cost}g`])
-      rows.push(
-        ['Tier', m.tier],
-        ['Score', String(m.score)],
-        ['Win rate', `${m.win_rate.toFixed(0)}%`],
-        ['Pick rate', `${m.pick_rate.toFixed(0)}%`],
-        ['Sample', fmtCount(m.picks)]
-      )
-      return {
-        rows,
-        tier: m.tier,
-        score: m.score,
-        confidence: confidenceFor(m.picks),
-        known: true,
-        trap: this.trapIndex(m)
-      }
-    }
-
-    // potions / event choices: name-only (endpoints unverified). No fabricated stats.
     const rows: Array<[string, string]> = []
     if (item.cost != null) rows.push(['Cost', `${item.cost}g`])
-    return { rows, tier: null, score: null, confidence: 'low', known: false, trap: null }
+    const unknown = { rows, tier: null, score: null, confidence: 'low', known: false, trap: null } as const
+
+    // Event choices have no entity id to look up — the header name is all there is.
+    if (!kind) return { ...unknown, rows }
+
+    const firstSee = !this.idsSeen.has(id)
+    this.idsSeen.add(id)
+
+    const m = this.snap.metrics[kind][id]
+    if (!m) {
+      if (firstSee) {
+        const upper = id.toUpperCase()
+        const hint =
+          upper !== id && upper in this.snap.metrics[kind]
+            ? ` (uppercase "${upper}" WOULD match — case mismatch!)`
+            : ''
+        this.log(
+          `UNRESOLVED ${item.kind} id "${id}" — not in ${this.snap.ids[kind].length}-${kind} vocab${hint}`
+        )
+      }
+      return { ...unknown, rows }
+    }
+    if (firstSee) this.log(`resolved ${item.kind} "${id}" → tier ${m.tier}, score ${m.score}`)
+    this.idsResolved.add(id)
+
+    // Every rated row carries tier/score/win-rate/picks. Elo and pick rate are
+    // card-only in the data, so they are conditional rather than assumed — a
+    // relic showing "Elo 0" would be a fabricated rating, not a missing one.
+    rows.push(['Tier', m.tier], ['Score', String(m.score)])
+    if (m.elo != null) rows.push(['Elo', m.elo.toFixed(0)])
+    rows.push(['Win rate', `${m.win_rate.toFixed(0)}%`])
+    if (m.pick_rate != null) rows.push(['Pick rate', `${m.pick_rate.toFixed(0)}%`])
+    rows.push(['Sample', fmtCount(m.picks)])
+
+    return {
+      rows,
+      tier: m.tier,
+      score: m.score,
+      confidence: confidenceFor(m.picks),
+      known: true,
+      trap: this.trapIndex(m)
+    }
   }
 
   /**
@@ -335,6 +356,8 @@ export class CodexClient {
 
   // ── TRAP: revealed-preference (elo) vs outcome (score) divergence ──
   private trapIndex(m: MetricRow): number | null {
+    // Needs elo, so it is a card-only signal — the moments are card-only too.
+    if (m.elo == null) return null
     if (!this.snap || this.snap.eloStd <= 0 || this.snap.scoreStd <= 0) return null
     const zElo = (m.elo - this.snap.eloMean) / this.snap.eloStd
     const zScore = (m.score - this.snap.scoreMean) / this.snap.scoreStd
@@ -346,7 +369,11 @@ export class CodexClient {
     try {
       if (!existsSync(this.file)) return null
       const raw = JSON.parse(readFileSync(this.file, 'utf8'))
-      if (raw && Array.isArray(raw.cardIds) && raw.metricsCards) return raw as Snapshot
+      // Schema first: a cache written by an older build can carry a current
+      // apiVersion, which would satisfy the freshness check and pin the app to
+      // a shape that no longer has the tables it now reads.
+      if (raw?.schema !== SNAPSHOT_SCHEMA) return null
+      if (Array.isArray(raw.ids?.cards) && raw.metrics?.cards) return raw as Snapshot
       return null
     } catch {
       return null
@@ -375,19 +402,23 @@ export class CodexClient {
 
 // ── helpers ──
 
+/** Which metrics table answers for an item, or null when nothing rates it. */
+const METRIC_KIND_OF: Record<RawItem['kind'], MetricKind | null> = {
+  card: 'cards',
+  relic: 'relics',
+  potion: 'potions',
+  choice: null
+}
+
 function asArray(v: any): any[] {
   if (Array.isArray(v)) return v
-  if (v && typeof v === 'object') return v.cards ?? v.relics ?? v.data ?? []
+  if (v && typeof v === 'object') return v.cards ?? v.relics ?? v.potions ?? v.data ?? []
   return []
 }
 
-/** scores/{type} may be an array of rows or an id-keyed object. Normalise. */
-function scoreEntries(v: any): Array<{ id: string } & ScoreRow> {
-  if (Array.isArray(v)) return v.filter((e) => e?.id)
-  if (v && typeof v === 'object') {
-    return Object.entries(v).map(([id, r]: [string, any]) => ({ id, ...r }))
-  }
-  return []
+/** Keep real numbers, turn the API's nulls (and any NaN) into an explicit null. */
+function numOrNull(v: any): number | null {
+  return typeof v === 'number' && Number.isFinite(v) ? v : null
 }
 
 /** Compact fixed-3 for log lines; tolerant of undefined/NaN. */

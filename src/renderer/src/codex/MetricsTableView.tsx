@@ -1,12 +1,13 @@
 import { useMemo } from 'react'
 import styled from 'styled-components'
-import { bracketLabel, type CodexBracket, type CodexKind, type MetricsRow, type MetricsTable } from '@shared/codex'
+import { type CodexKind, type MetricsRow, type MetricsTable } from '@shared/codex'
 import { type LibraryEntry } from './data'
 import { DASH, compareNullable, fmtElo, fmtInt, fmtPct, fmtScore, prettifyId } from './format'
 import { defaultTableDir, type SortDir, type TableColumn, type Variant } from './params'
 import { Empty, Segmented, scrollbar } from './parts'
 import { TierBadge } from './tiers'
 import { useArtPreview } from './ArtPreview'
+import { useDefinitionTip } from './KeywordTooltip'
 
 /**
  * Every number, for every entry, sortable.
@@ -14,9 +15,11 @@ import { useArtPreview } from './ArtPreview'
  * The tier list is the answer; this is the working. It exists so that a grade
  * is never something the app just asserts — you can sort by elo, see that a
  * card is drafted far above its win rate, and decide for yourself. Which is
- * also why the definitions are written out under the table instead of living in
- * an about box: a column called "Elo" that nobody explains is a column that
- * gets misread.
+ * also why every column header carries its definition as a hover/focus bubble
+ * rather than hiding it in an about box: a column called "Elo" that nobody
+ * explains is a column that gets misread, and the explanation belongs on the
+ * word being misread. (These used to be a legend under the table; on the
+ * header they cost no space, so the table gets the room instead.)
  *
  * The null columns are the honest part. `elo` is populated only for
  * bracket-level card tables, `pick_rate` is null everywhere, and the per-act
@@ -47,20 +50,36 @@ interface Row {
   acts: Array<number | null>
 }
 
+/**
+ * The old under-table legend, redistributed onto the headers it explains.
+ * One sentence per *concept*, so the columns that answer the same question
+ * (Win% and W–L; Pick%, Seen and Runs; the three acts) share one definition
+ * rather than three paraphrases of it.
+ */
+const WIN_HELP =
+  "Runs containing the entry that ended in a win. Only meaningful against the cohort's baseline win rate — half of all cards sit near it by construction."
+
+const OFFER_HELP =
+  'How often it was offered, and how often it was taken. · means the snapshot does not record that number for this slice; it never means zero.'
+
+const ACT_HELP =
+  'Pick rate when the card was offered in that act — the same question as Pick%, asked three times as the run gets harder.'
+
 const COLUMN_HELP: Record<TableColumn | 'rank' | 'wl', string> = {
   rank: 'Position in the current sort',
   name: 'Name in the compendium; a trailing + is the upgraded version',
   tier: 'Letter grade from the Codex Score: S ≥90, A ≥78, B ≥65, C ≥50, D ≥35, else F',
-  score: 'Codex Score (0–100, Bayesian-shrunk win rate) — a small sample is pulled toward the average rather than trusted',
-  elo: 'Revealed preference from card-reward picks: what players choose when given the choice. Only measured where reward picks happen',
-  win: 'Percentage of runs containing this that were won — read it against the baseline win rate above',
-  pick: 'Percentage of the times it was offered that it was taken',
-  seen: 'How many times it was offered',
-  runs: 'How many runs it appeared in — the sample behind every other number in the row',
-  a1: 'Pick rate when offered in Act 1',
-  a2: 'Pick rate when offered in Act 2',
-  a3: 'Pick rate when offered in Act 3',
-  wl: 'Wins and losses among runs containing this'
+  score:
+    'Codex Score, 0–100: a win rate shrunk toward the cohort average in proportion to how little was seen, so a card taken forty times cannot outrank one taken forty thousand on luck alone.',
+  elo: 'Revealed preference, derived from what players pick out of card rewards. It measures reputation, not results — a gap between elo and score is the interesting part.',
+  win: WIN_HELP,
+  pick: OFFER_HELP,
+  seen: OFFER_HELP,
+  runs: OFFER_HELP,
+  a1: ACT_HELP,
+  a2: ACT_HELP,
+  a3: ACT_HELP,
+  wl: WIN_HELP
 }
 
 export function MetricsTableView({
@@ -68,8 +87,6 @@ export function MetricsTableView({
   entries,
   filtersActive,
   table,
-  bracket,
-  character,
   variant,
   col,
   dir,
@@ -82,15 +99,15 @@ export function MetricsTableView({
   /** Whether that set is narrowed at all; if it is not, metrics-only ids stay. */
   filtersActive: boolean
   table: MetricsTable | null
-  bracket: CodexBracket
-  character: string | null
   variant: Variant
   col: TableColumn
   dir: SortDir
   onChange: (patch: { col?: TableColumn; dir?: SortDir; variant?: Variant }) => void
   onOpen: (id: string) => void
 }): JSX.Element {
-  const preview = useArtPreview()
+  // A table row spans the whole screen, so an edge-anchored preview lands on
+  // the name column; following the cursor's X keeps every column readable.
+  const preview = useArtPreview({ followCursorX: true })
 
   const byId = useMemo(() => {
     const map = new Map<string, LibraryEntry>()
@@ -130,42 +147,14 @@ export function MetricsTableView({
   const showPick = sorted.some((r) => r.pick != null)
   const showSeen = sorted.some((r) => r.seen != null && r.seen > 0)
 
-  const summary = [
-    bracketLabel(bracket),
-    ...(character ? [character] : []),
-    table?.total_runs != null ? `${fmtInt(table.total_runs)} runs` : null,
-    table?.baseline_win_rate != null ? `baseline ${fmtPct(table.baseline_win_rate)}` : null,
-    `${fmtInt(sorted.length)} shown`
-  ].filter(Boolean) as string[]
-
   const header = (column: TableColumn, label: string, numeric: boolean): JSX.Element => (
-    <Th
-      $numeric={numeric}
-      $on={col === column}
-      aria-sort={col === column ? (dir === 'asc' ? 'ascending' : 'descending') : 'none'}
-    >
-      <ThButton
-        type="button"
-        $numeric={numeric}
-        title={COLUMN_HELP[column]}
-        onClick={() =>
-          onChange(
-            col === column
-              ? { dir: dir === 'asc' ? 'desc' : 'asc' }
-              : { col: column, dir: defaultTableDir(column) }
-          )
-        }
-      >
-        {label}
-        <Arrow aria-hidden>{col === column ? (dir === 'asc' ? '▴' : '▾') : ''}</Arrow>
-      </ThButton>
-    </Th>
+    <SortHeader column={column} label={label} numeric={numeric} col={col} dir={dir} onChange={onChange} />
   )
 
   return (
     <>
-      <Controls>
-        {kind === 'cards' ? (
+      {kind === 'cards' ? (
+        <Controls>
           <Segmented
             label="Card version"
             value={variant}
@@ -176,9 +165,8 @@ export function MetricsTableView({
               { value: 'both', label: 'Both' }
             ]}
           />
-        ) : null}
-        <Summary>{summary.join(' · ')}</Summary>
-      </Controls>
+        </Controls>
+      ) : null}
 
       {!sorted.length ? (
         <Empty>No matches.</Empty>
@@ -201,9 +189,7 @@ export function MetricsTableView({
                 {showActs ? header('a1', 'Act 1', true) : null}
                 {showActs ? header('a2', 'Act 2', true) : null}
                 {showActs ? header('a3', 'Act 3', true) : null}
-                <Th $numeric title={COLUMN_HELP.wl}>
-                  W–L
-                </Th>
+                <StaticHeader label="W–L" help={COLUMN_HELP.wl} numeric />
               </tr>
             </thead>
             <tbody>
@@ -256,48 +242,78 @@ export function MetricsTableView({
         </TableWrap>
       )}
 
-      <Footnotes>
-        <dt>Score</dt>
-        <dd>
-          Codex Score, 0–100: a win rate shrunk toward the cohort average in proportion to how
-          little was seen, so a card taken forty times cannot outrank one taken forty thousand on
-          luck alone.
-        </dd>
-        <dt>Elo</dt>
-        <dd>
-          Revealed preference, derived from what players pick out of card rewards. It measures
-          reputation, not results — a gap between elo and score is the interesting part.
-          {showElo ? null : ' Not measured in this slice, so the column is hidden rather than blank.'}
-        </dd>
-        <dt>Win% and W–L</dt>
-        <dd>
-          Runs containing the entry that ended in a win. Only meaningful against the baseline win
-          rate in the line above the table — half of all cards sit near it by construction.
-        </dd>
-        <dt>{[showPick ? 'Pick%' : null, showSeen ? 'Seen' : null, 'Runs'].filter(Boolean).join(', ')}</dt>
-        <dd>
-          How often it was offered, and how often it was taken. `·` means the snapshot does not
-          record that number for this slice; it never means zero.
-          {showPick && showSeen
-            ? null
-            : ' Offer counts exist only for card rewards, so the columns without them are hidden here.'}
-        </dd>
-        {kind === 'cards' ? (
-          <>
-            <dt>Act 1–3</dt>
-            <dd>
-              Pick rate when the card was offered in that act — the same question as Pick%, asked
-              three times as the run gets harder.
-              {showActs
-                ? null
-                : ' The snapshot records these for whole brackets only, so choosing a character removes them and the columns are hidden rather than left empty.'}
-            </dd>
-          </>
-        ) : null}
-      </Footnotes>
-
       {preview.preview}
     </>
+  )
+}
+
+// ── headers ─────────────────────────────────────────────────────────────────
+
+/**
+ * A sortable column header carrying its own definition bubble. A component
+ * rather than a render helper so the hover state lives here — opening a
+ * tooltip must not re-render six hundred rows below it.
+ */
+function SortHeader({
+  column,
+  label,
+  numeric,
+  col,
+  dir,
+  onChange
+}: {
+  column: TableColumn
+  label: string
+  numeric: boolean
+  col: TableColumn
+  dir: SortDir
+  onChange: (patch: { col?: TableColumn; dir?: SortDir }) => void
+}): JSX.Element {
+  const { bind, tip } = useDefinitionTip(label, COLUMN_HELP[column])
+  return (
+    <Th
+      $numeric={numeric}
+      $on={col === column}
+      aria-sort={col === column ? (dir === 'asc' ? 'ascending' : 'descending') : 'none'}
+    >
+      <ThButton
+        type="button"
+        $numeric={numeric}
+        {...bind}
+        onClick={() =>
+          onChange(
+            col === column
+              ? { dir: dir === 'asc' ? 'desc' : 'asc' }
+              : { col: column, dir: defaultTableDir(column) }
+          )
+        }
+      >
+        {label}
+        <Arrow aria-hidden>{col === column ? (dir === 'asc' ? '▴' : '▾') : ''}</Arrow>
+      </ThButton>
+      {tip}
+    </Th>
+  )
+}
+
+/** The unsortable header (W–L): same definition bubble, no button underneath. */
+function StaticHeader({
+  label,
+  help,
+  numeric
+}: {
+  label: string
+  help: string
+  numeric?: boolean
+}): JSX.Element {
+  const { bind, tip } = useDefinitionTip(label, help)
+  return (
+    <Th $numeric={numeric}>
+      <ThStatic $numeric={Boolean(numeric)} tabIndex={0} {...bind}>
+        {label}
+      </ThStatic>
+      {tip}
+    </Th>
   )
 }
 
@@ -382,20 +398,6 @@ const Controls = styled.div`
 `
 
 /**
- * "All runs · 1,183,705 runs · baseline 43.4% · 577 shown".
- *
- * A win rate is meaningless without the baseline it is being read against, and
- * a table of 30,000 runs is a different document from a table of three million.
- * It sits beside the variant pill rather than above the table so the sticky
- * header has nothing between it and the top of its scroller.
- */
-const Summary = styled.p`
-  margin: 0;
-  font-size: 12px;
-  color: var(--ink-faint);
-`
-
-/**
  * The table scrolls inside its own box rather than with the page.
  *
  * That is what makes `position: sticky` on the header actually work: a sticky
@@ -406,7 +408,9 @@ const Summary = styled.p`
  * sticky at all, on a table 600 rows long.
  */
 const TableWrap = styled.div`
-  max-height: calc(100vh - 280px);
+  /* The legend that used to sit under the table is on the headers now, so the
+     freed space goes to rows: this is chrome-above-the-table, nothing below. */
+  max-height: calc(100vh - 240px);
   min-height: 220px;
   overflow: auto;
   border-radius: 12px;
@@ -462,8 +466,22 @@ const ThButton = styled.button<{ $numeric: boolean }>`
 
 const Arrow = styled.span`
   width: 8px;
-  font-size: 9px;
+  font-size: var(--fs-2xs);
   line-height: 1;
+`
+
+/** ThButton's geometry for a header that is a definition, not a control. */
+const ThStatic = styled.span<{ $numeric: boolean }>`
+  width: 100%;
+  display: inline-flex;
+  align-items: center;
+  justify-content: ${(p) => (p.$numeric ? 'flex-end' : 'flex-start')};
+  padding: 8px 10px;
+  cursor: help;
+  &:focus-visible {
+    outline: 2px solid var(--brand);
+    outline-offset: -2px;
+  }
 `
 
 const Tr = styled.tr`
@@ -494,21 +512,4 @@ const NameCell = styled.span`
   overflow: hidden;
   text-overflow: ellipsis;
   vertical-align: bottom;
-`
-
-const Footnotes = styled.dl`
-  margin: 18px 2px 0;
-  font-size: 11px;
-  line-height: 1.6;
-  color: var(--ink-faint);
-  dt {
-    margin-top: 8px;
-    font-family: var(--font-display);
-    font-size: 12px;
-    letter-spacing: 0.3px;
-    color: var(--ink-dim);
-  }
-  dd {
-    margin: 2px 0 0;
-  }
 `

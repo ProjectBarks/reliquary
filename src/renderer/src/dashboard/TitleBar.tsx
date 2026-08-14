@@ -114,7 +114,7 @@ const Brand = styled.div`
   gap: 9px;
   min-width: 150px;
   font-family: var(--font-display);
-  font-size: 18px;
+  font-size: var(--fs-xl);
   letter-spacing: 0.5px;
   color: var(--sts-color-cream);
   i {

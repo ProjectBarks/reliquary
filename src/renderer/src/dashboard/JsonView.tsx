@@ -111,8 +111,8 @@ function Primitive({ value }: { value: unknown }): JSX.Element {
 
 const Root = styled.div`
   font-family: var(--font-mono);
-  font-size: 11px;
-  line-height: 1.55;
+  font-size: var(--fs-sm);
+  line-height: 1.5;
   color: #cdc3b1;
   background: rgba(0, 0, 0, 0.35);
   border-radius: 6px;

@@ -88,7 +88,7 @@ export const SearchInput = styled.input`
   padding: 0 34px 0 32px;
   border-radius: 8px;
   font-family: inherit;
-  font-size: 13px;
+  font-size: var(--fs-base);
   color: var(--ink);
   background: var(--fill);
   border: 1px solid var(--line-strong);
@@ -138,7 +138,7 @@ export const SearchAffordance = styled.button`
   background: var(--fill);
   color: var(--ink-faint);
   font-family: var(--font-mono);
-  font-size: 11px;
+  font-size: var(--fs-xs);
   line-height: 1;
   &:hover {
     color: var(--ink);
@@ -214,7 +214,7 @@ const SegmentButton = styled.button<{ $on: boolean }>`
   border: 0;
   border-right: 1px solid var(--line);
   font-family: inherit;
-  font-size: 12px;
+  font-size: var(--fs-base);
   font-weight: 600;
   display: inline-flex;
   align-items: center;
@@ -430,7 +430,7 @@ const TriggerBadge = styled.span<{ $dot: boolean }>`
   background: var(--brand);
   border: 1px solid #201d1b;
   color: #1a1613;
-  font-size: 9px;
+  font-size: var(--fs-2xs);
   font-weight: 700;
   font-variant-numeric: tabular-nums;
   line-height: 1;
@@ -663,7 +663,7 @@ const GroupWrap = styled.div`
 `
 
 const GroupName = styled.div`
-  font-size: 10px;
+  font-size: var(--fs-2xs);
   letter-spacing: 0.6px;
   text-transform: uppercase;
   color: var(--ink-faint);
@@ -720,8 +720,8 @@ const ChipButton = styled.button<{ $on: boolean; $tone?: string; $caps: boolean 
   padding: 4px 10px;
   border-radius: 999px;
   font-family: inherit;
-  font-size: 11px;
-  line-height: 1.45;
+  font-size: var(--fs-sm);
+  line-height: 1.5;
   text-transform: ${(p) => (p.$caps ? 'capitalize' : 'none')};
   color: ${(p) => (p.$on ? '#1a1613' : (p.$tone ?? 'var(--ink-dim)'))};
   background: ${(p) => (p.$on ? (p.$tone ?? 'var(--brand)') : 'var(--fill)')};
@@ -742,7 +742,7 @@ const ChipButton = styled.button<{ $on: boolean; $tone?: string; $caps: boolean 
 /** The line a popover shows when it has nothing to offer yet. */
 export const PopoverNote = styled.p`
   margin: 2px 0;
-  font-size: 12px;
+  font-size: var(--fs-sm);
   font-style: italic;
   color: var(--ink-faint);
 `
@@ -755,7 +755,7 @@ export const Chip = styled.span<{ $tone?: string }>`
   gap: 5px;
   padding: 2px 8px;
   border-radius: 999px;
-  font-size: 11px;
+  font-size: var(--fs-xs);
   line-height: 1.5;
   white-space: nowrap;
   color: ${(p) => p.$tone ?? 'var(--ink-dim)'};
@@ -763,18 +763,12 @@ export const Chip = styled.span<{ $tone?: string }>`
   border: 1px solid ${(p) => (p.$tone ? 'currentColor' : 'var(--line)')};
 `
 
-export const ResultCount = styled.div`
-  font-size: 12px;
-  color: var(--ink-faint);
-  padding: 0 2px 8px;
-`
-
 // ── the three states ────────────────────────────────────────────────────────
 
 /** "No matches." — one italic line, no illustration, no apology. */
 export const Empty = styled.p`
   margin: 26px 2px;
-  font-size: 13px;
+  font-size: var(--fs-base);
   font-style: italic;
   color: var(--ink-faint);
 `
@@ -793,7 +787,7 @@ const LoadingLine = styled.div`
   align-items: center;
   gap: 9px;
   margin: 22px 2px;
-  font-size: 13px;
+  font-size: var(--fs-base);
   color: var(--ink-dim);
 `
 
@@ -843,12 +837,12 @@ const ErrorPanel = styled(Panel)`
 `
 
 const ErrorTitle = styled.div`
-  font-size: 14px;
+  font-size: var(--fs-md);
   color: var(--ink);
 `
 
 const ErrorBody = styled.div`
-  font-size: 12px;
+  font-size: var(--fs-sm);
   color: var(--ink-faint);
   margin-top: 3px;
   word-break: break-word;
@@ -920,8 +914,13 @@ const layers: symbol[] = []
 export function useTransientLayer(onEscape: () => void): void {
   // The callback is read through a ref so a caller passing an inline arrow —
   // which is all of them — doesn't push and pop the stack on every render.
+  // Written from an effect rather than during render (a Rules-of-React
+  // violation the React Compiler rightly refuses to memoize past); by the time
+  // any Escape can be pressed, the commit has flushed and the ref is current.
   const latest = useRef(onEscape)
-  latest.current = onEscape
+  useEffect(() => {
+    latest.current = onEscape
+  })
 
   useEffect(() => {
     const token = Symbol('layer')
@@ -1026,6 +1025,14 @@ export function Modal({
   )
 }
 
+/**
+ * No `backdrop-filter` here, deliberately. The compare modal opens *over* the
+ * detail modal, and two stacked fullscreen backdrop blurs meant every repaint
+ * (a caret blink, a chip hover) re-rasterized the whole window through both —
+ * ruinous on machines the GPU crash guard has dropped to software rendering,
+ * which is exactly where this app often finds itself. A slightly deeper tint
+ * does the same separating job for the price of a fill.
+ */
 const Scrim = styled.div`
   position: fixed;
   inset: 0;
@@ -1034,8 +1041,7 @@ const Scrim = styled.div`
   align-items: center;
   justify-content: center;
   padding: 28px 20px;
-  background: oklch(0.08 0.01 300 / 62%);
-  backdrop-filter: blur(2px);
+  background: oklch(0.08 0.01 300 / 68%);
   animation: ${scrimIn} 0.16s ease;
   @media (prefers-reduced-motion: reduce) {
     animation: none;
@@ -1075,7 +1081,7 @@ export const CloseButton = styled.button`
   border: 1px solid transparent;
   background: transparent;
   color: var(--ink-dim);
-  font-size: 15px;
+  font-size: var(--fs-md);
   line-height: 1;
   &:hover {
     background: var(--fill-hover);
@@ -1112,7 +1118,7 @@ export const NavAnchor = styled.a<{ $active: boolean }>`
   cursor: pointer;
   text-decoration: none;
   font-family: var(--font-display);
-  font-size: 15px;
+  font-size: var(--fs-md);
   letter-spacing: 0.4px;
   color: ${(p) => (p.$active ? 'var(--ink)' : 'var(--ink-dim)')};
   transition: color 0.13s ease;
@@ -1164,7 +1170,7 @@ export const ChipAnchor = styled.a`
   border: 1px solid var(--line);
   background: var(--fill);
   color: var(--ink-dim);
-  font-size: 12px;
+  font-size: var(--fs-sm);
   transition:
     background 0.13s ease,
     color 0.13s ease;
@@ -1188,7 +1194,7 @@ export const QuietLink = styled.button`
   border: 0;
   background: none;
   font-family: inherit;
-  font-size: 12px;
+  font-size: var(--fs-sm);
   color: var(--brand-soft);
   text-decoration: none;
   border-bottom: 1px solid transparent;

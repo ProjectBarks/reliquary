@@ -82,7 +82,7 @@ const Crashed = styled.div`
   color: oklch(1 0 0 / 62%);
   strong {
     color: var(--sts-color-cream);
-    font-size: 14px;
+    font-size: var(--fs-md);
   }
 `
 
