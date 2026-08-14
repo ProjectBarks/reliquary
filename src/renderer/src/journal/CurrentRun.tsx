@@ -1,5 +1,4 @@
 import { useMemo } from 'react'
-import { createLink } from '@tanstack/react-router'
 import styled from 'styled-components'
 import type { JournalCurrentRun, RunFile } from '@shared/types'
 import { cohortLabel, runCohort } from '@shared/types'
@@ -9,7 +8,6 @@ import { ErrorState, Loading } from '../codex/parts'
 import { AmbiguityBanner } from './AmbiguityBanner'
 import {
   useCurrentRun,
-  useJournalCatalog,
   useLiveEnemies,
   useLivePiles,
   useRunFile,
@@ -66,9 +64,9 @@ import {
  *
  * The idle state is the one that had to be designed rather than defaulted.
  * "No run in progress" is the *normal* condition of this screen — most of the
- * time the game is not running at all — so it says what it is waiting for and
- * points at the last finished run instead of showing an empty plaque with
- * dashes where the numbers go. Three lines, one of them a link.
+ * time the game is not running at all — so it says what it is waiting for
+ * instead of showing an empty plaque with dashes where the numbers go. Two
+ * lines, and nothing else.
  *
  * Neither state prints a section title. The sub-nav is already showing Current
  * Run in brand, and a heading under it saying "Current Run, nothing is being
@@ -85,35 +83,24 @@ import {
 
 export function CurrentRun(): JSX.Element {
   const live = useCurrentRun()
-  const catalog = useJournalCatalog()
   // Hooks are unconditional: `useRunFile(null)` is the "nothing asked for"
   // resource, so the idle state costs no request and no rule-of-hooks dance.
   const file = useRunFile(live?.runId ?? null)
 
-  const latest = useMemo(() => {
-    const rows = (catalog.data ?? []).filter((e) => e.state === 'closed' && !e.unreadable)
-    return rows.length ? rows.reduce((a, b) => (a.lastSeenAt >= b.lastSeenAt ? a : b)) : null
-  }, [catalog.data])
-
   return (
     <>
       <AmbiguityBanner />
-      {live ? <Live live={live} file={file} /> : <Idle latestId={latest?.id ?? null} />}
+      {live ? <Live live={live} file={file} /> : <Idle />}
     </>
   )
 }
 
-function Idle({ latestId }: { latestId: string | null }): JSX.Element {
+function Idle(): JSX.Element {
   return (
     <Section>
       <EmptyPlate>
         <strong>No run in progress.</strong>
         <span>Start a run with Slay the Spire 2 open and this fills in as you play.</span>
-        {latestId ? (
-          <LastRunLink to="/journal/run/$id" params={{ id: latestId }}>
-            Read the last finished run →
-          </LastRunLink>
-        ) : null}
       </EmptyPlate>
     </Section>
   )
@@ -325,24 +312,4 @@ const PileCell = styled.div`
   }
 `
 
-/** A quiet way back to the last run that *did* finish. */
-const LastRunAnchor = styled.a`
-  align-self: flex-start;
-  margin-top: 4px;
-  cursor: pointer;
-  font-size: 13px;
-  color: var(--brand-soft);
-  text-decoration: none;
-  border-bottom: 1px solid transparent;
-  &:hover {
-    border-bottom-color: currentColor;
-  }
-  &:focus-visible {
-    outline: 2px solid var(--brand);
-    outline-offset: 2px;
-    border-radius: 3px;
-  }
-`
-
-const LastRunLink = createLink(LastRunAnchor)
 
