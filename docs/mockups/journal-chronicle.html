@@ -1,0 +1,1716 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Reliquary — Run Journal (Chronicle)</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Kreon:wght@300..700&family=Montserrat:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+/* ═══ tokens — copied from overlay.css / ui.tsx / tiers.ts ═══════════════ */
+:root{
+  --ink:#fff6e2; --ink-dim:#9c9384; --ink-faint:#918878;
+  --line:oklch(1 0 0 / 9%); --line-strong:oklch(1 0 0 / 15%);
+  --fill:oklch(1 0 0 / 5%); --fill-hover:oklch(1 0 0 / 9%);
+  --brand:#b47bff; --brand-deep:#6b3fbe; --brand-soft:#d8c2ff;
+  --gold:#efc851; --red:#ff5555; --green:#7fff00; --aqua:#2aebbe; --orange:#ffa518; --cream:#fff6e2;
+  --ironclad-frame:oklch(0.444 0.119 32.7); --ironclad-edge:oklch(0.574 0.129 33.2);
+  --tier-a:#7fff00; --tier-b:#2aebbe; --tier-c:#efc851; --tier-d:#ffa518; --tier-f:#ff5555;
+  --font-display:'Kreon', serif;
+  --font-body:'Montserrat','Open Sans',system-ui,sans-serif;
+  --font-mono:Consolas,ui-monospace,monospace;
+  --panel:rgba(38,35,33,0.55);
+  --card:rgba(38,35,33,0.66);
+  --hard:5px 5px 0 oklch(0 0 0 / 25%);
+  --hex:polygon(50% 0%,92% 27%,76% 78%,50% 100%,24% 78%,8% 27%);
+}
+*{box-sizing:border-box}
+html{scroll-behavior:smooth}
+body{
+  margin:0; min-height:100vh;
+  background:radial-gradient(120% 120% at 50% 0%, #2a2622 0%, #171512 62%, #100e0c 100%) fixed;
+  color:var(--ink); font-family:var(--font-body); font-size:14px; line-height:1.5;
+  -webkit-font-smoothing:antialiased;
+}
+h1,h2,h3,p,figure,blockquote{margin:0}
+b{font-weight:600}
+::-webkit-scrollbar{width:9px;height:9px}
+::-webkit-scrollbar-thumb{background:oklch(1 0 0 / 16%);border-radius:4px}
+.measure{width:100%;max-width:1240px;margin:0 auto;padding:0 22px}
+.tnum{font-variant-numeric:tabular-nums}
+
+/* ═══ tab chrome ════════════════════════════════════════════════════════ */
+.titlebar{height:46px;display:flex;align-items:center;gap:12px;padding:0 8px 0 16px;
+  border-bottom:1px solid oklch(1 0 0 / 8%)}
+.tb-brand{flex:1 1 0;min-width:150px;display:flex;align-items:center;gap:9px;
+  font-family:var(--font-display);font-size:18px;letter-spacing:.5px;color:var(--cream)}
+.gem{width:20px;height:20px;fill:none;stroke:var(--brand);stroke-width:1.4;stroke-linejoin:round;
+  filter:drop-shadow(0 0 6px oklch(0.68 0.19 300 / 50%))}
+.gem .facet{stroke-width:1;opacity:.6}
+.tabs{flex:0 0 auto;display:flex;gap:6px}
+.tab{padding:7px 18px;border-radius:8px;font-family:var(--font-display);font-size:15px;
+  letter-spacing:.5px;color:var(--cream);border:1px solid transparent;text-decoration:none}
+.tab.on{color:#1a1613;background:var(--brand);border-color:var(--brand);box-shadow:2px 2px 0 oklch(0 0 0 / 30%)}
+.winctl{flex:1 1 0;min-width:150px;display:flex;align-items:center;justify-content:flex-end;gap:4px}
+.ctl{width:34px;height:30px;display:flex;align-items:center;justify-content:center;
+  border-radius:8px;color:var(--cream)}
+.ctl svg{width:12px;height:12px;stroke:currentColor;stroke-width:1.4;stroke-linecap:round;fill:none}
+
+.subnav{border-bottom:1px solid var(--line);background:oklch(0 0 0 / 12%)}
+.subnav .measure{display:flex;align-items:center;gap:6px 16px;min-height:44px;padding-top:4px;padding-bottom:4px}
+.navlink{position:relative;display:inline-flex;align-items:center;height:30px;padding:0 3px;
+  font-family:var(--font-display);font-size:15px;letter-spacing:.4px;color:var(--ink-dim);text-decoration:none}
+.navlink.on{color:var(--ink)}
+.navlink.on::after{content:'';position:absolute;left:0;right:0;bottom:-1px;height:2px;border-radius:1px;background:var(--brand)}
+.subctl{margin-left:auto;display:flex;align-items:center;gap:8px}
+.select{height:34px;padding:0 32px 0 13px;border-radius:8px;font-size:13px;font-weight:600;
+  color:var(--ink);background-color:var(--fill);border:1px solid var(--line-strong);
+  display:inline-flex;align-items:center;
+  background-image:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6'><path d='M1 1l4 4 4-4' fill='none' stroke='%23fff6e2' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round'/></svg>");
+  background-repeat:no-repeat;background-position:right 11px center}
+
+/* ═══ art + fallbacks ═══════════════════════════════════════════════════ */
+.cardart{position:relative;display:block;width:100%;aspect-ratio:25/38;border-radius:9px;
+  overflow:hidden;background:var(--fill);border:1px solid var(--line);flex:0 0 auto;
+  box-shadow:3px 3px 0 oklch(0 0 0 / 28%)}
+.cardart img{position:relative;z-index:1;display:block;width:100%;height:100%;
+  object-fit:cover;-webkit-user-drag:none}
+/* The name plate is always painted *behind* the art, so a 404, a slow CDN or an
+   offline machine all resolve to a designed placeholder instead of an empty box.
+   The onerror handler additionally removes the image so its alt text never shows. */
+.cardart .plate{position:absolute;inset:0;z-index:0;display:flex;flex-direction:column;
+  align-items:center;justify-content:center;gap:6px;padding:10px;text-align:center;
+  background:
+    linear-gradient(165deg, color-mix(in oklab, var(--ironclad-edge) 34%, transparent) 0%, transparent 52%),
+    color-mix(in oklab, var(--ironclad-frame) 42%, #17140f);
+  box-shadow:inset 0 0 0 1px color-mix(in oklab, var(--ironclad-edge) 55%, transparent)}
+.cardart.noart img{display:none}
+.plate-name{font-family:var(--font-display);font-size:13px;line-height:1.15;letter-spacing:.3px;color:var(--cream);
+  text-shadow:1px 1px 0 oklch(0 0 0 / 55%)}
+.plate-rule{width:34px;height:1px;background:oklch(1 0 0 / 26%)}
+.cardart.sm{border-radius:8px}
+.cardart.dim img{filter:saturate(.35) brightness(.62)}
+.cardart.skipped img{filter:saturate(.2) brightness(.5)}
+.cardart.skipped::after{content:'';position:absolute;inset:0;
+  background:repeating-linear-gradient(-45deg, oklch(0 0 0 / 42%) 0 6px, transparent 6px 12px)}
+
+.sprite{position:relative;display:flex;align-items:center;justify-content:center;
+  width:var(--s);height:var(--s);flex:0 0 auto}
+.sprite img{position:relative;z-index:1;max-width:100%;max-height:100%;object-fit:contain;-webkit-user-drag:none}
+.sprite.noart img{display:none}
+.sprite .plate{position:absolute;z-index:0;left:50%;top:50%;transform:translate(-50%,-50%);
+  display:flex;align-items:center;justify-content:center;
+  width:calc(var(--s) * .82);height:calc(var(--s) * .95);clip-path:var(--hex);
+  background:linear-gradient(155deg, oklch(1 0 0 / 22%) 0%, transparent 40%),
+    color-mix(in oklab, var(--ironclad-frame) 62%, #17140f)}
+.plate-ini{font-family:var(--font-display);font-size:calc(var(--s) * .3);letter-spacing:.5px;color:var(--cream)}
+.plateframe{display:flex;align-items:center;justify-content:center;width:72px;height:72px;
+  border-radius:12px;background:var(--fill);border:1px solid var(--line);flex:0 0 auto}
+.plateframe.sm{width:46px;height:46px;border-radius:9px}
+.relicslot{display:flex;align-items:center;justify-content:center;width:84px;height:84px;
+  border-radius:12px;background:var(--fill);border:1px solid var(--line);flex:0 0 auto;
+  box-shadow:3px 3px 0 oklch(0 0 0 / 28%)}
+.relicslot.big{width:116px;height:150px}
+.relicslot.dim{opacity:.55}
+
+/* ═══ chapter heads ═════════════════════════════════════════════════════ */
+.chapter{margin-top:52px}
+.sechead{display:flex;align-items:baseline;flex-wrap:wrap;gap:4px 11px;margin:0 0 16px;padding:0 2px}
+.sechead::after{content:'';flex:1 1 24px;align-self:center;height:1px;margin-left:4px;
+  background:linear-gradient(to right, var(--line-strong), transparent)}
+.roman{font-family:var(--font-display);font-size:12px;letter-spacing:2.4px;color:var(--brand)}
+.sectitle{font-family:var(--font-display);font-size:19px;letter-spacing:.6px;color:var(--ink)}
+.secnote{font-size:12px;color:var(--ink-faint)}
+
+/* ═══ I · the frontispiece ══════════════════════════════════════════════ */
+.hero{position:relative;margin-top:26px;padding:24px 26px 26px;border:1px solid var(--line);
+  border-radius:14px;overflow:hidden;box-shadow:var(--hard);
+  background:
+    linear-gradient(180deg, color-mix(in oklab, var(--ironclad-frame) 26%, transparent) 0%, transparent 46%),
+    radial-gradient(90% 130% at 88% 0%, oklch(0.55 0.22 27 / 12%), transparent 60%),
+    var(--card)}
+.hero::before{content:'';position:absolute;left:0;right:0;top:0;height:2px;
+  background:linear-gradient(90deg, var(--ironclad-edge), var(--ironclad-frame) 38%, transparent 82%)}
+.eyebrow{display:flex;flex-wrap:wrap;gap:4px 12px;font-family:var(--font-mono);font-size:11px;
+  letter-spacing:.7px;color:var(--ink-faint);text-transform:uppercase}
+.eyebrow .dot{color:oklch(1 0 0 / 22%)}
+.runtitle{font-family:var(--font-display);font-size:42px;line-height:1.08;letter-spacing:.5px;
+  color:var(--ink);margin-top:8px;text-shadow:3px 3px 0 oklch(0 0 0 / 45%)}
+.runtitle em{font-style:normal;color:var(--ironclad-edge)}
+.shape{margin-top:7px;font-size:13px;color:var(--ink-dim)}
+.shape .core{color:var(--brand-soft)}
+.verdictbar{display:inline-flex;align-items:center;gap:14px;margin-top:18px;
+  padding:9px 18px 9px 13px;border-radius:10px;
+  border:1px solid oklch(0.62 0.2 27 / 40%);
+  background:linear-gradient(90deg, oklch(0.55 0.22 27 / 24%), oklch(0.55 0.22 27 / 5%))}
+.verdictbar .mark{width:12px;height:15px;clip-path:var(--hex);background:var(--red);
+  filter:drop-shadow(0 0 6px oklch(0.62 0.2 27 / 60%))}
+.verdictbar .word{font-family:var(--font-display);font-size:21px;letter-spacing:2.6px;color:var(--red)}
+.verdictbar .rest{font-size:13px;color:var(--ink-dim)}
+.verdictbar .rest b{color:var(--ink);font-weight:500}
+
+.plaque{margin-top:22px;display:grid;
+  grid-template-columns:1.6fr .66fr 1.15fr .8fr .58fr .74fr .8fr .86fr 1.5fr;
+  border:1px solid var(--line-strong);border-radius:10px;overflow:hidden;
+  background:oklch(0 0 0 / 26%);
+  box-shadow:inset 0 1px 0 oklch(1 0 0 / 6%), inset 0 -2px 6px oklch(0 0 0 / 30%)}
+.pcell{padding:11px 14px 12px;border-right:1px solid var(--line);min-width:0}
+.pcell:last-child{border-right:0}
+.pcell .k{font-size:9.5px;letter-spacing:1px;text-transform:uppercase;color:var(--ink-faint)}
+.pcell .v{font-family:var(--font-display);font-size:23px;line-height:1.15;color:var(--ink);
+  font-variant-numeric:tabular-nums;margin-top:1px;white-space:nowrap}
+.pcell .w{font-family:var(--font-mono);font-size:10px;color:var(--ink-faint);letter-spacing:.2px;white-space:nowrap}
+.pcell.char .v{color:var(--ironclad-edge);font-size:20px;letter-spacing:.8px}
+.pcell.hp .v{color:var(--red)}
+.pcell.gold .v{color:var(--gold)}
+
+/* ═══ II · the chronicle ════════════════════════════════════════════════ */
+.chronicle{margin-top:2px}
+.entry{display:grid;grid-template-columns:74px 26px minmax(0,1fr);scroll-margin-top:80px}
+.ftag{padding:15px 12px 0 0;text-align:right;font-family:var(--font-mono);font-size:11px;
+  letter-spacing:.4px;color:var(--ink-faint);font-variant-numeric:tabular-nums}
+.entry.quiet .ftag{padding-top:8px;opacity:.55}
+.entry.bossrow .ftag{color:var(--red);opacity:1}
+.spine{position:relative}
+.spine::before{content:'';position:absolute;left:50%;top:0;bottom:0;width:2px;margin-left:-1px;
+  background:var(--line-strong)}
+.node{position:absolute;left:50%;top:17px;width:13px;height:16px;margin-left:-6.5px;
+  clip-path:var(--hex);background:var(--nc);filter:drop-shadow(0 0 5px var(--nc));z-index:1}
+.entry.quiet .node{top:11px;width:8px;height:10px;margin-left:-4px;filter:none;opacity:.55}
+.entry.bossrow .node{top:19px;width:19px;height:23px;margin-left:-9.5px}
+.ebody{position:relative;display:flex;gap:15px;padding:11px 0 13px 15px;min-height:52px}
+.entry.quiet .ebody{padding:5px 0 5px 15px;min-height:0}
+.entry.hasart .ebody::before{content:'';position:absolute;left:0;top:25px;width:15px;height:1px;
+  background:var(--line-strong)}
+.etext{min-width:0;flex:1;padding-top:1px}
+.rtype{display:inline-flex;align-items:center;gap:6px;font-family:var(--font-display);
+  font-size:12px;letter-spacing:1.4px;text-transform:uppercase;color:var(--tc)}
+.rtype svg{width:14px;height:14px;fill:none;stroke:currentColor;stroke-width:1.35;
+  stroke-linecap:round;stroke-linejoin:round;flex:0 0 auto}
+.entry.quiet .rtype{font-size:11px;opacity:.62}
+.entry.quiet .rtype svg{width:12px;height:12px}
+.entry.bossrow .rtype{font-size:14px;letter-spacing:2.2px}
+.took{font-size:15.5px;color:var(--ink);margin-top:3px;line-height:1.35}
+.took b{font-weight:600}
+.strike-tag{display:inline-block;margin-left:5px;padding:1px 7px;border-radius:999px;
+  font-size:10.5px;letter-spacing:.5px;text-transform:uppercase;color:var(--ink-faint);
+  background:var(--fill);border:1px solid var(--line)}
+.kindtag{display:inline-block;margin-left:5px;padding:1px 7px;border-radius:999px;font-size:10.5px;
+  letter-spacing:.5px;text-transform:uppercase;color:var(--gold);background:var(--fill);
+  border:1px solid color-mix(in oklab, var(--gold) 40%, transparent)}
+.note{display:flex;align-items:center;gap:6px;margin-top:5px;font-size:12.5px;color:var(--ink-dim)}
+.note.warn{color:var(--orange)}
+.warnmark{width:13px;height:13px;flex:0 0 auto;fill:none;stroke:currentColor;stroke-width:1.4;
+  stroke-linecap:round;stroke-linejoin:round}
+.entry.bossrow .took{font-size:17px}
+.entry.warnrow .ebody{background:linear-gradient(90deg, oklch(0.72 0.16 60 / 7%), transparent 44%);
+  border-radius:0 10px 10px 0}
+/* The last floor. The chronicle ends mid-sentence, so the row has to carry it. */
+.entry.fatalrow .ebody{background:linear-gradient(90deg, oklch(0.55 0.22 27 / 14%), transparent 52%);
+  border-radius:0 10px 10px 0;padding-bottom:18px}
+.entry.fatalrow .node{background:var(--red);filter:drop-shadow(0 0 9px var(--red))}
+.entry.fatalrow .spine::before{background:linear-gradient(to bottom, var(--line-strong) 0 26px, transparent 26px)}
+.note.fatal{margin-top:7px;font-family:var(--font-display);font-size:19px;letter-spacing:2.4px;
+  text-transform:uppercase;color:var(--red);text-shadow:2px 2px 0 oklch(0 0 0 / 45%)}
+/* A back-reference from the epilogue has to land somewhere the eye can find. */
+.entry:target .ebody{background:linear-gradient(90deg, oklch(0.68 0.19 300 / 16%), transparent 55%);
+  border-radius:0 10px 10px 0;box-shadow:inset 2px 0 0 var(--brand)}
+
+.actbreak{display:flex;align-items:center;gap:16px;margin:30px 0 24px;padding:0 2px}
+.actbreak .rule{flex:1;height:1px;background:linear-gradient(to right, transparent, var(--line-strong), transparent)}
+.actbreak .label{display:flex;align-items:center;gap:12px;font-family:var(--font-display);
+  font-size:15px;letter-spacing:4px;text-transform:uppercase;color:var(--ink-dim);white-space:nowrap}
+.actbreak .loz{width:8px;height:11px;clip-path:var(--hex);background:var(--brand);opacity:.85;
+  filter:drop-shadow(0 0 5px oklch(0.68 0.19 300 / 55%))}
+.actbreak .actsub{flex:0 0 auto;font-family:var(--font-mono);font-size:10.5px;letter-spacing:.6px;
+  color:var(--ink-faint);text-transform:uppercase}
+.theend{display:flex;align-items:center;gap:16px;margin:22px 0 0}
+.theend .rule{flex:1;height:1px;background:linear-gradient(to right, transparent, var(--line-strong), transparent)}
+.theend .endword{font-family:var(--font-display);font-size:13px;letter-spacing:3px;
+  text-transform:uppercase;color:var(--red);opacity:.8}
+
+/* ── the interruption panels ── */
+.interrupt{margin:22px 0 26px;border-radius:14px;overflow:hidden;box-shadow:var(--hard);
+  border:1px solid oklch(0.72 0.16 60 / 32%);border-left:3px solid var(--orange);
+  background:
+    linear-gradient(102deg, oklch(0.72 0.16 60 / 11%) 0%, transparent 48%),
+    rgba(38,35,33,0.78)}
+.ihead{display:flex;align-items:center;gap:11px;padding:13px 20px;
+  border-bottom:1px solid var(--line);background:oklch(0 0 0 / 18%)}
+.ibadge{display:flex;align-items:center;justify-content:center;width:24px;height:24px;flex:0 0 auto;
+  border-radius:7px;background:color-mix(in oklab, var(--orange) 22%, transparent);
+  border:1px solid color-mix(in oklab, var(--orange) 45%, transparent);color:var(--orange)}
+.ibadge svg{width:13px;height:13px;fill:none;stroke:currentColor;stroke-width:1.5;
+  stroke-linecap:round;stroke-linejoin:round}
+.ifloor{font-family:var(--font-mono);font-size:12px;letter-spacing:.6px;color:var(--orange);
+  padding:2px 8px;border-radius:6px;background:var(--fill);border:1px solid var(--line)}
+.ititle{font-family:var(--font-display);font-size:18px;letter-spacing:.4px;color:var(--ink)}
+.irule{flex:1;min-width:16px;height:1px;background:linear-gradient(to right, var(--line-strong), transparent)}
+.ikicker{font-family:var(--font-mono);font-size:10px;letter-spacing:.9px;text-transform:uppercase;
+  color:var(--ink-faint);white-space:nowrap}
+.ibody{display:grid;grid-template-columns:auto minmax(0,1fr);gap:26px;padding:20px 22px 22px}
+.ievidence{display:flex;align-items:flex-start;gap:14px}
+.ecard{width:116px;display:flex;flex-direction:column;gap:8px}
+.elabel{font-size:9.5px;letter-spacing:1px;text-transform:uppercase;color:var(--ink-faint)}
+.ecard.better .elabel{color:var(--tier-a)}
+.ecard figcaption{display:flex;flex-direction:column;gap:5px;align-items:flex-start}
+.ename{font-family:var(--font-display);font-size:14px;letter-spacing:.3px;color:var(--ink);line-height:1.2}
+.ebase{font-family:var(--font-mono);font-size:10px;color:var(--ink-faint);line-height:1.4}
+.earrow{align-self:center;margin-top:14px;font-family:var(--font-display);font-size:11px;
+  letter-spacing:1.4px;text-transform:uppercase;color:var(--ink-faint);writing-mode:vertical-rl;
+  transform:rotate(180deg)}
+.grade{display:inline-flex;align-items:center;gap:5px;height:22px;padding:0 7px;border-radius:6px;
+  font-family:var(--font-display);font-size:13px;font-weight:600;letter-spacing:.4px;
+  color:#17140f;border:1px solid oklch(0 0 0 / 22%);font-variant-numeric:tabular-nums}
+.grade i{font-style:normal;font-size:11px;opacity:.7}
+.gA{background:var(--tier-a)} .gB{background:var(--tier-b)} .gC{background:var(--tier-c)}
+.gD{background:var(--tier-d)} .gF{background:var(--tier-f)}
+.iprose{min-width:0}
+.iverdict{font-size:14.5px;line-height:1.62;color:var(--ink-dim);max-width:66ch}
+.iverdict b{color:var(--ink);font-weight:600}
+.reasons{display:flex;flex-wrap:wrap;align-items:center;gap:6px;margin-top:13px}
+.rlabel{font-size:9.5px;letter-spacing:1.1px;text-transform:uppercase;color:var(--ink-faint);margin-right:2px}
+.reason{padding:2.5px 9px;border-radius:999px;font-size:11px;line-height:1.5;white-space:nowrap;
+  color:var(--brand-soft);background:var(--fill);border:1px solid color-mix(in oklab, var(--brand) 32%, transparent)}
+.marginalia{position:relative;margin-top:15px;padding:2px 0 2px 15px;border-left:2px solid var(--brand-deep);
+  font-size:13px;font-style:italic;line-height:1.6;color:var(--ink-faint);max-width:58ch}
+.quill{position:absolute;left:-9px;top:2px;width:15px;height:15px;fill:none;stroke:var(--brand-deep);
+  stroke-width:1.3;stroke-linecap:round;background:#1b1917;padding:1px}
+
+/* ═══ III · the deck ════════════════════════════════════════════════════ */
+.deckgrid{display:grid;grid-template-columns:repeat(auto-fill, minmax(176px, 1fr));gap:18px 16px}
+.tile{display:flex;flex-direction:column;gap:9px}
+.tileart{position:relative}
+.xn{position:absolute;left:7px;top:7px;min-width:26px;height:22px;padding:0 6px;border-radius:6px;
+  display:inline-flex;align-items:center;justify-content:center;font-family:var(--font-display);
+  font-size:13px;color:var(--ink);background:oklch(0 0 0 / 68%);border:1px solid var(--line-strong);
+  font-variant-numeric:tabular-nums}
+.upg{position:absolute;right:7px;top:7px;width:22px;height:22px;border-radius:6px;
+  display:inline-flex;align-items:center;justify-content:center;font-family:var(--font-display);
+  font-size:15px;color:#17140f;background:var(--gold);border:1px solid oklch(0 0 0 / 22%)}
+.stamp{position:absolute;left:50%;top:52%;transform:translate(-50%,-50%) rotate(-9deg);
+  padding:5px 11px;border-radius:4px;font-family:var(--font-display);font-size:12.5px;
+  letter-spacing:1.6px;text-transform:uppercase;white-space:nowrap;color:var(--red);
+  background:oklch(0 0 0 / 74%);border:2px solid var(--red);
+  box-shadow:0 0 0 1px oklch(0 0 0 / 45%), 0 0 14px oklch(0.62 0.2 27 / 35%)}
+.stamp.half{color:var(--orange);border-color:var(--orange);
+  box-shadow:0 0 0 1px oklch(0 0 0 / 45%), 0 0 14px oklch(0.72 0.16 60 / 30%)}
+.tile.dead .cardart{border-color:color-mix(in oklab, var(--red) 55%, transparent)}
+.tile.dead .cardart img{filter:saturate(.25) brightness(.55)}
+.tile.partial .cardart{border-color:color-mix(in oklab, var(--orange) 45%, transparent)}
+.tile.partial .cardart img{filter:saturate(.6) brightness(.78)}
+.dname{font-family:var(--font-display);font-size:14.5px;letter-spacing:.3px;color:var(--ink);line-height:1.2}
+.dname i{font-style:normal;color:var(--gold);margin-left:2px}
+.tile.dead .dname{color:var(--red)}
+.dstats{display:flex;align-items:baseline;gap:5px;margin-top:4px;font-family:var(--font-mono);
+  font-size:10px;letter-spacing:.4px;text-transform:uppercase;color:var(--ink-faint);
+  font-variant-numeric:tabular-nums}
+.dstats b{font-family:var(--font-display);font-size:15px;font-weight:600;color:var(--ink)}
+.dstats b.d{color:var(--ink-dim)}
+.tile.dead .dstats b{color:var(--red)}
+.meter{height:3px;border-radius:2px;margin-top:7px;background:oklch(1 0 0 / 8%);overflow:hidden}
+.meter i{display:block;height:100%;background:var(--brand)}
+.tile.dead .meter{background:oklch(0.55 0.22 27 / 34%)}
+.tile.partial .meter i{background:var(--orange)}
+.deadnote{margin-top:6px;font-size:11px;font-style:italic;color:var(--red)}
+.tile.partial .deadnote{color:var(--orange)}
+
+/* ═══ IV · relics & potions ═════════════════════════════════════════════ */
+.twocol{display:grid;grid-template-columns:2fr 1fr;gap:18px;align-items:start}
+.panel{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:16px 18px}
+.panelhead{display:flex;align-items:baseline;gap:9px;margin-bottom:14px}
+.panelhead h3{font-family:var(--font-display);font-size:15px;letter-spacing:.5px;color:var(--ink)}
+.panelhead span{font-size:11.5px;color:var(--ink-faint)}
+.relicrow{display:flex;flex-wrap:wrap;gap:16px 18px}
+.relic{display:flex;flex-direction:column;align-items:center;gap:8px;width:104px;text-align:center}
+.rmeta{display:flex;flex-direction:column;align-items:center;gap:4px}
+.rname{font-family:var(--font-display);font-size:13px;line-height:1.15;color:var(--ink)}
+.rtag{font-family:var(--font-mono);font-size:10px;letter-spacing:.5px;color:var(--ink-faint);
+  padding:1px 7px;border-radius:999px;background:var(--fill);border:1px solid var(--line)}
+.rtag.starter{color:var(--ironclad-edge);border-color:color-mix(in oklab, var(--ironclad-edge) 45%, transparent)}
+.rtag.spentflag{color:var(--ink-faint);text-decoration:line-through}
+.relic.spent{opacity:.5}
+.relic.spent .plateframe{border-style:dashed}
+
+/* ═══ V · the epilogue ══════════════════════════════════════════════════ */
+.epigraph{max-width:62ch;margin:0 0 22px;padding-left:16px;border-left:2px solid var(--brand-deep);
+  font-family:var(--font-display);font-size:17px;line-height:1.6;color:var(--ink-dim);font-style:italic}
+.verdict-card{padding:18px 20px 19px;border-radius:12px;background:var(--card);
+  border:1px solid var(--line);box-shadow:var(--hard)}
+.verdict-card + .verdict-card{margin-top:14px}
+.verdict-card header{display:flex;align-items:baseline;gap:11px;margin-bottom:9px}
+.vnum{font-family:var(--font-display);font-size:13px;letter-spacing:2px;color:var(--brand);
+  min-width:26px}
+.verdict-card h3{flex:1;font-family:var(--font-display);font-size:17px;letter-spacing:.4px;color:var(--ink)}
+.backref{font-family:var(--font-mono);font-size:11px;letter-spacing:.5px;color:var(--brand-soft);
+  text-decoration:none;padding:2px 8px;border-radius:999px;border:1px solid var(--line);background:var(--fill)}
+.verdict-card p{font-size:14px;line-height:1.65;color:var(--ink-dim);max-width:78ch}
+.verdict-card p b{color:var(--ink);font-weight:600}
+
+.deadrow{display:flex;align-items:center;gap:12px;padding:9px 0}
+.deadrow + .deadrow{border-top:1px solid var(--line)}
+.deadrow .dname{flex:1;font-size:14px}
+.deadrow .dline{font-family:var(--font-mono);font-size:11px;color:var(--red);
+  font-variant-numeric:tabular-nums;letter-spacing:.4px}
+.recline{margin-top:13px;padding:11px 13px;border-radius:9px;background:oklch(0 0 0 / 22%);
+  border:1px solid var(--line);font-size:13.5px;line-height:1.55;color:var(--ink)}
+.recline b{color:var(--red)}
+
+.proxynums{display:grid;grid-template-columns:repeat(4,1fr);gap:1px;background:var(--line);
+  border:1px solid var(--line);border-radius:10px;overflow:hidden;margin-bottom:14px}
+.pn{padding:13px 14px;background:oklch(0 0 0 / 22%)}
+.pn .v{font-family:var(--font-display);font-size:26px;line-height:1.1;color:var(--ink);
+  font-variant-numeric:tabular-nums}
+.pn .k{margin-top:3px;font-size:11px;line-height:1.4;color:var(--ink-faint)}
+.pn.hl .v{color:var(--brand-soft)}
+.proxytext{font-size:13.5px;line-height:1.62;color:var(--ink-dim);max-width:80ch}
+.proxytext b{color:var(--ink);font-weight:600}
+.caveat{display:flex;align-items:flex-start;gap:9px;margin-top:12px}
+.proxychip{flex:0 0 auto;padding:2px 9px;border-radius:6px;font-family:var(--font-display);
+  font-size:11px;letter-spacing:1.2px;text-transform:uppercase;color:#17140f;background:var(--gold);
+  border:1px solid oklch(0 0 0 / 22%)}
+.caveat em{font-size:12.5px;line-height:1.55;color:var(--ink-faint)}
+.paceline{display:flex;align-items:center;gap:14px;flex-wrap:wrap}
+.pacebig{font-family:var(--font-display);font-size:28px;color:var(--ink);font-variant-numeric:tabular-nums}
+.pacebig small{font-size:13px;color:var(--ink-faint);font-family:var(--font-body)}
+.pacebar{flex:1;min-width:220px;height:8px;border-radius:4px;background:oklch(1 0 0 / 8%);position:relative;overflow:hidden}
+.pacebar i{position:absolute;left:0;top:0;bottom:0;background:linear-gradient(90deg,var(--brand-deep),var(--brand));border-radius:4px}
+.pacebar u{position:absolute;top:-4px;bottom:-4px;width:2px;background:var(--ink-faint)}
+.paceleg{display:flex;gap:16px;font-family:var(--font-mono);font-size:10.5px;letter-spacing:.4px;color:var(--ink-faint);margin-top:9px}
+
+.colophon{margin:44px 0 40px;padding-top:14px;border-top:1px solid var(--line);
+  display:flex;flex-wrap:wrap;gap:6px 14px;font-family:var(--font-mono);font-size:10.5px;
+  letter-spacing:.5px;color:var(--ink-faint);text-transform:uppercase}
+.colophon .dot{color:oklch(1 0 0 / 20%)}
+
+@media (max-width:1180px){
+  .ibody{grid-template-columns:minmax(0,1fr);gap:20px}
+  .plaque{grid-template-columns:repeat(5,1fr)}
+  .pcell:nth-child(5){border-right:0}
+}
+</style>
+</head>
+<body>
+
+<svg width="0" height="0" style="position:absolute" aria-hidden="true"><defs>
+<symbol id="i-fight" viewBox="0 0 16 16"><path d="M3 3.2l7.4 7.4M2.6 11.2l2.2 2.2M11.6 12.4l1.4 1.4M13 3.2L5.6 10.6M13.4 11.2l-2.2 2.2M4.4 12.4L3 13.8"/></symbol>
+<symbol id="i-elite" viewBox="0 0 16 16"><path d="M2.2 12.6L3.4 4l3.1 3.4L8 3.2l1.5 4.2L12.6 4l1.2 8.6z"/><path d="M2.6 12.6h10.8"/></symbol>
+<symbol id="i-boss" viewBox="0 0 16 16"><path d="M3 12.4V7.6a5 5 0 0 1 10 0v4.8l-2.4-1.8-2.6 1.9-2.6-1.9z"/><circle cx="6.1" cy="7.9" r="1.05"/><circle cx="9.9" cy="7.9" r="1.05"/></symbol>
+<symbol id="i-rest" viewBox="0 0 16 16"><path d="M8 2.4c2.3 2.4 3.4 4.2 3.4 5.9a3.4 3.4 0 0 1-6.8 0c0-1.7 1.1-3.5 3.4-5.9z"/><path d="M2.6 13.4h10.8"/></symbol>
+<symbol id="i-shop" viewBox="0 0 16 16"><path d="M3.4 5.6h9.2l-.9 8H4.3z"/><path d="M6 5.6V4.3a2 2 0 0 1 4 0v1.3"/></symbol>
+<symbol id="i-treasure" viewBox="0 0 16 16"><path d="M2.4 6.7h11.2v6.6H2.4z"/><path d="M2.4 6.7 4 3.3h8l1.6 3.4"/><path d="M8 6.7v6.6"/></symbol>
+<symbol id="i-event" viewBox="0 0 16 16"><circle cx="8" cy="8" r="5.6"/><path d="M6.5 6.4a1.6 1.6 0 0 1 3.1.4c0 1.1-1.6 1.3-1.6 2.4"/><path d="M8 11.3h.01"/></symbol>
+<symbol id="i-warn" viewBox="0 0 16 16"><path d="M8 2.4 14.6 13.6H1.4z"/><path d="M8 6.4v3.3"/><path d="M8 11.5h.01"/></symbol>
+<symbol id="i-quill" viewBox="0 0 16 16"><path d="M13.4 2.6c-5 .6-8 3-9 6.4-.5 1.7-.4 3.2-.4 4.4"/><path d="M4 13.4c4.6.4 7.6-1.8 8.6-5.2"/></symbol>
+</defs></svg>
+
+<!-- ═══ mocked app chrome ═════════════════════════════════════════════ -->
+<header class="titlebar">
+  <div class="tb-brand">
+    <svg class="gem" viewBox="0 0 24 24" aria-hidden="true">
+      <path d="M12 2.5 L20 7 L20 17 L12 21.5 L4 17 L4 7 Z"/>
+      <path class="facet" d="M12 7 L16.2 9.6 L16.2 14.4 L12 17 L7.8 14.4 L7.8 9.6 Z M12 2.5 L12 7 M20 7 L16.2 9.6 M20 17 L16.2 14.4 M12 21.5 L12 17 M4 17 L7.8 14.4 M4 7 L7.8 9.6"/>
+      <circle cx="12" cy="12" r="2.3" style="fill:var(--brand);stroke:none"/>
+    </svg>
+    <span>Reliquary</span>
+  </div>
+  <nav class="tabs">
+    <a class="tab" href="#">Home</a>
+    <a class="tab" href="#">Codex</a>
+    <a class="tab on" href="#">Journal</a>
+    <a class="tab" href="#">Settings</a>
+  </nav>
+  <div class="winctl">
+    <span class="ctl"><svg viewBox="0 0 12 12"><line x1="2.5" y1="6" x2="9.5" y2="6"/></svg></span>
+    <span class="ctl"><svg viewBox="0 0 12 12"><rect x="2.5" y="2.5" width="7" height="7" rx="1"/></svg></span>
+    <span class="ctl"><svg viewBox="0 0 12 12"><line x1="3" y1="3" x2="9" y2="9"/><line x1="9" y1="3" x2="3" y2="9"/></svg></span>
+  </div>
+</header>
+
+<nav class="subnav" aria-label="Journal sections">
+  <div class="measure">
+    <a class="navlink on" href="#">Journal</a>
+    <a class="navlink" href="#">Archive</a>
+    <a class="navlink" href="#">Compare</a>
+    <div class="subctl">
+      <span class="select">12 Aug · Ironclad · floor 45</span>
+      <span class="select">All runs</span>
+    </div>
+  </div>
+</nav>
+
+<main class="measure">
+
+  <!-- ═══ I · frontispiece ═══════════════════════════════════════════ -->
+  <section class="hero">
+    <div class="eyebrow">
+      <span class="roman">I</span><span class="dot">·</span>
+      <span>Run 2026-08-12T23-40-11Z-ironclad-a41f3c</span><span class="dot">·</span>
+      <span>game 1.3.0.123</span><span class="dot">·</span>
+      <span>45 rooms entered</span><span class="dot">·</span>
+      <span>schema 1</span>
+    </div>
+    <h1 class="runtitle">The <em>Demon Form</em> Ramp,<br>told in forty-five floors</h1>
+    <p class="shape">Deck shape <span class="core">Demon Form · Inflame · Whirlwind · Uppercut</span> — the ramp was built, and never doubled.</p>
+
+    <div class="verdictbar">
+      <span class="mark"></span>
+      <span class="word">Defeated</span>
+      <span class="rest">Act 3 Boss <span class="dot">·</span> floor <b>45</b> <span class="dot">·</span> <b>51m 33s</b></span>
+    </div>
+
+    <div class="plaque">
+      <div class="pcell char"><div class="k">Character</div><div class="v">IRONCLAD</div><div class="w">burning blood</div></div>
+      <div class="pcell"><div class="k">Act</div><div class="v tnum">3</div><div class="w">of 3</div></div>
+      <div class="pcell hp"><div class="k">HP</div><div class="v tnum">0/82</div><div class="w">62/82 entering the boss</div></div>
+      <div class="pcell gold"><div class="k">Gold</div><div class="v tnum">143</div><div class="w">unspent</div></div>
+      <div class="pcell"><div class="k">Asc</div><div class="v tnum">0</div><div class="w">—</div></div>
+      <div class="pcell"><div class="k">Deck</div><div class="v tnum">26</div><div class="w">19 unique</div></div>
+      <div class="pcell"><div class="k">Relics</div><div class="v tnum">6</div><div class="w">1 starter</div></div>
+      <div class="pcell"><div class="k">Potions</div><div class="v tnum">1</div><div class="w">1 spent</div></div>
+      <div class="pcell"><div class="k">Pace</div><div class="v tnum">1m 09s</div><div class="w">per floor · 51m 33s total</div></div>
+    </div>
+  </section>
+
+  <!-- ═══ II · the chronicle ═════════════════════════════════════════ -->
+  <section class="chapter">
+    <div class="sechead">
+      <span class="roman">II</span>
+      <h2 class="sectitle">The Chronicle</h2>
+      <span class="secnote">forty-five floors, in the order they happened · three of them were the run</span>
+    </div>
+    <div class="chronicle">
+<div class="actbreak">
+    <span class="rule"></span>
+    <span class="label"><span class="loz"></span>Act I<span class="loz"></span></span>
+    <span class="rule"></span>
+    <span class="actsub">floors 1 – 15</span>
+  </div><div class="entry quiet" id="f1" style="--nc:var(--ink-dim);--tc:var(--ink-dim)">
+    <div class="ftag">F1</div>
+    <div class="spine"><span class="node"></span></div>
+    <div class="ebody">
+      
+      <div class="etext">
+        <span class="rtype"><svg><use href="#i-fight"/></svg>Fight</span>
+        
+        
+      </div>
+    </div>
+  </div><div class="entry quiet" id="f2" style="--nc:var(--ink-dim);--tc:var(--ink-dim)">
+    <div class="ftag">F2</div>
+    <div class="spine"><span class="node"></span></div>
+    <div class="ebody">
+      
+      <div class="etext">
+        <span class="rtype"><svg><use href="#i-fight"/></svg>Fight</span>
+        
+        
+      </div>
+    </div>
+  </div><div class="entry hasart" id="f3" style="--nc:var(--ink-dim);--tc:var(--ink-dim)">
+    <div class="ftag">F3</div>
+    <div class="spine"><span class="node"></span></div>
+    <div class="ebody">
+      <span class="cardart sm" style="width:84px">
+    <img src="https://cdn.spire-codex.com/cards-full/stable/anger.webp" alt="Anger" loading="lazy" decoding="async" draggable="false" onerror="this.parentNode.classList.add('noart')">
+    <span class="plate"><span class="plate-name">Anger</span><span class="plate-rule"></span></span>
+    
+  </span>
+      <div class="etext">
+        <span class="rtype"><svg><use href="#i-fight"/></svg>Fight</span>
+        <div class="took">Took <b>Anger</b></div>
+        
+      </div>
+    </div>
+  </div><div class="entry quiet" id="f4" style="--nc:var(--brand);--tc:var(--brand)">
+    <div class="ftag">F4</div>
+    <div class="spine"><span class="node"></span></div>
+    <div class="ebody">
+      
+      <div class="etext">
+        <span class="rtype"><svg><use href="#i-event"/></svg>Event</span>
+        
+        
+      </div>
+    </div>
+  </div><div class="entry hasart" id="f5" style="--nc:var(--ink-dim);--tc:var(--ink-dim)">
+    <div class="ftag">F5</div>
+    <div class="spine"><span class="node"></span></div>
+    <div class="ebody">
+      <span class="cardart sm" style="width:84px">
+    <img src="https://cdn.spire-codex.com/cards-full/stable/shrug_it_off.webp" alt="Shrug It Off" loading="lazy" decoding="async" draggable="false" onerror="this.parentNode.classList.add('noart')">
+    <span class="plate"><span class="plate-name">Shrug It Off</span><span class="plate-rule"></span></span>
+    
+  </span>
+      <div class="etext">
+        <span class="rtype"><svg><use href="#i-fight"/></svg>Fight</span>
+        <div class="took">Took <b>Shrug It Off</b></div>
+        
+      </div>
+    </div>
+  </div><div class="entry hasart" id="f6" style="--nc:var(--gold);--tc:var(--gold)">
+    <div class="ftag">F6</div>
+    <div class="spine"><span class="node"></span></div>
+    <div class="ebody">
+      <span class="relicslot"><span class="sprite " style="--s:56px">
+    <img src="https://cdn.spire-codex.com/relics/amethyst_aubergine.webp" alt="Amethyst Aubergine" loading="lazy" decoding="async" draggable="false" onerror="this.parentNode.classList.add('noart')">
+    <span class="plate"><span class="plate-ini">AA</span></span>
+  </span></span>
+      <div class="etext">
+        <span class="rtype"><svg><use href="#i-treasure"/></svg>Treasure</span>
+        <div class="took">Claimed <b>Amethyst Aubergine</b> <span class="kindtag">relic</span></div>
+        
+      </div>
+    </div>
+  </div><div class="entry hasart" id="f7" style="--nc:var(--ink-dim);--tc:var(--ink-dim)">
+    <div class="ftag">F7</div>
+    <div class="spine"><span class="node"></span></div>
+    <div class="ebody">
+      <span class="cardart sm" style="width:84px">
+    <img src="https://cdn.spire-codex.com/cards-full/stable/pommel_strike.webp" alt="Pommel Strike" loading="lazy" decoding="async" draggable="false" onerror="this.parentNode.classList.add('noart')">
+    <span class="plate"><span class="plate-name">Pommel Strike</span><span class="plate-rule"></span></span>
+    
+  </span>
+      <div class="etext">
+        <span class="rtype"><svg><use href="#i-fight"/></svg>Fight</span>
+        <div class="took">Took <b>Pommel Strike</b></div>
+        
+      </div>
+    </div>
+  </div><div class="entry hasart" id="f8" style="--nc:var(--orange);--tc:var(--orange)">
+    <div class="ftag">F8</div>
+    <div class="spine"><span class="node"></span></div>
+    <div class="ebody">
+      <span class="relicslot"><span class="sprite " style="--s:56px">
+    <img src="https://cdn.spire-codex.com/relics/akabeko.webp" alt="Akabeko" loading="lazy" decoding="async" draggable="false" onerror="this.parentNode.classList.add('noart')">
+    <span class="plate"><span class="plate-ini">A</span></span>
+  </span></span>
+      <div class="etext">
+        <span class="rtype"><svg><use href="#i-elite"/></svg>Elite</span>
+        <div class="took">Claimed <b>Akabeko</b> <span class="kindtag">relic</span></div>
+        <div class="note">elite: 2 enemies</div>
+      </div>
+    </div>
+  </div><div class="entry" id="f9" style="--nc:var(--aqua);--tc:var(--aqua)">
+    <div class="ftag">F9</div>
+    <div class="spine"><span class="node"></span></div>
+    <div class="ebody">
+      
+      <div class="etext">
+        <span class="rtype"><svg><use href="#i-shop"/></svg>Shop</span>
+        
+        <div class="note">removed Strike · bought Whirlwind (156g)</div>
+      </div>
+    </div>
+  </div><div class="entry hasart" id="f10" style="--nc:var(--ink-dim);--tc:var(--ink-dim)">
+    <div class="ftag">F10</div>
+    <div class="spine"><span class="node"></span></div>
+    <div class="ebody">
+      <span class="cardart sm skipped" style="width:84px">
+    <img src="https://cdn.spire-codex.com/cards-full/stable/iron_wave.webp" alt="Iron Wave" loading="lazy" decoding="async" draggable="false" onerror="this.parentNode.classList.add('noart')">
+    <span class="plate"><span class="plate-name">Iron Wave</span><span class="plate-rule"></span></span>
+    
+  </span>
+      <div class="etext">
+        <span class="rtype"><svg><use href="#i-fight"/></svg>Fight</span>
+        <div class="took">Passed on <b>Iron Wave</b></div>
+        <div class="note">reward skipped</div>
+      </div>
+    </div>
+  </div><div class="entry" id="f11" style="--nc:var(--green);--tc:var(--green)">
+    <div class="ftag">F11</div>
+    <div class="spine"><span class="node"></span></div>
+    <div class="ebody">
+      
+      <div class="etext">
+        <span class="rtype"><svg><use href="#i-rest"/></svg>Rest</span>
+        
+        <div class="note">upgraded Bash</div>
+      </div>
+    </div>
+  </div><div class="entry hasart warnrow" id="f12" style="--nc:var(--ink-dim);--tc:var(--ink-dim)">
+    <div class="ftag">F12</div>
+    <div class="spine"><span class="node"></span></div>
+    <div class="ebody">
+      <span class="cardart sm" style="width:84px">
+    <img src="https://cdn.spire-codex.com/cards-full/stable/twin_strike.webp" alt="Twin Strike" loading="lazy" decoding="async" draggable="false" onerror="this.parentNode.classList.add('noart')">
+    <span class="plate"><span class="plate-name">Twin Strike</span><span class="plate-rule"></span></span>
+    
+  </span>
+      <div class="etext">
+        <span class="rtype"><svg><use href="#i-fight"/></svg>Fight</span>
+        <div class="took">Took <b>Twin Strike</b></div>
+        <div class="note warn"><svg class="warnmark"><use href="#i-warn"/></svg>skipped Feel No Pain</div>
+      </div>
+    </div>
+  </div><aside class="interrupt">
+    <div class="ihead">
+      <span class="ibadge"><svg><use href="#i-warn"/></svg></span>
+      <span class="ifloor">F12</span>
+      <h3 class="ititle">The exhaust package was already in your hand</h3>
+      <span class="irule"></span>
+      <span class="ikicker">Journey Review · finding I of III</span>
+    </div>
+    <div class="ibody">
+      <div class="ievidence">
+        <figure class="ecard better">
+          <span class="elabel">The better pick</span>
+          <span class="cardart " style="width:116px">
+    <img src="https://cdn.spire-codex.com/cards-full/stable/feel_no_pain.webp" alt="Feel No Pain" loading="lazy" decoding="async" draggable="false" onerror="this.parentNode.classList.add('noart')">
+    <span class="plate"><span class="plate-name">Feel No Pain</span><span class="plate-rule"></span></span>
+    
+  </span>
+          <figcaption>
+            <span class="ename">Feel No Pain</span>
+            <span class="grade gA">44<i>A</i></span>
+            <span class="ebase">44 for your deck · 31 standalone</span>
+            
+          </figcaption>
+        </figure>
+        <span class="earrow">instead of</span>
+        <figure class="ecard worse">
+          <span class="elabel">What you took</span>
+          <span class="cardart dim" style="width:116px">
+    <img src="https://cdn.spire-codex.com/cards-full/stable/twin_strike.webp" alt="Twin Strike" loading="lazy" decoding="async" draggable="false" onerror="this.parentNode.classList.add('noart')">
+    <span class="plate"><span class="plate-name">Twin Strike</span><span class="plate-rule"></span></span>
+    
+  </span>
+          <figcaption>
+            <span class="ename">Twin Strike</span>
+            <span class="grade gD">12<i>D</i></span>
+            
+          </figcaption>
+        </figure>
+      </div>
+      <div class="iprose">
+        <p class="iverdict"><b>Took Twin Strike over Feel No Pain.</b> Feel No Pain graded <b>44 (A)</b> against the deck you were actually holding, versus <b>31</b> standalone — the deck-conditioned score is the whole point: Bloodletting and Offering were already in the pile, and both want a free exhaust payoff. Twin Strike graded <b>12 (D)</b>, and it was <b>never played all run</b>.</p>
+        <div class="reasons">
+          <span class="rlabel">Why</span>
+          <span class="reason">Bloodletting 68%</span><span class="reason">Offering 71%</span><span class="reason">exhaust package already in deck</span>
+        </div>
+        <blockquote class="marginalia"><svg class="quill"><use href="#i-quill"/></svg>Twin Strike sat in the deck for 33 more floors and was drawn eleven times without ever being played.</blockquote>
+      </div>
+    </div>
+  </aside><div class="entry hasart" id="f13" style="--nc:var(--brand);--tc:var(--brand)">
+    <div class="ftag">F13</div>
+    <div class="spine"><span class="node"></span></div>
+    <div class="ebody">
+      <span class="cardart sm" style="width:84px">
+    <img src="https://cdn.spire-codex.com/cards-full/stable/bloodletting.webp" alt="Bloodletting" loading="lazy" decoding="async" draggable="false" onerror="this.parentNode.classList.add('noart')">
+    <span class="plate"><span class="plate-name">Bloodletting</span><span class="plate-rule"></span></span>
+    
+  </span>
+      <div class="etext">
+        <span class="rtype"><svg><use href="#i-event"/></svg>Event</span>
+        <div class="took">Took <b>Bloodletting</b></div>
+        
+      </div>
+    </div>
+  </div><div class="entry" id="f14" style="--nc:var(--green);--tc:var(--green)">
+    <div class="ftag">F14</div>
+    <div class="spine"><span class="node"></span></div>
+    <div class="ebody">
+      
+      <div class="etext">
+        <span class="rtype"><svg><use href="#i-rest"/></svg>Rest</span>
+        
+        <div class="note">upgraded Inflame</div>
+      </div>
+    </div>
+  </div><div class="entry hasart bossrow" id="f15" style="--nc:var(--red);--tc:var(--red)">
+    <div class="ftag">F15</div>
+    <div class="spine"><span class="node"></span></div>
+    <div class="ebody">
+      <span class="cardart sm" style="width:84px">
+    <img src="https://cdn.spire-codex.com/cards-full/stable/demon_form.webp" alt="Demon Form" loading="lazy" decoding="async" draggable="false" onerror="this.parentNode.classList.add('noart')">
+    <span class="plate"><span class="plate-name">Demon Form</span><span class="plate-rule"></span></span>
+    
+  </span>
+      <div class="etext">
+        <span class="rtype"><svg><use href="#i-boss"/></svg>Boss</span>
+        <div class="took">Took <b>Demon Form</b></div>
+        <div class="note">Act 1 boss down · 74/80 HP</div>
+      </div>
+    </div>
+  </div><div class="actbreak">
+    <span class="rule"></span>
+    <span class="label"><span class="loz"></span>Act II<span class="loz"></span></span>
+    <span class="rule"></span>
+    <span class="actsub">floors 16 – 30</span>
+  </div><div class="entry quiet" id="f16" style="--nc:var(--ink-dim);--tc:var(--ink-dim)">
+    <div class="ftag">F16</div>
+    <div class="spine"><span class="node"></span></div>
+    <div class="ebody">
+      
+      <div class="etext">
+        <span class="rtype"><svg><use href="#i-fight"/></svg>Fight</span>
+        
+        
+      </div>
+    </div>
+  </div><div class="entry hasart" id="f17" style="--nc:var(--ink-dim);--tc:var(--ink-dim)">
+    <div class="ftag">F17</div>
+    <div class="spine"><span class="node"></span></div>
+    <div class="ebody">
+      <span class="cardart sm" style="width:84px">
+    <img src="https://cdn.spire-codex.com/cards-full/stable/uppercut.webp" alt="Uppercut" loading="lazy" decoding="async" draggable="false" onerror="this.parentNode.classList.add('noart')">
+    <span class="plate"><span class="plate-name">Uppercut</span><span class="plate-rule"></span></span>
+    
+  </span>
+      <div class="etext">
+        <span class="rtype"><svg><use href="#i-fight"/></svg>Fight</span>
+        <div class="took">Took <b>Uppercut</b></div>
+        
+      </div>
+    </div>
+  </div><div class="entry quiet" id="f18" style="--nc:var(--brand);--tc:var(--brand)">
+    <div class="ftag">F18</div>
+    <div class="spine"><span class="node"></span></div>
+    <div class="ebody">
+      
+      <div class="etext">
+        <span class="rtype"><svg><use href="#i-event"/></svg>Event</span>
+        
+        
+      </div>
+    </div>
+  </div><div class="entry hasart" id="f19" style="--nc:var(--ink-dim);--tc:var(--ink-dim)">
+    <div class="ftag">F19</div>
+    <div class="spine"><span class="node"></span></div>
+    <div class="ebody">
+      <span class="cardart sm" style="width:84px">
+    <img src="https://cdn.spire-codex.com/cards-full/stable/carnage.webp" alt="Carnage" loading="lazy" decoding="async" draggable="false" onerror="this.parentNode.classList.add('noart')">
+    <span class="plate"><span class="plate-name">Carnage</span><span class="plate-rule"></span></span>
+    
+  </span>
+      <div class="etext">
+        <span class="rtype"><svg><use href="#i-fight"/></svg>Fight</span>
+        <div class="took">Took <b>Carnage</b></div>
+        
+      </div>
+    </div>
+  </div><div class="entry hasart" id="f20" style="--nc:var(--gold);--tc:var(--gold)">
+    <div class="ftag">F20</div>
+    <div class="spine"><span class="node"></span></div>
+    <div class="ebody">
+      <span class="relicslot"><span class="sprite " style="--s:56px">
+    <img src="https://cdn.spire-codex.com/relics/art_of_war.webp" alt="Art of War" loading="lazy" decoding="async" draggable="false" onerror="this.parentNode.classList.add('noart')">
+    <span class="plate"><span class="plate-ini">AO</span></span>
+  </span></span>
+      <div class="etext">
+        <span class="rtype"><svg><use href="#i-treasure"/></svg>Treasure</span>
+        <div class="took">Claimed <b>Art of War</b> <span class="kindtag">relic</span></div>
+        
+      </div>
+    </div>
+  </div><div class="entry hasart" id="f21" style="--nc:var(--ink-dim);--tc:var(--ink-dim)">
+    <div class="ftag">F21</div>
+    <div class="spine"><span class="node"></span></div>
+    <div class="ebody">
+      <span class="cardart sm" style="width:84px">
+    <img src="https://cdn.spire-codex.com/cards-full/stable/disarm.webp" alt="Disarm" loading="lazy" decoding="async" draggable="false" onerror="this.parentNode.classList.add('noart')">
+    <span class="plate"><span class="plate-name">Disarm</span><span class="plate-rule"></span></span>
+    
+  </span>
+      <div class="etext">
+        <span class="rtype"><svg><use href="#i-fight"/></svg>Fight</span>
+        <div class="took">Took <b>Disarm</b></div>
+        
+      </div>
+    </div>
+  </div><div class="entry" id="f22" style="--nc:var(--green);--tc:var(--green)">
+    <div class="ftag">F22</div>
+    <div class="spine"><span class="node"></span></div>
+    <div class="ebody">
+      
+      <div class="etext">
+        <span class="rtype"><svg><use href="#i-rest"/></svg>Rest</span>
+        
+        <div class="note">upgraded Shrug It Off</div>
+      </div>
+    </div>
+  </div><div class="entry hasart" id="f23" style="--nc:var(--orange);--tc:var(--orange)">
+    <div class="ftag">F23</div>
+    <div class="spine"><span class="node"></span></div>
+    <div class="ebody">
+      <span class="relicslot"><span class="sprite " style="--s:56px">
+    <img src="https://cdn.spire-codex.com/relics/alchemical_coffer.webp" alt="Alchemical Coffer" loading="lazy" decoding="async" draggable="false" onerror="this.parentNode.classList.add('noart')">
+    <span class="plate"><span class="plate-ini">AC</span></span>
+  </span></span>
+      <div class="etext">
+        <span class="rtype"><svg><use href="#i-elite"/></svg>Elite</span>
+        <div class="took">Claimed <b>Alchemical Coffer</b> <span class="kindtag">relic</span></div>
+        
+      </div>
+    </div>
+  </div><div class="entry hasart" id="f24" style="--nc:var(--ink-dim);--tc:var(--ink-dim)">
+    <div class="ftag">F24</div>
+    <div class="spine"><span class="node"></span></div>
+    <div class="ebody">
+      <span class="cardart sm" style="width:84px">
+    <img src="https://cdn.spire-codex.com/cards-full/stable/battle_trance.webp" alt="Battle Trance" loading="lazy" decoding="async" draggable="false" onerror="this.parentNode.classList.add('noart')">
+    <span class="plate"><span class="plate-name">Battle Trance</span><span class="plate-rule"></span></span>
+    
+  </span>
+      <div class="etext">
+        <span class="rtype"><svg><use href="#i-fight"/></svg>Fight</span>
+        <div class="took">Took <b>Battle Trance</b></div>
+        
+      </div>
+    </div>
+  </div><div class="entry hasart" id="f25" style="--nc:var(--brand);--tc:var(--brand)">
+    <div class="ftag">F25</div>
+    <div class="spine"><span class="node"></span></div>
+    <div class="ebody">
+      <span class="cardart sm" style="width:84px">
+    <img src="https://cdn.spire-codex.com/cards-full/stable/body_slam.webp" alt="Body Slam" loading="lazy" decoding="async" draggable="false" onerror="this.parentNode.classList.add('noart')">
+    <span class="plate"><span class="plate-name">Body Slam</span><span class="plate-rule"></span></span>
+    
+  </span>
+      <div class="etext">
+        <span class="rtype"><svg><use href="#i-event"/></svg>Event</span>
+        <div class="took">Took <b>Body Slam</b></div>
+        <div class="note">event add</div>
+      </div>
+    </div>
+  </div><div class="entry quiet" id="f26" style="--nc:var(--ink-dim);--tc:var(--ink-dim)">
+    <div class="ftag">F26</div>
+    <div class="spine"><span class="node"></span></div>
+    <div class="ebody">
+      
+      <div class="etext">
+        <span class="rtype"><svg><use href="#i-fight"/></svg>Fight</span>
+        
+        
+      </div>
+    </div>
+  </div><div class="entry" id="f27" style="--nc:var(--aqua);--tc:var(--aqua)">
+    <div class="ftag">F27</div>
+    <div class="spine"><span class="node"></span></div>
+    <div class="ebody">
+      
+      <div class="etext">
+        <span class="rtype"><svg><use href="#i-shop"/></svg>Shop</span>
+        
+        <div class="note">bought Ashwater (48g)</div>
+      </div>
+    </div>
+  </div><div class="entry warnrow" id="f28" style="--nc:var(--aqua);--tc:var(--aqua)">
+    <div class="ftag">F28</div>
+    <div class="spine"><span class="node"></span></div>
+    <div class="ebody">
+      
+      <div class="etext">
+        <span class="rtype"><svg><use href="#i-shop"/></svg>Shop</span>
+        
+        <div class="note warn"><svg class="warnmark"><use href="#i-warn"/></svg>skipped Barricade (187g) · bought Bread (203g)</div>
+      </div>
+    </div>
+  </div><aside class="interrupt">
+    <div class="ihead">
+      <span class="ibadge"><svg><use href="#i-warn"/></svg></span>
+      <span class="ifloor">F28</span>
+      <h3 class="ititle">Two hundred gold, spent on the wrong shelf</h3>
+      <span class="irule"></span>
+      <span class="ikicker">Journey Review · finding II of III</span>
+    </div>
+    <div class="ibody">
+      <div class="ievidence">
+        <figure class="ecard better">
+          <span class="elabel">The better pick</span>
+          <span class="cardart " style="width:116px">
+    <img src="https://cdn.spire-codex.com/cards-full/stable/barricade.webp" alt="Barricade" loading="lazy" decoding="async" draggable="false" onerror="this.parentNode.classList.add('noart')">
+    <span class="plate"><span class="plate-name">Barricade</span><span class="plate-rule"></span></span>
+    
+  </span>
+          <figcaption>
+            <span class="ename">Barricade</span>
+            <span class="grade gA">41<i>A</i></span>
+            
+            <span class="ebase">187g</span>
+          </figcaption>
+        </figure>
+        <span class="earrow">instead of</span>
+        <figure class="ecard worse">
+          <span class="elabel">What you took</span>
+          <span class="relicslot big dim"><span class="sprite " style="--s:72px">
+    <img src="https://cdn.spire-codex.com/relics/bread.webp" alt="Bread" loading="lazy" decoding="async" draggable="false" onerror="this.parentNode.classList.add('noart')">
+    <span class="plate"><span class="plate-ini">B</span></span>
+  </span></span>
+          <figcaption>
+            <span class="ename">Bread</span>
+            
+            <span class="ebase">203g</span>
+          </figcaption>
+        </figure>
+      </div>
+      <div class="iprose">
+        <p class="iverdict"><b>Left Barricade (187g) and bought Bread (203g).</b> Barricade graded <b>41 (A)</b>: you were running Body Slam and two copies of Shrug It Off, which is the exact shape that turns persistent block into damage. <b>Body Slam sat unplayed for 8 draws because block never persisted.</b></p>
+        <div class="reasons">
+          <span class="rlabel">Why</span>
+          <span class="reason">Body Slam 74%</span><span class="reason">Shrug It Off ×2 62%</span>
+        </div>
+        <blockquote class="marginalia"><svg class="quill"><use href="#i-quill"/></svg>The cheaper card was the better card. Sixteen gold separated the two.</blockquote>
+      </div>
+    </div>
+  </aside><div class="entry" id="f29" style="--nc:var(--green);--tc:var(--green)">
+    <div class="ftag">F29</div>
+    <div class="spine"><span class="node"></span></div>
+    <div class="ebody">
+      
+      <div class="etext">
+        <span class="rtype"><svg><use href="#i-rest"/></svg>Rest</span>
+        
+        <div class="note">upgraded Pommel Strike</div>
+      </div>
+    </div>
+  </div><div class="entry hasart bossrow" id="f30" style="--nc:var(--red);--tc:var(--red)">
+    <div class="ftag">F30</div>
+    <div class="spine"><span class="node"></span></div>
+    <div class="ebody">
+      <span class="cardart sm" style="width:84px">
+    <img src="https://cdn.spire-codex.com/cards-full/stable/offering.webp" alt="Offering" loading="lazy" decoding="async" draggable="false" onerror="this.parentNode.classList.add('noart')">
+    <span class="plate"><span class="plate-name">Offering</span><span class="plate-rule"></span></span>
+    
+  </span>
+      <div class="etext">
+        <span class="rtype"><svg><use href="#i-boss"/></svg>Boss</span>
+        <div class="took">Took <b>Offering</b></div>
+        <div class="note">Act 2 boss down · 58/82 HP</div>
+      </div>
+    </div>
+  </div><div class="actbreak">
+    <span class="rule"></span>
+    <span class="label"><span class="loz"></span>Act III<span class="loz"></span></span>
+    <span class="rule"></span>
+    <span class="actsub">floors 31 – 45</span>
+  </div><div class="entry hasart" id="f31" style="--nc:var(--ink-dim);--tc:var(--ink-dim)">
+    <div class="ftag">F31</div>
+    <div class="spine"><span class="node"></span></div>
+    <div class="ebody">
+      <span class="cardart sm" style="width:84px">
+    <img src="https://cdn.spire-codex.com/cards-full/stable/anger.webp" alt="Anger" loading="lazy" decoding="async" draggable="false" onerror="this.parentNode.classList.add('noart')">
+    <span class="plate"><span class="plate-name">Anger</span><span class="plate-rule"></span></span>
+    
+  </span>
+      <div class="etext">
+        <span class="rtype"><svg><use href="#i-fight"/></svg>Fight</span>
+        <div class="took">Took <b>Anger</b></div>
+        
+      </div>
+    </div>
+  </div><div class="entry quiet" id="f32" style="--nc:var(--ink-dim);--tc:var(--ink-dim)">
+    <div class="ftag">F32</div>
+    <div class="spine"><span class="node"></span></div>
+    <div class="ebody">
+      
+      <div class="etext">
+        <span class="rtype"><svg><use href="#i-fight"/></svg>Fight</span>
+        
+        
+      </div>
+    </div>
+  </div><div class="entry hasart warnrow" id="f33" style="--nc:var(--brand);--tc:var(--brand)">
+    <div class="ftag">F33</div>
+    <div class="spine"><span class="node"></span></div>
+    <div class="ebody">
+      <span class="cardart sm" style="width:84px">
+    <img src="https://cdn.spire-codex.com/cards-full/stable/impervious.webp" alt="Impervious" loading="lazy" decoding="async" draggable="false" onerror="this.parentNode.classList.add('noart')">
+    <span class="plate"><span class="plate-name">Impervious</span><span class="plate-rule"></span></span>
+    
+  </span>
+      <div class="etext">
+        <span class="rtype"><svg><use href="#i-event"/></svg>Event</span>
+        <div class="took">Took <b>Impervious</b></div>
+        <div class="note warn"><svg class="warnmark"><use href="#i-warn"/></svg>skipped Limit Break</div>
+      </div>
+    </div>
+  </div><aside class="interrupt">
+    <div class="ihead">
+      <span class="ibadge"><svg><use href="#i-warn"/></svg></span>
+      <span class="ifloor">F33</span>
+      <h3 class="ititle">One card from exponential</h3>
+      <span class="irule"></span>
+      <span class="ikicker">Journey Review · finding III of III</span>
+    </div>
+    <div class="ibody">
+      <div class="ievidence">
+        <figure class="ecard better">
+          <span class="elabel">The better pick</span>
+          <span class="cardart " style="width:116px">
+    <img src="https://cdn.spire-codex.com/cards-full/stable/limit_break.webp" alt="Limit Break" loading="lazy" decoding="async" draggable="false" onerror="this.parentNode.classList.add('noart')">
+    <span class="plate"><span class="plate-name">Limit Break</span><span class="plate-rule"></span></span>
+    
+  </span>
+          <figcaption>
+            <span class="ename">Limit Break</span>
+            <span class="grade gA">47<i>A</i></span>
+            
+            
+          </figcaption>
+        </figure>
+        <span class="earrow">instead of</span>
+        <figure class="ecard worse">
+          <span class="elabel">What you took</span>
+          <span class="cardart dim" style="width:116px">
+    <img src="https://cdn.spire-codex.com/cards-full/stable/impervious.webp" alt="Impervious" loading="lazy" decoding="async" draggable="false" onerror="this.parentNode.classList.add('noart')">
+    <span class="plate"><span class="plate-name">Impervious</span><span class="plate-rule"></span></span>
+    
+  </span>
+          <figcaption>
+            <span class="ename">Impervious</span>
+            <span class="grade gB">28<i>B</i></span>
+            
+          </figcaption>
+        </figure>
+      </div>
+      <div class="iprose">
+        <p class="iverdict"><b>Took Impervious over Limit Break.</b> Limit Break graded <b>47 (A)</b> — the highest deck-conditioned score of the run — off Demon Form, Inflame and a pair of Angers. Impervious graded <b>28 (B)</b>: fine, and not a mistake in isolation. But <b>the ramp package was one card from going exponential</b>, and this was the card.</p>
+        <div class="reasons">
+          <span class="rlabel">Why</span>
+          <span class="reason">Demon Form 77%</span><span class="reason">Inflame 66%</span><span class="reason">Anger ×2 58%</span>
+        </div>
+        <blockquote class="marginalia"><svg class="quill"><use href="#i-quill"/></svg>Demon Form was drawn twelve times and played seven. It never had a doubler.</blockquote>
+      </div>
+    </div>
+  </aside><div class="entry hasart" id="f34" style="--nc:var(--ink-dim);--tc:var(--ink-dim)">
+    <div class="ftag">F34</div>
+    <div class="spine"><span class="node"></span></div>
+    <div class="ebody">
+      <span class="cardart sm" style="width:84px">
+    <img src="https://cdn.spire-codex.com/cards-full/stable/carnage.webp" alt="Carnage" loading="lazy" decoding="async" draggable="false" onerror="this.parentNode.classList.add('noart')">
+    <span class="plate"><span class="plate-name">Carnage</span><span class="plate-rule"></span></span>
+    
+  </span>
+      <div class="etext">
+        <span class="rtype"><svg><use href="#i-fight"/></svg>Fight</span>
+        <div class="took">Took <b>Carnage</b></div>
+        
+      </div>
+    </div>
+  </div><div class="entry" id="f35" style="--nc:var(--green);--tc:var(--green)">
+    <div class="ftag">F35</div>
+    <div class="spine"><span class="node"></span></div>
+    <div class="ebody">
+      
+      <div class="etext">
+        <span class="rtype"><svg><use href="#i-rest"/></svg>Rest</span>
+        
+        <div class="note">upgraded Battle Trance</div>
+      </div>
+    </div>
+  </div><div class="entry" id="f36" style="--nc:var(--orange);--tc:var(--orange)">
+    <div class="ftag">F36</div>
+    <div class="spine"><span class="node"></span></div>
+    <div class="ebody">
+      
+      <div class="etext">
+        <span class="rtype"><svg><use href="#i-elite"/></svg>Elite</span>
+        
+        <div class="note">used Attack Potion</div>
+      </div>
+    </div>
+  </div><div class="entry quiet" id="f37" style="--nc:var(--ink-dim);--tc:var(--ink-dim)">
+    <div class="ftag">F37</div>
+    <div class="spine"><span class="node"></span></div>
+    <div class="ebody">
+      
+      <div class="etext">
+        <span class="rtype"><svg><use href="#i-fight"/></svg>Fight</span>
+        
+        
+      </div>
+    </div>
+  </div><div class="entry quiet" id="f38" style="--nc:var(--gold);--tc:var(--gold)">
+    <div class="ftag">F38</div>
+    <div class="spine"><span class="node"></span></div>
+    <div class="ebody">
+      
+      <div class="etext">
+        <span class="rtype"><svg><use href="#i-treasure"/></svg>Treasure</span>
+        
+        
+      </div>
+    </div>
+  </div><div class="entry quiet" id="f39" style="--nc:var(--ink-dim);--tc:var(--ink-dim)">
+    <div class="ftag">F39</div>
+    <div class="spine"><span class="node"></span></div>
+    <div class="ebody">
+      
+      <div class="etext">
+        <span class="rtype"><svg><use href="#i-fight"/></svg>Fight</span>
+        
+        
+      </div>
+    </div>
+  </div><div class="entry quiet" id="f40" style="--nc:var(--brand);--tc:var(--brand)">
+    <div class="ftag">F40</div>
+    <div class="spine"><span class="node"></span></div>
+    <div class="ebody">
+      
+      <div class="etext">
+        <span class="rtype"><svg><use href="#i-event"/></svg>Event</span>
+        
+        
+      </div>
+    </div>
+  </div><div class="entry quiet" id="f41" style="--nc:var(--ink-dim);--tc:var(--ink-dim)">
+    <div class="ftag">F41</div>
+    <div class="spine"><span class="node"></span></div>
+    <div class="ebody">
+      
+      <div class="etext">
+        <span class="rtype"><svg><use href="#i-fight"/></svg>Fight</span>
+        
+        
+      </div>
+    </div>
+  </div><div class="entry" id="f42" style="--nc:var(--aqua);--tc:var(--aqua)">
+    <div class="ftag">F42</div>
+    <div class="spine"><span class="node"></span></div>
+    <div class="ebody">
+      
+      <div class="etext">
+        <span class="rtype"><svg><use href="#i-shop"/></svg>Shop</span>
+        
+        <div class="note">nothing bought</div>
+      </div>
+    </div>
+  </div><div class="entry quiet" id="f43" style="--nc:var(--ink-dim);--tc:var(--ink-dim)">
+    <div class="ftag">F43</div>
+    <div class="spine"><span class="node"></span></div>
+    <div class="ebody">
+      
+      <div class="etext">
+        <span class="rtype"><svg><use href="#i-fight"/></svg>Fight</span>
+        
+        
+      </div>
+    </div>
+  </div><div class="entry" id="f44" style="--nc:var(--green);--tc:var(--green)">
+    <div class="ftag">F44</div>
+    <div class="spine"><span class="node"></span></div>
+    <div class="ebody">
+      
+      <div class="etext">
+        <span class="rtype"><svg><use href="#i-rest"/></svg>Rest</span>
+        
+        <div class="note">rested · 62/82 HP</div>
+      </div>
+    </div>
+  </div><div class="entry bossrow fatalrow" id="f45" style="--nc:var(--red);--tc:var(--red)">
+    <div class="ftag">F45</div>
+    <div class="spine"><span class="node"></span></div>
+    <div class="ebody">
+      
+      <div class="etext">
+        <span class="rtype"><svg><use href="#i-boss"/></svg>Boss</span>
+        
+        <div class="note fatal">DEFEATED — Act 3 Boss</div>
+      </div>
+    </div>
+  </div><div class="theend"><span class="rule"></span><span class="endword">Here the chronicle stops</span><span class="rule"></span></div>
+    </div>
+  </section>
+
+  <!-- ═══ III · the deck ═════════════════════════════════════════════ -->
+  <section class="chapter">
+    <div class="sechead">
+      <span class="roman">III</span>
+      <h2 class="sectitle">The Deck You Died With</h2>
+      <span class="secnote">26 cards · 19 groups · times played is approximate (150 ms pile sampling)</span>
+    </div>
+    <div class="deckgrid">
+<article class="tile">
+    <div class="tileart">
+      <span class="cardart ">
+    <img src="https://cdn.spire-codex.com/cards-full/stable/strike.webp" alt="Strike" loading="lazy" decoding="async" draggable="false" onerror="this.parentNode.classList.add('noart')">
+    <span class="plate"><span class="plate-name">Strike</span><span class="plate-rule"></span></span>
+    
+  </span>
+      <span class="xn">×4</span>
+      
+    </div>
+    <div class="tilefoot">
+      <div class="dname">Strike</div>
+      <div class="dstats"><b>41</b><span>played</span><b class="d">52</b><span>drawn</span></div>
+      <div class="meter"><i style="width:79%"></i></div>
+      
+    </div>
+  </article><article class="tile">
+    <div class="tileart">
+      <span class="cardart ">
+    <img src="https://cdn.spire-codex.com/cards-full/stable/defend.webp" alt="Defend" loading="lazy" decoding="async" draggable="false" onerror="this.parentNode.classList.add('noart')">
+    <span class="plate"><span class="plate-name">Defend</span><span class="plate-rule"></span></span>
+    
+  </span>
+      <span class="xn">×4</span>
+      
+    </div>
+    <div class="tilefoot">
+      <div class="dname">Defend</div>
+      <div class="dstats"><b>47</b><span>played</span><b class="d">55</b><span>drawn</span></div>
+      <div class="meter"><i style="width:85%"></i></div>
+      
+    </div>
+  </article><article class="tile">
+    <div class="tileart">
+      <span class="cardart ">
+    <img src="https://cdn.spire-codex.com/cards-full/stable/bash_upg.webp" alt="Bash" loading="lazy" decoding="async" draggable="false" onerror="this.parentNode.classList.add('noart')">
+    <span class="plate"><span class="plate-name">Bash</span><span class="plate-rule"></span></span>
+    
+  </span>
+      
+      <span class="upg">+</span>
+    </div>
+    <div class="tilefoot">
+      <div class="dname">Bash<i>+</i></div>
+      <div class="dstats"><b>19</b><span>played</span><b class="d">21</b><span>drawn</span></div>
+      <div class="meter"><i style="width:90%"></i></div>
+      
+    </div>
+  </article><article class="tile">
+    <div class="tileart">
+      <span class="cardart ">
+    <img src="https://cdn.spire-codex.com/cards-full/stable/anger.webp" alt="Anger" loading="lazy" decoding="async" draggable="false" onerror="this.parentNode.classList.add('noart')">
+    <span class="plate"><span class="plate-name">Anger</span><span class="plate-rule"></span></span>
+    
+  </span>
+      <span class="xn">×2</span>
+      
+    </div>
+    <div class="tilefoot">
+      <div class="dname">Anger</div>
+      <div class="dstats"><b>12</b><span>played</span><b class="d">15</b><span>drawn</span></div>
+      <div class="meter"><i style="width:80%"></i></div>
+      
+    </div>
+  </article><article class="tile dead">
+    <div class="tileart">
+      <span class="cardart ">
+    <img src="https://cdn.spire-codex.com/cards-full/stable/twin_strike.webp" alt="Twin Strike" loading="lazy" decoding="async" draggable="false" onerror="this.parentNode.classList.add('noart')">
+    <span class="plate"><span class="plate-name">Twin Strike</span><span class="plate-rule"></span></span>
+    <span class="stamp">Never played</span>
+  </span>
+      
+      
+    </div>
+    <div class="tilefoot">
+      <div class="dname">Twin Strike</div>
+      <div class="dstats"><b>0</b><span>played</span><b class="d">11</b><span>drawn</span></div>
+      <div class="meter"><i style="width:0%"></i></div>
+      <div class="deadnote">drawn 11× — never played</div>
+    </div>
+  </article><article class="tile">
+    <div class="tileart">
+      <span class="cardart ">
+    <img src="https://cdn.spire-codex.com/cards-full/stable/pommel_strike_upg.webp" alt="Pommel Strike" loading="lazy" decoding="async" draggable="false" onerror="this.parentNode.classList.add('noart')">
+    <span class="plate"><span class="plate-name">Pommel Strike</span><span class="plate-rule"></span></span>
+    
+  </span>
+      
+      <span class="upg">+</span>
+    </div>
+    <div class="tilefoot">
+      <div class="dname">Pommel Strike<i>+</i></div>
+      <div class="dstats"><b>22</b><span>played</span><b class="d">24</b><span>drawn</span></div>
+      <div class="meter"><i style="width:92%"></i></div>
+      
+    </div>
+  </article><article class="tile">
+    <div class="tileart">
+      <span class="cardart ">
+    <img src="https://cdn.spire-codex.com/cards-full/stable/shrug_it_off_upg.webp" alt="Shrug It Off" loading="lazy" decoding="async" draggable="false" onerror="this.parentNode.classList.add('noart')">
+    <span class="plate"><span class="plate-name">Shrug It Off</span><span class="plate-rule"></span></span>
+    
+  </span>
+      
+      <span class="upg">+</span>
+    </div>
+    <div class="tilefoot">
+      <div class="dname">Shrug It Off<i>+</i></div>
+      <div class="dstats"><b>16</b><span>played</span><b class="d">18</b><span>drawn</span></div>
+      <div class="meter"><i style="width:89%"></i></div>
+      
+    </div>
+  </article><article class="tile">
+    <div class="tileart">
+      <span class="cardart ">
+    <img src="https://cdn.spire-codex.com/cards-full/stable/shrug_it_off.webp" alt="Shrug It Off" loading="lazy" decoding="async" draggable="false" onerror="this.parentNode.classList.add('noart')">
+    <span class="plate"><span class="plate-name">Shrug It Off</span><span class="plate-rule"></span></span>
+    
+  </span>
+      
+      
+    </div>
+    <div class="tilefoot">
+      <div class="dname">Shrug It Off</div>
+      <div class="dstats"><b>18</b><span>played</span><b class="d">19</b><span>drawn</span></div>
+      <div class="meter"><i style="width:95%"></i></div>
+      
+    </div>
+  </article><article class="tile">
+    <div class="tileart">
+      <span class="cardart ">
+    <img src="https://cdn.spire-codex.com/cards-full/stable/whirlwind.webp" alt="Whirlwind" loading="lazy" decoding="async" draggable="false" onerror="this.parentNode.classList.add('noart')">
+    <span class="plate"><span class="plate-name">Whirlwind</span><span class="plate-rule"></span></span>
+    
+  </span>
+      
+      
+    </div>
+    <div class="tilefoot">
+      <div class="dname">Whirlwind</div>
+      <div class="dstats"><b>9</b><span>played</span><b class="d">13</b><span>drawn</span></div>
+      <div class="meter"><i style="width:69%"></i></div>
+      
+    </div>
+  </article><article class="tile">
+    <div class="tileart">
+      <span class="cardart ">
+    <img src="https://cdn.spire-codex.com/cards-full/stable/inflame_upg.webp" alt="Inflame" loading="lazy" decoding="async" draggable="false" onerror="this.parentNode.classList.add('noart')">
+    <span class="plate"><span class="plate-name">Inflame</span><span class="plate-rule"></span></span>
+    
+  </span>
+      
+      <span class="upg">+</span>
+    </div>
+    <div class="tilefoot">
+      <div class="dname">Inflame<i>+</i></div>
+      <div class="dstats"><b>15</b><span>played</span><b class="d">16</b><span>drawn</span></div>
+      <div class="meter"><i style="width:94%"></i></div>
+      
+    </div>
+  </article><article class="tile">
+    <div class="tileart">
+      <span class="cardart ">
+    <img src="https://cdn.spire-codex.com/cards-full/stable/demon_form.webp" alt="Demon Form" loading="lazy" decoding="async" draggable="false" onerror="this.parentNode.classList.add('noart')">
+    <span class="plate"><span class="plate-name">Demon Form</span><span class="plate-rule"></span></span>
+    
+  </span>
+      
+      
+    </div>
+    <div class="tilefoot">
+      <div class="dname">Demon Form</div>
+      <div class="dstats"><b>7</b><span>played</span><b class="d">12</b><span>drawn</span></div>
+      <div class="meter"><i style="width:58%"></i></div>
+      
+    </div>
+  </article><article class="tile partial">
+    <div class="tileart">
+      <span class="cardart ">
+    <img src="https://cdn.spire-codex.com/cards-full/stable/carnage.webp" alt="Carnage" loading="lazy" decoding="async" draggable="false" onerror="this.parentNode.classList.add('noart')">
+    <span class="plate"><span class="plate-name">Carnage</span><span class="plate-rule"></span></span>
+    <span class="stamp half">1 of 2 dead</span>
+  </span>
+      <span class="xn">×2</span>
+      
+    </div>
+    <div class="tilefoot">
+      <div class="dname">Carnage</div>
+      <div class="dstats"><b>11</b><span>played</span><b class="d">17</b><span>drawn</span></div>
+      <div class="meter"><i style="width:65%"></i></div>
+      <div class="deadnote">2nd copy never played</div>
+    </div>
+  </article><article class="tile">
+    <div class="tileart">
+      <span class="cardart ">
+    <img src="https://cdn.spire-codex.com/cards-full/stable/uppercut.webp" alt="Uppercut" loading="lazy" decoding="async" draggable="false" onerror="this.parentNode.classList.add('noart')">
+    <span class="plate"><span class="plate-name">Uppercut</span><span class="plate-rule"></span></span>
+    
+  </span>
+      
+      
+    </div>
+    <div class="tilefoot">
+      <div class="dname">Uppercut</div>
+      <div class="dstats"><b>13</b><span>played</span><b class="d">15</b><span>drawn</span></div>
+      <div class="meter"><i style="width:87%"></i></div>
+      
+    </div>
+  </article><article class="tile">
+    <div class="tileart">
+      <span class="cardart ">
+    <img src="https://cdn.spire-codex.com/cards-full/stable/disarm.webp" alt="Disarm" loading="lazy" decoding="async" draggable="false" onerror="this.parentNode.classList.add('noart')">
+    <span class="plate"><span class="plate-name">Disarm</span><span class="plate-rule"></span></span>
+    
+  </span>
+      
+      
+    </div>
+    <div class="tilefoot">
+      <div class="dname">Disarm</div>
+      <div class="dstats"><b>10</b><span>played</span><b class="d">11</b><span>drawn</span></div>
+      <div class="meter"><i style="width:91%"></i></div>
+      
+    </div>
+  </article><article class="tile">
+    <div class="tileart">
+      <span class="cardart ">
+    <img src="https://cdn.spire-codex.com/cards-full/stable/bloodletting.webp" alt="Bloodletting" loading="lazy" decoding="async" draggable="false" onerror="this.parentNode.classList.add('noart')">
+    <span class="plate"><span class="plate-name">Bloodletting</span><span class="plate-rule"></span></span>
+    
+  </span>
+      
+      
+    </div>
+    <div class="tilefoot">
+      <div class="dname">Bloodletting</div>
+      <div class="dstats"><b>14</b><span>played</span><b class="d">15</b><span>drawn</span></div>
+      <div class="meter"><i style="width:93%"></i></div>
+      
+    </div>
+  </article><article class="tile">
+    <div class="tileart">
+      <span class="cardart ">
+    <img src="https://cdn.spire-codex.com/cards-full/stable/battle_trance_upg.webp" alt="Battle Trance" loading="lazy" decoding="async" draggable="false" onerror="this.parentNode.classList.add('noart')">
+    <span class="plate"><span class="plate-name">Battle Trance</span><span class="plate-rule"></span></span>
+    
+  </span>
+      
+      <span class="upg">+</span>
+    </div>
+    <div class="tilefoot">
+      <div class="dname">Battle Trance<i>+</i></div>
+      <div class="dstats"><b>16</b><span>played</span><b class="d">16</b><span>drawn</span></div>
+      <div class="meter"><i style="width:100%"></i></div>
+      
+    </div>
+  </article><article class="tile">
+    <div class="tileart">
+      <span class="cardart ">
+    <img src="https://cdn.spire-codex.com/cards-full/stable/impervious.webp" alt="Impervious" loading="lazy" decoding="async" draggable="false" onerror="this.parentNode.classList.add('noart')">
+    <span class="plate"><span class="plate-name">Impervious</span><span class="plate-rule"></span></span>
+    
+  </span>
+      
+      
+    </div>
+    <div class="tilefoot">
+      <div class="dname">Impervious</div>
+      <div class="dstats"><b>5</b><span>played</span><b class="d">7</b><span>drawn</span></div>
+      <div class="meter"><i style="width:71%"></i></div>
+      
+    </div>
+  </article><article class="tile dead">
+    <div class="tileart">
+      <span class="cardart ">
+    <img src="https://cdn.spire-codex.com/cards-full/stable/body_slam.webp" alt="Body Slam" loading="lazy" decoding="async" draggable="false" onerror="this.parentNode.classList.add('noart')">
+    <span class="plate"><span class="plate-name">Body Slam</span><span class="plate-rule"></span></span>
+    <span class="stamp">Never played</span>
+  </span>
+      
+      
+    </div>
+    <div class="tilefoot">
+      <div class="dname">Body Slam</div>
+      <div class="dstats"><b>0</b><span>played</span><b class="d">8</b><span>drawn</span></div>
+      <div class="meter"><i style="width:0%"></i></div>
+      <div class="deadnote">drawn 8× — never played</div>
+    </div>
+  </article><article class="tile">
+    <div class="tileart">
+      <span class="cardart ">
+    <img src="https://cdn.spire-codex.com/cards-full/stable/offering.webp" alt="Offering" loading="lazy" decoding="async" draggable="false" onerror="this.parentNode.classList.add('noart')">
+    <span class="plate"><span class="plate-name">Offering</span><span class="plate-rule"></span></span>
+    
+  </span>
+      
+      
+    </div>
+    <div class="tilefoot">
+      <div class="dname">Offering</div>
+      <div class="dstats"><b>8</b><span>played</span><b class="d">9</b><span>drawn</span></div>
+      <div class="meter"><i style="width:89%"></i></div>
+      
+    </div>
+  </article>
+    </div>
+  </section>
+
+  <!-- ═══ IV · relics &amp; potions ══════════════════════════════════ -->
+  <section class="chapter">
+    <div class="sechead">
+      <span class="roman">IV</span>
+      <h2 class="sectitle">What You Carried</h2>
+      <span class="secnote">six relics · one potion held, one spent</span>
+    </div>
+    <div class="twocol">
+      <div class="panel">
+        <div class="panelhead"><h3>Relics</h3><span>6 · picked up at F6, F8, F20, F23, F28</span></div>
+        <div class="relicrow"><div class="relic">
+  <span class="plateframe"><span class="sprite " style="--s:56px">
+    <img src="https://cdn.spire-codex.com/relics/burning_blood.webp" alt="Burning Blood" loading="lazy" decoding="async" draggable="false" onerror="this.parentNode.classList.add('noart')">
+    <span class="plate"><span class="plate-ini">BB</span></span>
+  </span></span>
+  <div class="rmeta"><span class="rname">Burning Blood</span><span class="rtag starter">starter</span></div>
+</div><div class="relic">
+  <span class="plateframe"><span class="sprite " style="--s:56px">
+    <img src="https://cdn.spire-codex.com/relics/amethyst_aubergine.webp" alt="Amethyst Aubergine" loading="lazy" decoding="async" draggable="false" onerror="this.parentNode.classList.add('noart')">
+    <span class="plate"><span class="plate-ini">AA</span></span>
+  </span></span>
+  <div class="rmeta"><span class="rname">Amethyst Aubergine</span><span class="rtag">F6</span></div>
+</div><div class="relic">
+  <span class="plateframe"><span class="sprite " style="--s:56px">
+    <img src="https://cdn.spire-codex.com/relics/akabeko.webp" alt="Akabeko" loading="lazy" decoding="async" draggable="false" onerror="this.parentNode.classList.add('noart')">
+    <span class="plate"><span class="plate-ini">A</span></span>
+  </span></span>
+  <div class="rmeta"><span class="rname">Akabeko</span><span class="rtag">F8</span></div>
+</div><div class="relic">
+  <span class="plateframe"><span class="sprite " style="--s:56px">
+    <img src="https://cdn.spire-codex.com/relics/art_of_war.webp" alt="Art of War" loading="lazy" decoding="async" draggable="false" onerror="this.parentNode.classList.add('noart')">
+    <span class="plate"><span class="plate-ini">AO</span></span>
+  </span></span>
+  <div class="rmeta"><span class="rname">Art of War</span><span class="rtag">F20</span></div>
+</div><div class="relic">
+  <span class="plateframe"><span class="sprite " style="--s:56px">
+    <img src="https://cdn.spire-codex.com/relics/alchemical_coffer.webp" alt="Alchemical Coffer" loading="lazy" decoding="async" draggable="false" onerror="this.parentNode.classList.add('noart')">
+    <span class="plate"><span class="plate-ini">AC</span></span>
+  </span></span>
+  <div class="rmeta"><span class="rname">Alchemical Coffer</span><span class="rtag">F23</span></div>
+</div><div class="relic">
+  <span class="plateframe"><span class="sprite " style="--s:56px">
+    <img src="https://cdn.spire-codex.com/relics/bread.webp" alt="Bread" loading="lazy" decoding="async" draggable="false" onerror="this.parentNode.classList.add('noart')">
+    <span class="plate"><span class="plate-ini">B</span></span>
+  </span></span>
+  <div class="rmeta"><span class="rname">Bread</span><span class="rtag">F28</span></div>
+</div></div>
+      </div>
+      <div class="panel">
+        <div class="panelhead"><h3>Potions</h3><span>1 held at death</span></div>
+        <div class="relicrow">
+<div class="relic">
+  <span class="plateframe"><span class="sprite " style="--s:56px">
+    <img src="https://cdn.spire-codex.com/potions/ashwater.webp" alt="Ashwater" loading="lazy" decoding="async" draggable="false" onerror="this.parentNode.classList.add('noart')">
+    <span class="plate"><span class="plate-ini">A</span></span>
+  </span></span>
+  <div class="rmeta"><span class="rname">Ashwater</span><span class="rtag">held · F27</span></div>
+</div>
+<div class="relic spent">
+  <span class="plateframe"><span class="sprite " style="--s:56px">
+    <img src="https://cdn.spire-codex.com/potions/attack_potion.webp" alt="Attack Potion" loading="lazy" decoding="async" draggable="false" onerror="this.parentNode.classList.add('noart')">
+    <span class="plate"><span class="plate-ini">AP</span></span>
+  </span></span>
+  <div class="rmeta"><span class="rname">Attack Potion</span><span class="rtag spentflag">spent · F36</span></div>
+</div></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ═══ V · the epilogue ═══════════════════════════════════════════ -->
+  <section class="chapter">
+    <div class="sechead">
+      <span class="roman">V</span>
+      <h2 class="sectitle">Epilogue — The Journey Review</h2>
+      <span class="secnote">three findings, already marked where they happened</span>
+    </div>
+
+    <p class="epigraph">The Act 3 boss did not kill this run. Three offers did, and all three were graded
+    at the moment they were made — against the deck you were actually holding, not against the card in the abstract.</p>
+
+<article class="verdict-card">
+  <header>
+    <span class="vnum">I</span>
+    <h3>Took Twin Strike over Feel No Pain.</h3>
+    <a class="backref" href="#f12">↑ F12</a>
+  </header>
+  <p>Feel No Pain graded <b>44 (A)</b> against the deck you were actually holding, versus <b>31</b> standalone — the deck-conditioned score is the whole point: Bloodletting and Offering were already in the pile, and both want a free exhaust payoff. Twin Strike graded <b>12 (D)</b>, and it was <b>never played all run</b>.</p>
+  <div class="reasons">
+    <span class="rlabel">Why</span>
+    <span class="reason">Bloodletting 68%</span><span class="reason">Offering 71%</span><span class="reason">exhaust package already in deck</span>
+  </div>
+</article><article class="verdict-card">
+  <header>
+    <span class="vnum">II</span>
+    <h3>Left Barricade (187g) and bought Bread (203g).</h3>
+    <a class="backref" href="#f28">↑ F28</a>
+  </header>
+  <p>Barricade graded <b>41 (A)</b>: you were running Body Slam and two copies of Shrug It Off, which is the exact shape that turns persistent block into damage. <b>Body Slam sat unplayed for 8 draws because block never persisted.</b></p>
+  <div class="reasons">
+    <span class="rlabel">Why</span>
+    <span class="reason">Body Slam 74%</span><span class="reason">Shrug It Off ×2 62%</span>
+  </div>
+</article><article class="verdict-card">
+  <header>
+    <span class="vnum">III</span>
+    <h3>Took Impervious over Limit Break.</h3>
+    <a class="backref" href="#f33">↑ F33</a>
+  </header>
+  <p>Limit Break graded <b>47 (A)</b> — the highest deck-conditioned score of the run — off Demon Form, Inflame and a pair of Angers. Impervious graded <b>28 (B)</b>: fine, and not a mistake in isolation. But <b>the ramp package was one card from going exponential</b>, and this was the card.</p>
+  <div class="reasons">
+    <span class="rlabel">Why</span>
+    <span class="reason">Demon Form 77%</span><span class="reason">Inflame 66%</span><span class="reason">Anger ×2 58%</span>
+  </div>
+</article>
+
+    <div class="twocol" style="margin-top:22px">
+      <div class="panel">
+        <div class="panelhead"><h3>The cards you never played</h3><span>three dead draws in a 26-card deck</span></div>
+        <div class="deadrow">
+  <span class="plateframe sm"><span class="sprite " style="--s:38px">
+    <img src="https://cdn.spire-codex.com/cards/twin_strike.webp" alt="Twin Strike" loading="lazy" decoding="async" draggable="false" onerror="this.parentNode.classList.add('noart')">
+    <span class="plate"><span class="plate-ini">TS</span></span>
+  </span></span>
+  <span class="dname">Twin Strike</span>
+  <span class="dline">drawn 11 · played 0</span>
+</div><div class="deadrow">
+  <span class="plateframe sm"><span class="sprite " style="--s:38px">
+    <img src="https://cdn.spire-codex.com/cards/body_slam.webp" alt="Body Slam" loading="lazy" decoding="async" draggable="false" onerror="this.parentNode.classList.add('noart')">
+    <span class="plate"><span class="plate-ini">BS</span></span>
+  </span></span>
+  <span class="dname">Body Slam</span>
+  <span class="dline">drawn 8 · played 0</span>
+</div><div class="deadrow">
+  <span class="plateframe sm"><span class="sprite " style="--s:38px">
+    <img src="https://cdn.spire-codex.com/cards/carnage.webp" alt="Carnage" loading="lazy" decoding="async" draggable="false" onerror="this.parentNode.classList.add('noart')">
+    <span class="plate"><span class="plate-ini">C</span></span>
+  </span></span>
+  <span class="dname">2nd Carnage</span>
+  <span class="dline">2nd copy · played 0</span>
+</div>
+        <div class="recline">Three dead cards ≈ <b>one whole redraw per combat</b> — shop removals were available at F27 and F42.</div>
+      </div>
+      <div class="panel">
+        <div class="panelhead"><h3>Pace</h3><span>wall clock, per floor</span></div>
+        <div class="paceline">
+          <span class="pacebig tnum">1m 09s<small> / floor</small></span>
+        </div>
+        <div class="pacebar" style="margin-top:12px"><i style="width:39%"></i><u style="left:59%"></u></div>
+        <div class="paceleg"><span>this run 1m 09s</span><span>archive avg 1m 46s</span></div>
+        <p class="proxytext" style="margin-top:13px">Faster than your archive average (<b>1m 46s</b>).
+        Two shops passed with gold above <b>140</b>.</p>
+      </div>
+    </div>
+
+    <div class="panel" style="margin-top:18px">
+      <div class="panelhead"><h3>How common was this deck?</h3><span>community metrics · Ironclad slice</span></div>
+      <div class="proxynums">
+        <div class="pn"><div class="v tnum">4,210</div><div class="k">Ironclad runs in this bracket</div></div>
+        <div class="pn"><div class="v tnum">18,412</div><div class="k">total runs in the cohort</div></div>
+        <div class="pn hl"><div class="v tnum">58–61%</div><div class="k">your core is picked when offered</div></div>
+        <div class="pn hl"><div class="v tnum">9–14%</div><div class="k">of Ironclad runs field most of this core</div></div>
+      </div>
+      <p class="proxytext"><b>4,210 Ironclad runs</b> in this bracket (18,412 total). Your core
+      (<span class="reason" style="white-space:normal">Demon Form · Inflame · Whirlwind · Uppercut</span>)
+      is picked <b>58–61%</b> of the time when offered; decks fielding most of this core appear in roughly
+      <b>9–14%</b> of Ironclad runs.</p>
+      <div class="caveat">
+        <span class="proxychip">Proxy</span>
+        <em>The community API can&rsquo;t count exact deck matches — there is no endpoint that takes a deck and
+        returns how many players ran it. These are pick-rate overlaps, labelled as such, never a fabricated match count.</em>
+      </div>
+    </div>
+  </section>
+
+  <div class="colophon">
+    <span>Reliquary · Run Journal</span><span class="dot">·</span>
+    <span>Chronicle direction — static mockup</span><span class="dot">·</span>
+    <span>fixture run per docs/journal-plan.md §4.1</span><span class="dot">·</span>
+    <span>times played approximate</span><span class="dot">·</span>
+    <span>popularity figures are a labelled proxy</span>
+  </div>
+</main>
+</body>
+</html>
