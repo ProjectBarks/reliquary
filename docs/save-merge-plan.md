@@ -459,9 +459,10 @@ cohort baselines ("your 2P average") update to include them.
 
 # User decisions (2026-08-14)
 
-- **No automatic import of pre-Reliquary history runs.** The retroactive import of
-  the ~60 existing save-only runs ships as a manual **button in Settings**
-  ("Import past runs from the game's save history") â€” user-triggered, idempotent,
-  reporting how many were imported/skipped. Merging saves into runs the journal
-  itself recorded (close-time + watcher + startup sweep for journal-known runs)
-  stays automatic as planned.
+- **Pre-Reliquary history is NEVER imported in this phase.** No auto-import and
+  no Settings button yet — bulk import is fully deferred behind a future
+  setting (WP-S3 stays on the shelf). What ships now is only the automatic
+  JOIN: listen for writes/edits to the game's save files and merge each
+  terminal file into the run the journal itself recorded (exact runStartTime
+  match; close/suspend triggers + fs.watch + startup sweep). Save files for
+  runs the journal never recorded are left entirely alone.
