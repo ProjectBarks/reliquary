@@ -671,3 +671,287 @@ asar.unpacked forked bundles need `.mjs` — the recorder is main-process so no 
 but verify the runs dir resolves under the packaged userData). Acceptance: full
 quit/resume/abandon cycle on a packaged build writes/reads `userData/runs/` correctly;
 catalog survives an app update (schema untouched).
+
+---
+
+# Audit findings
+
+Adversarial review of everything above against the live sources
+(`src/main/scry/{readers,models,provider,connection,ReaderHost,readerProcess,readerProtocol,scryObject}.ts`,
+`src/main/index.ts`, `src/main/codex/CompendiumService.ts`, `src/main/settings/SettingsStore.ts`,
+`src/shared/types.ts`) and the fixed UI (`docs/mockups/journal-blend-spec.md`).
+Verdict at the end. **The policy layer (§2, §5) survives; the wiring premise in §3.1 does not.**
+
+## A. Citation table
+
+| # | Plan claim | Cited | Status |
+|---|---|---|---|
+| 1 | Reader polls at **~150 ms**, cited to `provider.ts:41-43` | — | **REFUTED (both).** Poll interval is `POLL_MS = 250` (`readerProcess.ts:31`); detect loop is 2 s (`:30`). `provider.ts:41-43` is the `OFFER_STABLE_POLLS` comment, which itself still says "~450ms at 150ms" — a stale comment the plan inherited. Consequence: "3 consecutive polls" = 750 ms, 10 s debounce = 40 polls. |
+| 2 | `readNGameState` non-null only when scene is `NRun` | `readers.ts:173-176` | **VERIFIED** (`:176`). **Incomplete**: it also returns null when `GlobalUi` is absent (`:178-179`), which per `models.ts:636-640` happens *inside* a live run while it loads/tears down. So `nGame: null` has three causes, not two. |
+| 3 | Main menu is a recognised scene reading as `nGame: null` | `models.ts:252`, `NGame.getCurrentScene` 674-681 | **VERIFIED** (`NMainMenuClassName` at `:252`; `getCurrentScene` 674-681 maps it to a plain `ScryObject`, so `readNGameState` bails at `:176`). |
+| 4 | Character id via `findLocalPlayer` → `getCharacterId()`; "reports transient `''`"; provider ignores empties and resets on real change | `readers.ts:215`, `models.ts:126-129`, `provider.ts:302-309`, `307`, `642-654` | **VERIFIED with a correction.** `readers.ts:215` yields `null` (not `''`) when there is no local player; `''` only exists in the provider's coalescing (`provider.ts:305`). Reset-on-change (`:307`) and `resetRunState` (`:642-654`) verified. Also: `findLocalPlayer` returns null whenever `LocalContext.NetId` is null (`models.ts:745-749`) — a null NetId silently disables character **and** deck, i.e. the whole recorder. |
+| 5 | Act index from `run._state._currentActIndex`, "monotonically non-decreasing, 0-based" | `readers.ts:214` | **PARTLY REFUTED.** Field verified (`models.ts:262-265`), but the read is `safe(() => run._state?._currentActIndex ?? 0, 0)` — **it falls back to 0 on an absent `_state` or a throw**, and `idleNGameState()` also emits `currentActIndex: 0` (`provider.ts:782`). Act is therefore *not* monotonic across transitions, and "act 0" is indistinguishable from "unknown". See defect A4. |
+| 6 | Room type only `combat/merchant/event/other` | `readers.ts:183-187` | **VERIFIED.** |
+| 7 | `isGameOver` = overlay-stack scan, boolean only, no death/victory variant | `readers.ts:189-195`, `models.ts:253-254` | **VERIFIED.** Scans the whole stack (not just the top) with `safe(...,false)` per entry, so a freed entry reads false. Flicker risk is low by construction (exact class-name equality); the realistic failure is a **missed** game-over, not a false one. |
+| 8 | **`Player.Deck` readable any time in a run, unconditionally in `readPileState`** | `readers.ts:89-107`, `models.ts:142-146` | **VERIFIED as a reader-level claim** (read before the combat-room branch, `readers.ts:89-103`; model comment `:134-141`). **Two caveats the plan misses**: (a) the read is wrapped in try/catch and *falls back to `[]`* (`:99-103`) — a failed read is indistinguishable from "no deck"; (b) `List.map` walks `0..length-1` where `length` is `_size` captured at construction and `at()` reads a `_version`-keyed array (`scryObject.ts:212-250`), and `readPileState` **drops undefined slots** (`readers.ts:84`) — so a mid-mutation read yields a **short but non-empty** deck. See defect A3. Its runtime availability *during combat* is asserted by a code comment, never verified — see Q11. |
+| 9 | `RunState._players` is a `List<Player>`; `Player` carries `NetId`; `findLocalPlayer` walks it against `LocalContext.NetId` | `models.ts:262-269`, `117-121`, `713-721`, `742-751` | **VERIFIED, all four** (`_players` 266-268; `NetId` 118-121; `LocalContext.NetId` 713-721; `findLocalPlayer` 742-750). The "plumbing already ported" claim is correct; `playerCount` is ~10 lines using `List.length`. Whether remote players actually populate `_players` remains decomp-implied, exactly as the plan states. |
+| 10 | `processGone` → `handleProcessGone()` resets and emits idle | `readerProtocol.ts:43`, `provider.ts:271-282` | **VERIFIED.** **Additional fact the plan does not know**: the reader **synthesises** `processGone` after 40 consecutive failed polls with the game still running (`readerProcess.ts:180-183`), and sends none at all when the *child* dies and respawns (`processGone()` is only reachable via `detect()` while connected, `:70`). So `processGone` ≠ "game gone", and "game gone" does not always produce `processGone`. |
+| 11 | Window detection / `process` message shape | `connection.ts:35-54`, `19-20`; `readerProtocol.ts:36-41`, `42` | **VERIFIED, all.** |
+| 12 | Reader restarts with backoff; last snapshot cached | `ReaderHost.ts:24-26`, `39` | **VERIFIED.** |
+| 13 | Game build version | `readers.ts:411-419` | **VERIFIED.** |
+| 14 | **`emitSnapshot()` + `onProcess` are chokepoints through which "everything §1 lists already flows"; no provider surgery** | `index.ts:173-206`, `210-237` | **REFUTED — the central defect.** The functions exist at those exact lines and are called unconditionally (dashboard open or not), but they carry the *derived, deduplicated* renderer contract, which omits nearly every signal the recorder needs. See defect A1 for the itemised proof. |
+| 15 | `handle()` invoke wrapper resolves `{data}`/`{error}`, never rejects | `index.ts:265-273` | **VERIFIED** (`telemetry.guardAsync` + fallback). |
+| 16 | Push channel pattern / `RequestState` replays every key | `index.ts:123`, `297-309`, `preload/index.ts:85-101` | **VERIFIED.** A new `journal.currentRun` key must be added to `Sts2StateMap` (`types.ts:213-222`) for `lastState` typing — already in WP4's file list. |
+| 17 | `CompendiumService.saveDisk` is a plain `writeFile` (weaker than temp+rename) | `CompendiumService.ts:358-373` | **VERIFIED, exactly those lines.** |
+| 18 | `SettingsStore` writes synchronously | `SettingsStore.ts:37-45` | **VERIFIED, exactly those lines.** |
+| 19 | `fs.rename` replaces an existing file on Windows | §3.3 | **VERIFIED** (Node maps to `MoveFileEx` with `MOVEFILE_REPLACE_EXISTING`; no unlink-first needed). The real Win32 gaps are different — see A9. |
+| 20 | Schema version present in both run files and catalog | §3.3, §3.4 | **VERIFIED** (`"schema": 1` in both). |
+| 21 | Codex route-tree factory precedent | `renderer/src/codex/routes.tsx:52` | **VERIFIED** (factory exists; `App.tsx` owns app shape). |
+
+## B. Confirmed defects
+
+### A1 — CRITICAL — The recorder cannot be built on `emitSnapshot`; §3.1 must tap the raw stream
+
+`emitSnapshot` is the *renderer* contract. Itemised, at that chokepoint the recorder would receive:
+
+- **No owned deck.** `Sts2PileState` is `{draw, hand, discard}` (`types.ts:80-84`); `toPileState`
+  consumes `raw.deck` internally for advice (`provider.ts:588`, `602-636`) and never emits it.
+  **The entire identity backbone of §2 is not present at the chokepoint.**
+- **No exhaust pile** (same type) — needed by journal-plan §3.1's play detection *and* rendered by
+  the LIVE mockup's "Combat piles" panel.
+- **No per-instance identity.** `Sts2Card` has no `baseAddress` (`types.ts:47-61`); `RawCard` does
+  (`readers.ts:36`). Without it, drawn/played tracking (journal-plan §3.1, the Deck Ledger's two
+  numeric columns) is impossible.
+- **No offered ids, costs, or kinds.** `Sts2StatPanel` carries only geometry, a *display name*, and
+  stat rows (`types.ts:127-168`). Pick inference needs `offered[]` **ids** and shop **prices**
+  (`RawItem.id/cost`, `readers.ts:225-237`), which are dropped in `toLayoutState`.
+- **No numeric advice.** `applyDeckAdvice` reduces `score` to a letter grade (`provider.ts:747-754`);
+  `offer_shown.advice {score, base, reasons}` (journal-plan §2.2) cannot be reconstructed.
+- **Deduplicated, so "polls" are not observable.** Every `poll*` emits only on JSON change
+  (`provider.ts:341-345, 352-356, 378-382, 389-408`). "Require the same values for 3 consecutive
+  polls" (§2.3, §3.2) is **unimplementable** on a stream that collapses identical polls into one
+  event, and "10 s of `nGame: null`" degenerates to a single edge plus a timer.
+- **No error context.** `readFailed` / `errorStreak` never reach `emitSnapshot`.
+
+**Fix (fold into WP3, and edit §3.1):** add a third callback to `ScryProviderCallbacks`
+(`provider.ts:52-55`) — `onRaw(raw: RawSnapshot, ctx: { detected: boolean; errorStreak: number; gameVersion: string | null })` —
+invoked in the `'snapshot'` case (`provider.ts:215-221`) *before* the four `poll*` calls, plus
+pass-throughs for `processGone`, `readFailed` and `gameVersion`. `RunRecorder.observe(raw, ctx)`
+consumes `RawSnapshot` (`readerProtocol.ts:22-27`). `emitSnapshot` keeps exactly one job:
+publishing the derived `journal.currentRun` key. This is what journal-plan §2.2 originally
+specified ("provider exposes a tap, or the recorder is called from `onReaderMessage`"); §3.1
+regressed it. WP3's file list must add `src/main/scry/provider.ts` and `readerProtocol.ts`.
+
+### A2 — HIGH — The EVOLVED tolerance rejects normal unobserved play (upgrades are not absorbed)
+
+§2.3 defines `removed = C.deck ∖ F.deck` over `"<ID>#<upgradeLevel>"` strings with
+`|removed| ≤ max(2, ceil(0.15·|C.deck|))` and retention `≥ 0.75`, and asserts "upgrades count as
+remove+add, which the tolerance absorbs". Arithmetic: a suspension observed at the starter deck
+(`|C.deck| = 12`) gives a budget of **2**. Three campfire upgrades during unobserved play produce
+`|removed| = 3` → EVOLVED fails → **D6: new file, and the real run is marked
+`abandoned(superseded)`**. This is precisely the case §1.5 gap 6 calls "the largest identity
+problem". Retention fails too (9/12 = 0.75 is borderline; five upgrades gives 0.58).
+
+**Fix (WP3, §2.3):** evaluate the predicate on the **base-id multiset** (strip `#upg`):
+`removedIds = C.ids ∖ F.ids` with the stated tolerance, retention `≥ 0.75` over ids, **plus** an
+upgrade-monotonicity check (for every surviving id, `sum(upgradeLevels)` in F ≥ that in C).
+Upgrades then cost nothing, genuine removals still count, and a deck that *loses* upgrade levels
+is correctly refused.
+
+### A3 — HIGH — A partial deck read is non-empty and will be treated as identity
+
+`readPileState` drops null slots (`readers.ts:80-85`) and swallows read failures into `deck = []`
+(`:99-103`); `List` fixes `length` from `_size` at construction and re-materialises `_items` on a
+`_version` change (`scryObject.ts:212-235`). A read racing a game-side mutation therefore yields a
+**short deck of real cards** — which passes §3.2's "non-empty deck" sighting gate, produces a wrong
+`deckHash`, and can look like DIVERGED (D6 → wrongly supersede a live run) or like a regression.
+
+**Fix (WP1 + WP3):** have the reader report `deckSize` (the `_size` value) alongside the
+materialised array, and have the recorder **discard any poll where `deck.length !== deckSize`**;
+require the size *and* hash to be stable across 3 consecutive polls before a fingerprint is minted.
+Never mint a fingerprint from a poll whose `nGame` is null or whose `pile` is null.
+
+### A4 — HIGH — `act` conflates "act 1" with "unknown", breaking D3/D7
+
+`currentActIndex` falls back to `0` on an absent `_state` or any throw (`readers.ts:214`), and the
+idle state also reports `0` (`provider.ts:782`). During a load, an act-2 run can report act 0 for a
+poll or more. D7 ("EXACT deck but `act < C.act`" → new file + anomaly telemetry) then fires on a
+perfectly normal resume, and D3's `act >= C.act` gate fails.
+
+**Fix (WP1):** make it `currentActIndex: number | null` (null when `_state` is absent) through
+`RawNGameState` → `Sts2NGameState`; the matcher refuses to build a fingerprint from a null act, and
+D7 only fires on two non-null acts. The renderer already renders "act ?" gracefully as a dash.
+
+### A5 — MEDIUM-HIGH — Supersession is eager and destructive; and save-scumming has no rule
+
+§2.4 marks older same-character suspended runs `abandoned(superseded)` **the moment a sighting
+occurs**. Combined with A3/A4 (or a torn read that pairs a new `characterId` with a stale deck —
+`nGame` and `pile` are separate scene walks in one poll, `readerProcess.ts:156-161`), a *transient*
+observation can permanently retire a live run. Separately, save restoration (deck **regresses** to a
+subset) is unnamed: a small scum lands in EVOLVED by accident and is mislabelled
+`unobserved-play`; a large one (`act < C.act`) falls through D2–D6 to **D6 → new file + supersede
+the real run**. D7 only covers the EXACT-deck case.
+
+**Fix (WP3, §2.4/§5.1):** (a) make supersession **deferred and idempotent** — a sighting selects a
+match immediately, but a *competing* run is only demoted once the new run is confirmed (first deck
+mutation, or first `room_enter` after the sighting, or 60 s of continuous recording); (b) add a
+**REGRESSED** predicate before DIVERGED: `F.deck ⊆ C.deck` (multiset) and `|C.deck ∖ F.deck| ≥ 1`
+with no additions → **resume `C` with `gap.reason:'save-restore'`, regardless of act**, and never
+supersede on a subset match. Both rules only ever *avoid* destructive transitions, so neither can
+make a wrong answer worse.
+
+### A6 — MEDIUM — The catalog cannot answer the questions the matcher asks it
+
+§3.4 asserts "matching never opens run files except the single chosen candidate", but EVOLVED,
+D4's `F.deck ⊇ C.deck`, and REGRESSED all need the candidate's **deck multiset**, and the entry
+carries only `deckHash`, `deckSize`, `core`.
+
+**Fix (WP2):** add `deck: string[]` (the `"<ID>#<upg>"` multiset, ~26 short strings) to
+`CatalogEntry`, at minimum for non-terminal states. Cost is ~1 KB/run; it keeps the stated
+"candidates from the catalog alone" invariant true.
+
+### A7 — MEDIUM — Room counting undercounts consecutive same-type rooms
+
+Room counting is specified off `roomType` changes (journal-plan §2.2, inherited here). Two
+consecutive `combat` rooms produce **no** `roomType` edge; the only reliable boundary in the read
+set is the map/travel cycle (`isMapOpen`, `isTraveling` — `readers.ts:207-208`). Rooms feed pace,
+`R##` labels and the header's "≈ floor", so a silent undercount corrupts three visible numbers.
+
+**Fix (WP3):** treat the **falling edge of `isTraveling`** (with `roomType` sampled after it
+stabilises) as the room boundary; keep the `roomType` edge as a secondary trigger for the first
+room after a sighting. Add telemetry comparing the two counters so the rule can be corrected from
+the field.
+
+### A8 — MEDIUM — No cross-process write guard (the capture-run exemption is real)
+
+`index.ts:435` exempts `SPECTRA_CAPTURE` runs from the single-instance lock, and WP5's own
+acceptance runs the app with `SPECTRA_STUB` + a fixture. Two processes sharing one `userData`
+means two `RunStore`s: per-file temp+rename gives no mutual exclusion, and `catalog.json`
+last-writer-wins can clobber a live run's row (or a rebuild-by-scan can race a live flush).
+
+**Fix (WP2):** `RunStore` refuses all writes unless the instance owns the single-instance lock
+(thread the `hasLock` value from `index.ts:435-439` into its constructor); `SPECTRA_JOURNAL_STUB`
+and any capture run write to `userData/runs-stub/` instead. Reads stay allowed everywhere.
+
+### A9 — MEDIUM — Atomic-write details on Win32
+
+`fs.rename`-over-target is correct (see A-table 19), but three things are missing: (a) **no fsync**
+of the temp file before rename — power loss can leave a zero-length or partial target, which is the
+one failure temp+rename is supposed to prevent (WP2's SIGKILL test does *not* exercise this, since
+the page cache survives a process kill); (b) **no retry** on `EPERM`/`EBUSY`/`EACCES`, which
+Defender/Search/backup agents produce on `AppData` regularly; (c) a **fixed `.tmp` name** collides
+between the run flusher and the catalog flusher on a shared debounce. Also `will-quit` fires
+**twice** (`index.ts:566-584` preventDefaults, then re-quits), so any synchronous flush hook must
+be idempotent.
+
+**Fix (WP2):** `write(<file>.<pid>.<n>.tmp)` → `fsync(fd)` → `close` → `rename` with a 3× retry at
+50/150/400 ms on EPERM/EBUSY/EACCES → best-effort dir fsync; idempotent `will-quit` flush; extend
+the WP2 acceptance to include a torn-tmp fixture (truncated JSON) as well as the kill test.
+
+### A10 — MEDIUM — Startup scan cost is unbounded and on the critical path
+
+"Rebuild every entry from each file's header + snapshot" requires `JSON.parse` of the **whole**
+file (events included). 300 runs × 100–600 KB is 30–180 MB of synchronous parse on the main
+process at launch, before the first sighting can be matched.
+
+**Fix (WP2):** keep `{mtimeMs, size}` per entry in the catalog and full-parse only files whose stat
+differs (or that are missing/inconsistent); run the scan **after** `did-finish-load` of the
+dashboard, async, with the recorder holding sightings until it completes (the game cannot start a
+run faster than that, and a held sighting is lossless). Telemetry the scan duration and file count.
+
+### A11 — MEDIUM — Read failure is indistinguishable from "left the run"
+
+`read()` in the poll returns `null` for a *throw* (`readerProcess.ts:146-161`), and
+`readNGameState`/`readPileState` return `null` when there is no run — the same wire value
+(`readerProtocol.ts:22-27`). A dead-pointer streak inside a live run therefore looks exactly like
+quit-to-menu, and after 40 such polls the reader **fabricates** `processGone`
+(`readerProcess.ts:180-183`), which §3.2 treats as an *immediate* suspension.
+
+**Fix (WP3):** the 10 s menu debounce **pauses** while `ctx.errorStreak > 0` (available once A1's
+raw tap forwards `readFailed`), and a `processGone` that is not corroborated by
+`onProcess({detected:false})` within one detect cycle (2 s) is treated as a reader hiccup, not a
+suspension. Consequence of getting this wrong is only an extra session row (instant D2 resume), so
+this is a polish fix, not a blocker.
+
+### A12 — LOW-MEDIUM — Mockup surfaces with no planned data source
+
+Everything else in `journal-blend-spec.md` maps cleanly (header plaque, honesty whisper, route
+ledger + act dividers + census chip row, deck ledger with play-rate bars, relics/potions sighting
+strip, four finding cards + two footnotes, Archive rows, LIVE and VICTORY bands, Export JSON).
+Unsourced today:
+
+1. **`exhaust 1` in the LIVE "Combat piles" panel** (spec §6) — not in `Sts2PileState`. Fixed by A1
+   (raw tap) plus adding `exhaust` to the emitted pile state or to `journal.currentRun`.
+2. **`IN COMBAT · 2 enemies · your turn`** in the LIVE banner (spec §6) — needs
+   `sts2.enemiesState` (`enemies.length`, `currentSide`), which §4's CurrentRun subscription list
+   omits. Add it (it is an existing key; zero cost).
+3. **`analysis 11 req / budget 12`** in the manifest whisper and footer (spec §5.1, §2.5) — the
+   `analysis` object records `apiVersion` and which offers were replayed, but **no request count**.
+   Add `analysis.requests: number` + `budget: number` (WP6) and mirror into the catalog next to
+   `analysisStatus`.
+4. **`archive average 1m 46s`** (spec §5.5 footnote) — derivable from catalog
+   `activeMs`/`roomsEntered`, but no component owns it. Assign to WP5 (compute in the renderer from
+   `journal:list`, excluding `playerCount > 1` per §2.6).
+5. **Character-id casing** — the stub emits `'ironclad'` (`stub/sts2Stub.ts:136`) while the mockup
+   and catalog example use `IRONCLAD`. Normalise once at the recorder boundary; matching and
+   grouping must not be case-sensitive.
+
+### A13 — LOW — Doc corrections to fold in
+
+§1 header "~150 ms" → 250 ms, cited to `readerProcess.ts:31`; §1.2 "`nGame` null = menu or loading"
+→ add "or `GlobalUi` absent mid-run"; §1.2 characterId "reports transient `''`" → "reports `null`;
+`''` is the provider's coalescing"; §1.1 note that `processGone` is also synthesised after 40 failed
+polls; §3.2 "3 consecutive polls (~450 ms)" → 750 ms. WP5's acceptance ("Current Run renders live
+against the stub scenario switcher") is **not achievable as written** — the stub emits no owned deck
+and no per-instance ids; restate it as "renders against a scripted `SPECTRA_JOURNAL_STUB` recorder
+feed + fixture run file".
+
+## C. Open questions, reclassified
+
+| Q | Class | Disposition |
+|---|---|---|
+| Q1 one resumable save per character | **(b) runtime** | Keep, WP3 acceptance (5 min in-game). **Downgraded to informational** by defect A5's deferred supersession: with lazy demotion, a false Q1 costs nothing in either direction. Not a user question. |
+| Q2 seed / save-slot id in `RunState` | **(b) dev task** | Keep as WP1's timeboxed decomp check. Confirmed *not* present in the vendored port: `RunState` exposes exactly `_currentActIndex` and `_players` (`models.ts:262-269`), so the plan's "not readable today" is verified; only the upstream decomp can say whether it exists at all. Record the answer here. |
+| Q3 `_players` enumerates remote players; `playerCount` stability | **(b) runtime** | Keep, WP1/WP3. **Extend the same session to answer**: does `isGameOver` fire when a *teammate* dies (it scans the whole overlay stack, `readers.ts:190-195`)? A false D9 close is the plan's own worst-case wrong answer, and MP is the only plausible way to produce one. |
+| Q4 MP resume semantics | **(a) resolved** | No behavioural dependency: storage is already per-session (§2.6) and matching is local-deck-only. **Closed — delete the question.** |
+| Q5 storage policy | **(a) resolved** | Keep-all + per-run Delete + directory-size telemetry. Sizes are bounded (single-digit MB at hundreds of runs); the real cost was scan time, now fixed by A10. **Closed.** |
+| Q6 display staleness thresholds (48 h / 14 d) | **(a) resolved** | Pure presentation, no state change, trivially tunable. Ship as stated. **Closed.** |
+| Q7 quit-to-menu debounce 10 s | **(a) resolved** | Ship 10 s = 40 polls at `POLL_MS = 250`, **plus** A11's guard (pause while `errorStreak > 0`; require `detected:false` corroboration for `processGone`). Worst case remains one spurious session row. **Closed.** |
+| Q8 combat restart on resume | **(b) runtime** | Keep, WP3 acceptance. Cheap and already scripted in WP3's smoke test. |
+| Q9 `isGameOver` flicker | **(a) resolved** | Inspection says false positives are structurally unlikely (exact class-name equality, per-entry `safe(...,false)`, `readers.ts:190-195`); the realistic risk is a **missed** close, which degrades to `abandoned(superseded)` — acceptable. Ship the 2-poll guard + the "close followed by same-character EXACT sighting" telemetry as written. **Closed.** |
+| Q10 Archive merge/split affordance | **(a) resolved** | Out of v1; formats need no change to add it later. **Closed.** |
+| **Q11 (new)** Is `Player.Deck` fully populated *during* combat? | **(b) runtime** | The "readable anywhere in a run" claim is a code comment (`models.ts:134-141`), never verified mid-combat — and §2's identity rests on it. Cheap check, no new code: the existing `deck_read` telemetry already reports `owned_deck` vs `combat_piles` on every shape change (`provider.ts:616-624`); query for events with `owned_deck = 0 && combat_piles > 0`. Assign to WP1. If the deck *is* hollowed mid-combat, sightings must be deferred until `isCombatInProgress === false`. |
+
+**Final user-facing question list: EMPTY.** No remaining question has a default whose wrong answer
+costs the user anything irreversible. Two defaults were chosen on the user's behalf and are cheap to
+veto, listed here only for visibility: (1) **never ask, ever** — §2.1's policy is adopted whole,
+with A5 making every automatic transition non-destructive; (2) **keep all runs forever**, with a
+per-run Delete and no pruning.
+
+## D. Verdict — **SHIP WITH FIXES**
+
+The identity argument (§2) is sound and, with A2/A3/A4 fixed, actually stronger than the plan
+claims: content matching survives every hostile scenario tested (crash mid-write, quit-to-menu,
+days-long absence, unobserved play across acts, save restoration, character switch, mid-run attach,
+MP). The state machine, the event-sourced file with an embedded snapshot, the catalog-as-cache, the
+display-only staleness rule and the never-ask policy all hold up. The UI mapping covers the fixed
+mockup with five nameable holes, all small.
+
+What must change before WP3 starts:
+
+1. **A1** — retap the recorder onto `RawSnapshot` via a new provider callback (blocking; §3.1 as
+   written cannot see the deck, exhaust, card instance ids, offered ids/costs, numeric advice, or
+   individual polls).
+2. **A2** — base-id EVOLVED predicate + upgrade monotonicity.
+3. **A3** — `deckSize` from `_size`, reject truncated polls, stable size+hash for 3 polls.
+4. **A4** — nullable act.
+5. **A5** — deferred supersession + REGRESSED predicate.
+6. **A6** — candidate deck multiset in the catalog.
+7. **A7** — travel-edge room boundary.
+8. **A8/A9/A10** — lock-gated writes, fsync+retry+unique tmp, stat-cached async scan.
+9. **A11/A12/A13** — error-streak-aware debounce; five mockup sources; doc corrections (including
+   WP5's unachievable stub acceptance).
+
+No replan: every fix is local to a WP that already exists, and none of them touches §2's policy or
+the mockup. Phasing stands as written, with WP1 growing the `deckSize` + nullable-act reads and WP3
+growing `provider.ts` in its file list.
