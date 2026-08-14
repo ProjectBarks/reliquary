@@ -169,6 +169,20 @@ function wirePush(): void {
   window.spectra.onJournalPush((message) => {
     if (message.kind === 'catalog') {
       apply(CATALOG_KEY, { data: message.entries })
+      // A catalog push is also the only signal that a run FILE someone is
+      // reading has moved — a suspended run resuming, rooms accruing, a close.
+      // Without this, a report opened while the run was suspended said
+      // "suspended" forever while the game played on underneath it (observed
+      // live, 2026-08-14). Re-fetch any held run whose row advanced; loadRun's
+      // in-flight guard makes bursts cheap.
+      for (const entry of message.entries) {
+        const held = store.get(runKey(entry.id)) as Resource<RunFile> | undefined
+        const run = held?.data
+        if (!run) continue
+        if (run.state !== entry.state || (run.lastSeenAt ?? 0) < (entry.lastSeenAt ?? 0)) {
+          void loadRun(entry.id, true)
+        }
+      }
       return
     }
     // An analysis transition changes one row's chip and the run file behind it.

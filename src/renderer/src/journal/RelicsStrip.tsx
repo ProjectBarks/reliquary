@@ -1,7 +1,7 @@
 import styled from 'styled-components'
 import { useEntities } from './art'
 import type { Sighting } from './derive'
-import { Art, Note, Num, OutlineChip, Whisper } from './parts'
+import { Art, Num, OutlineChip } from './parts'
 
 /**
  * Relics & Potions — the honest strip.
@@ -10,50 +10,45 @@ import { Art, Note, Num, OutlineChip, Whisper } from './parts'
  * use are all unreadable. What *is* observable is shop stock: a merchant offer
  * carries priced ids, and the ones that are not cards are the relics and
  * potions that were on the shelf. That is a genuinely small thing to know, and
- * the section is sized accordingly — one row of chips, one chip admitting the
- * limit, one whisper naming what would fix it.
+ * the section is sized accordingly — one row of chips and one chip admitting
+ * the limit. One visible line, nothing under it.
  *
- * The alternative was to leave the section out until the readers land. Leaving
- * it in, clearly labelled, is better: it tells the reader that the absence is a
- * known gap with a plan behind it rather than an oversight, and it gives the
- * relic readers a landing site that already has its copy written.
+ * When there is no stock to show, the section does not appear at all. The
+ * earlier version rendered a heading, a badge and two sentences to say that a
+ * run which met no merchant had no merchandise — four lines of screen spent
+ * apologising for a section that had nothing to be. The admission itself is not
+ * lost: it is the `title` on the badge, on the runs that do show stock, which is
+ * exactly where a reader would go looking for it.
  */
 
-export function RelicsStrip({ sightings }: { sightings: readonly Sighting[] }): JSX.Element {
+/** What the badge admits to when a reader asks it. */
+const LIMIT =
+  'only shop stock is observable today — ownership, pickups and use land with the relic/potion readers'
+
+export function RelicsStrip({ sightings }: { sightings: readonly Sighting[] }): JSX.Element | null {
   const entities = useEntities()
+  if (sightings.length === 0) return null
 
   return (
-    <>
-      {sightings.length === 0 ? (
-        <Note>No shop stock was seen this run — merchants are the only source today.</Note>
-      ) : (
-        <Strip>
-          {sightings.map((sight) => {
-            const entity = entities.item(sight.id)
-            return (
-              <Sight key={`${sight.id}-${sight.roomIndex}`}>
-                <Art entity={entity} variant="sprite" />
-                <b>{entity.name}</b>
-                {sight.cost === null ? null : <Gold>{sight.cost}g</Gold>}
-                <Src>
-                  shop · R{sight.roomIndex < 10 ? `0${sight.roomIndex}` : sight.roomIndex}
-                </Src>
-              </Sight>
-            )
-          })}
-        </Strip>
-      )}
-      <Whisper style={{ margin: '10px 2px 0' }}>
-        only shop stock is observable today — ownership, pickups and use land with the
-        relic/potion readers
-      </Whisper>
-    </>
+    <Strip>
+      {sightings.map((sight) => {
+        const entity = entities.item(sight.id)
+        return (
+          <Sight key={`${sight.id}-${sight.roomIndex}`}>
+            <Art entity={entity} variant="sprite" />
+            <b>{entity.name}</b>
+            {sight.cost === null ? null : <Gold>{sight.cost}g</Gold>}
+            <Src>shop · R{sight.roomIndex < 10 ? `0${sight.roomIndex}` : sight.roomIndex}</Src>
+          </Sight>
+        )
+      })}
+    </Strip>
   )
 }
 
 /** The section head's badge, exported so the report can place it inline. */
 export function NotReadableChip(): JSX.Element {
-  return <OutlineChip>not readable in v1</OutlineChip>
+  return <OutlineChip title={LIMIT}>not readable in v1</OutlineChip>
 }
 
 const Strip = styled.div`

@@ -1,4 +1,5 @@
 import { useCallback, useMemo, useState } from 'react'
+import styled from 'styled-components'
 import type { RunFile } from '@shared/types'
 import { runCohort } from '@shared/types'
 import { Section, SectionHead, SectionNote, SectionTitle } from '../dashboard/ui'
@@ -27,6 +28,7 @@ import {
   CharValue,
   EmptyPlate,
   Num,
+  OutlineChip,
   PCell,
   Plaque,
   RunHead,
@@ -45,10 +47,19 @@ import {
  * is what lets the Review be absent — pending, failed, or never queued — without
  * the page becoming a stub.
  *
- * The honesty whisper under the header is one line shorter than the mockup's,
- * and that is a real improvement rather than an edit: WP1 found the game's own
- * cumulative floor counter, so the report prints exact floors and no longer has
- * to apologise for counting rooms in their place.
+ * **A section with nothing in it is not rendered.** The Deck Ledger of a run
+ * that has not ended yet, and the relic strip of a run that never walked into a
+ * shop, used to print a sentence explaining their own emptiness. Two paragraphs
+ * of apology is a worse answer than a page that is simply one section shorter —
+ * the reader who wants the deck of a live run is one click away in Current Run,
+ * and nobody has ever needed to be told that a run without merchants saw no
+ * merchandise.
+ *
+ * The header carries no section title of its own either: the sub-nav says
+ * Journal, the picker names the run, and the plaque's own h1 says RUN REPORT.
+ * What is left is one mono identity line — date, handle, game build — with the
+ * bookkeeping a reader never reads (schema, request budget, what v1 cannot see)
+ * moved onto tooltips and into the export, which is where audit trails belong.
  */
 
 export function RunReport({ id }: { id: string }): JSX.Element {
@@ -101,13 +112,6 @@ function Report({
   return (
     <>
       <Section>
-        <SectionHead>
-          <SectionTitle>Run Report</SectionTitle>
-          <SectionNote>
-            post-mortem · {ANALYSIS_WORD[run.analysisStatus]}
-          </SectionNote>
-        </SectionHead>
-
         <RunHeader
           run={run}
           banner={banner}
@@ -115,7 +119,6 @@ function Report({
           budget={budgetLine(analysis.value)}
         />
 
-        <Whisper style={{ margin: '10px 2px 0' }}>{HONESTY_LINE}</Whisper>
         {isPartial(run) ? (
           <Whisper style={{ margin: '4px 2px 0' }}>
             {run.observedFrom === 'mid-run'
@@ -135,24 +138,32 @@ function Report({
         {isPartial(run) ? <RoutePartialNote /> : null}
       </Section>
 
-      <Section>
-        <SectionHead>
-          <SectionTitle>Deck Ledger</SectionTitle>
-          <SectionNote>
-            {deck.cards} cards in {deck.rows.length} rows · sorted by played, descending ·
-            never-played last
-          </SectionNote>
-        </SectionHead>
-        <DeckLedger deck={deck} halfDead={analysis.value?.halfDead} />
-      </Section>
+      {/* No final deck means the run has not ended: the deck-so-far is on the
+          Current Run view, alive, and an empty ledger explaining that here
+          would be a section-sized signpost. */}
+      {deck.empty ? null : (
+        <Section>
+          <SectionHead>
+            <SectionTitle>Deck Ledger</SectionTitle>
+            <SectionNote title="Sorted by played, descending — never-played rows last">
+              {deck.cards} cards · {deck.rows.length} rows
+            </SectionNote>
+          </SectionHead>
+          <DeckLedger deck={deck} halfDead={analysis.value?.halfDead} />
+        </Section>
+      )}
 
-      <Section>
-        <SectionHead>
-          <SectionTitle>Relics &amp; Potions</SectionTitle>
-          <NotReadableChip />
-        </SectionHead>
-        <RelicsStrip sightings={route.sightings} />
-      </Section>
+      {/* Shop stock is the only relic/potion fact v1 can observe, so a run that
+          met no merchant has nothing to put here — and says nothing. */}
+      {route.sightings.length === 0 ? null : (
+        <Section>
+          <SectionHead>
+            <SectionTitle>Relics &amp; Potions</SectionTitle>
+            <NotReadableChip />
+          </SectionHead>
+          <RelicsStrip sightings={route.sightings} />
+        </Section>
+      )}
 
       <Section>
         <SectionHead>
@@ -184,8 +195,15 @@ function Report({
  *
  * Every cell here is something a reader can act on, and the cells the mockup
  * had to leave out — HP, gold, ascension — are *absent* rather than dashed. A
- * grid of `·` reads as a broken screen; an absence with one honest line under
- * it reads as a limit somebody knows about.
+ * grid of `·` reads as a broken screen; an absence reads as a report that only
+ * prints what it saw. The line that used to name those absences is a tooltip on
+ * the manifest now: the reader who wonders where gold went can hover, and the
+ * reader who never wondered is not charged a line for the answer.
+ *
+ * The manifest itself is identity only — the stamp, the handle, the game build
+ * — because that is the part a reader recognises. `schema 1 · analysis 0 req /
+ * budget 12` is bookkeeping about the *file*, not about the run; it rides the
+ * analysis chip's tooltip and goes out whole in the export.
  */
 function RunHeader({
   run,
@@ -216,11 +234,16 @@ function RunHeader({
           <h1>
             <em style={{ color: tint.edge }}>{characterName(run.character)}</em> — RUN REPORT
           </h1>
-          <Whisper>
-            run {stamp.stamp} · {stamp.tail} · game {run.gameVersion ?? 'unknown'} · schema{' '}
-            {run.schema}
-            {budget ? ` · ${budget}` : ` · ${ANALYSIS_WORD[run.analysisStatus]}`}
-          </Whisper>
+          <Manifest>
+            <Whisper title={HONESTY_LINE}>
+              run {stamp.stamp} · {stamp.tail} · game {run.gameVersion ?? 'unknown'}
+            </Whisper>
+            <OutlineChip
+              title={`schema ${run.schema}${budget ? ` · ${budget}` : ''} — also in the exported JSON`}
+            >
+              {ANALYSIS_WORD[run.analysisStatus]}
+            </OutlineChip>
+          </Manifest>
         </RunTitle>
         <Banner $tone={banner.tone}>
           <span className="word">{banner.word}</span>
@@ -286,22 +309,29 @@ function RunHeader({
   )
 }
 
-/** The Journal tab's index when the archive holds nothing finished yet. */
+/**
+ * The Journal tab's index when the archive holds nothing finished yet.
+ *
+ * The plate stays — an empty screen needs a frame or it reads as a failed load
+ * — but it is down to its two load-bearing sentences: what is missing, and what
+ * puts it there. The paragraph listing what a report contains was describing a
+ * screen the reader cannot see yet.
+ */
 export function NoRunsYet(): JSX.Element {
   return (
     <Section>
-      <SectionHead>
-        <SectionTitle>Run Report</SectionTitle>
-        <SectionNote>nothing to read yet</SectionNote>
-      </SectionHead>
       <EmptyPlate>
         <strong>No finished run on file.</strong>
-        <span>
-          Play a run with Reliquary open and its report writes itself here — the route you took,
-          the deck you ended with, and what the draft would have done differently. A run in
-          progress shows up under Current Run first.
-        </span>
+        <span>Play a run with Reliquary open and its report writes itself here.</span>
       </EmptyPlate>
     </Section>
   )
 }
+
+/** The identity line and the analysis chip, on one baseline. */
+const Manifest = styled.div`
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 4px 10px;
+`

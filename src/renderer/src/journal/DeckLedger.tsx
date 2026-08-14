@@ -2,7 +2,7 @@ import styled from 'styled-components'
 import { DASH, fmtInt } from '../codex/format'
 import { useEntities, type ResolvedEntity } from './art'
 import type { DeckLedger as DeckLedgerData, DeckLedgerRow } from './derive'
-import { Art, Note, Num, TBox, Table, Whisper } from './parts'
+import { Art, Num, TBox, Table, Whisper } from './parts'
 
 /**
  * The Deck Ledger: what the deck ended as, and what each card actually did.
@@ -23,8 +23,10 @@ import { Art, Note, Num, TBox, Table, Whisper } from './parts'
  *     stays absent otherwise, rather than being guessed from a low play rate.
  *
  * `played` is approximate by construction — it is inferred from 250 ms pile
- * sampling — and the whisper under the table says so rather than letting a
- * decimal imply a precision the sampler cannot give.
+ * sampling — and the table admits it rather than letting a decimal imply a
+ * precision the sampler cannot give. Two words under the table do that work;
+ * *how* the sampler works is on their tooltip, since it is the same sentence on
+ * every run and a reader learns it once.
  */
 
 export function DeckLedger({
@@ -34,17 +36,15 @@ export function DeckLedger({
   deck: DeckLedgerData
   /** Rows the analysis flagged as carrying a dead extra copy. */
   halfDead?: readonly string[]
-}): JSX.Element {
+}): JSX.Element | null {
   const entities = useEntities()
   const half = new Set((halfDead ?? []).map((id) => id.toUpperCase()))
 
-  if (deck.empty) {
-    return (
-      <Note>
-        No final deck on this run yet — it is written when the run ends.
-      </Note>
-    )
-  }
+  // No final deck means the run has not ended. The report renders no Deck
+  // Ledger section at all in that case; this guard is the same answer for any
+  // other caller, and it is a null rather than a sentence — the deck-so-far is
+  // live on Current Run, and a paragraph here would only point at it.
+  if (deck.empty) return null
 
   return (
     <>
@@ -105,10 +105,17 @@ export function DeckLedger({
           </tfoot>
         </DeckTable>
       </TBox>
-      <Whisper style={{ margin: '10px 2px 0' }}>
-        {deck.countsMissing
-          ? 'draw and play counts need an observed combat — this run has none on file'
-          : 'played is approximate — 250 ms pile sampling; end-of-turn discards excluded'}
+      {/* The caveat is real and stays reachable, but it is the same caveat on
+          every run, so it rides the tooltip rather than the page. */}
+      <Whisper
+        style={{ margin: '10px 2px 0' }}
+        title={
+          deck.countsMissing
+            ? 'Draw and play counts need an observed combat, and this run has none on file'
+            : 'Play counts are inferred from 250 ms pile sampling; end-of-turn discards are excluded'
+        }
+      >
+        {deck.countsMissing ? 'no observed combat' : 'played is approximate'}
       </Whisper>
     </>
   )

@@ -271,17 +271,71 @@ export const ANALYSIS_WORD: Record<AnalysisStatus, string> = {
 }
 
 /**
- * The one honest line under the run header.
+ * What v1 cannot read — the report's tooltip, not its text.
  *
- * It is shorter than the mockup's by one clause, and that clause is the point:
- * WP1 found the game's own cumulative floor counter (`RunState._mapPointHistory`
- * → `getTotalFloor()`), so floors are exact now and "rooms counted as ≈floors"
- * would be an apology for a problem that no longer exists. Everything still
- * listed is genuinely unread — `ascension` is hard-null in every run file, and
- * `relics`/`potions` are hard-empty, by construction in `RunStore.newRunFile`.
+ * It used to print under the run header, and printing it was the mistake: the
+ * report has no HP column, no gold column and no ascension cell, so their
+ * absence is already on the screen. A line naming six things the page is not
+ * showing is a line the reader has to read to learn nothing. It rides the
+ * manifest whisper's `title` now, where a reader who wonders *why* there is no
+ * gold can find the answer and nobody else pays for it.
+ *
+ * Everything listed is genuinely unread — `ascension` is hard-null in every run
+ * file, and `relics`/`potions` are hard-empty, by construction in
+ * `RunStore.newRunFile`.
  */
 export const HONESTY_LINE =
   'not readable in v1: hp · gold · ascension · owned relics · potions · enemy names'
+
+// ── footnotes ───────────────────────────────────────────────────────────────
+
+/**
+ * The visible half of a review footnote.
+ *
+ * The pipeline writes footnotes as whole sentences and should keep doing so —
+ * they are the review's audit trail, they go into the export verbatim, and this
+ * function never touches them. What it produces is the *tail* the chip shows on
+ * screen: six words at most, with the sentence itself on the chip's tooltip.
+ * Four sentences of mono prose under a page that had already said its piece was
+ * the single biggest block of free text in the tab.
+ *
+ * The tails are per-chip rather than a blind truncation, because a sentence cut
+ * at its sixth word is worse than no tail at all: `PROXY 4,210 solo runs` is a
+ * fact, "the community metrics table carried no…" is a cliff-hanger. A chip a
+ * newer pipeline invents falls back to the blind clamp of its first clause,
+ * which is plain but never says anything the sentence did not.
+ */
+export function footnoteTail(chip: string, text: string): string {
+  const tail = FOOTNOTE_TAILS[chip.trim().toUpperCase()]?.(text)
+  if (tail) return tail
+  return clampWords(text.split(/ · | — /)[0] ?? text, 6)
+}
+
+const FOOTNOTE_TAILS: Record<string, (text: string) => string | null> = {
+  // "4,210 runs for this character in the solo bracket (18,412 total) · …" and
+  // the mock's "4,210 Ironclad runs in bracket (…)" both reduce to a count and
+  // the noun it counts; a snapshot with no counts at all says so in six words.
+  PROXY: (text) => {
+    const match = /^([\d,]+)\s+(?:(\S+)\s+)?runs?\b(?:.*?\bin(?: the)?\s+(\S+)\s+bracket)?/.exec(
+      text
+    )
+    if (!match) return 'no cohort counts in this snapshot'
+    const noun = match[3] ?? match[2]
+    return noun ? `${match[1]} ${noun} runs` : `${match[1]} runs`
+  },
+  LOCAL: (text) => {
+    const match = /^(\d+) of (\d+) shops?\b/.exec(text)
+    return match ? `${match[1]} of ${match[2]} shops · no removal` : null
+  },
+  // The one footnote a reader can act on, so its tail says what to do about it
+  // rather than which host was unreachable.
+  OFFLINE: () => 'data source unreachable — partial'
+}
+
+function clampWords(text: string, max: number): string {
+  const words = text.trim().split(/\s+/)
+  return words.length <= max ? text.trim() : `${words.slice(0, max).join(' ')}…`
+}
 
 /** Whether this row is a provisional run still waiting on the ambiguity banner. */
 export function isProvisional(

@@ -3,7 +3,7 @@ import { createLink, useNavigate } from '@tanstack/react-router'
 import styled from 'styled-components'
 import type { CatalogEntry } from '@shared/types'
 import { cohortLabel, runCohort } from '@shared/types'
-import { Button, Section, SectionHead, SectionNote, SectionTitle } from '../dashboard/ui'
+import { Button, Section } from '../dashboard/ui'
 import { ErrorState, Loading } from '../codex/parts'
 import { DASH, relativeTime } from '../codex/format'
 import { AmbiguityBanner } from './AmbiguityBanner'
@@ -50,6 +50,11 @@ import { EmptyPlate, Num, OutlineChip, Plate, TBox, Whisper } from './parts'
  * the banner that can answer it, and an **unreadable** one names the schema it
  * was written with. An unreadable row shows no act, no rooms and no outcome —
  * every one of those would be a guess about a file this build cannot parse.
+ *
+ * The view prints no title. "Archive — every run on file, newest first" sat
+ * directly under a sub-nav with Archive lit in brand, over a table whose first
+ * column is dated and sorted; each of its three claims was already on the
+ * screen. The table's own footer still counts what is in it.
  */
 
 export function ArchiveView(): JSX.Element {
@@ -77,18 +82,12 @@ export function ArchiveView(): JSX.Element {
     <>
       <AmbiguityBanner />
       <Section>
-        <SectionHead>
-          <SectionTitle>Archive</SectionTitle>
-          <SectionNote>every run on file, newest first</SectionNote>
-        </SectionHead>
-
         {entries.length === 0 ? (
           <EmptyPlate>
             <strong>Nothing recorded yet.</strong>
             <span>
               The archive writes itself the first time you play with Reliquary open — one file
-              per run, kept on this machine until you delete it. Runs appear here the moment
-              they start, finished or not.
+              per run, kept on this machine.
             </span>
           </EmptyPlate>
         ) : (

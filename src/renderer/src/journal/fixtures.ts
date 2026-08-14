@@ -419,10 +419,22 @@ const ANALYSIS: JournalJson = {
       ]
     }
   ],
+  // Three footnotes rather than one, because the footnote block is now chips
+  // with their sentences on hover (`footnoteTail`) and the mock is where that
+  // is looked at: PROXY exercises the parsed tail, LOCAL the counted one, and
+  // OFFLINE the fixed actionable tail that stays visible on purpose.
   footnotes: [
     {
       chip: 'PROXY',
       text: '4,210 Ironclad runs in bracket (18,412 total) · core picked 58–61% when offered · decks with most of this core ≈ 9–14% — proxy, the API cannot count exact deck matches'
+    },
+    {
+      chip: 'LOCAL',
+      text: '2 of 4 shops left without a card removed · card use is counted from pile transitions at 250 ms, so play counts are approximate and aborted combats are excluded'
+    },
+    {
+      chip: 'OFFLINE',
+      text: 'spire-codex.com could not be reached for part of this review — the local findings are complete; reviewing the run again adds the draft-advice replays'
     }
   ]
 }

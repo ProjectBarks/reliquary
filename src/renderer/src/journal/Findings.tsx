@@ -9,7 +9,7 @@ import type { AnalysisFinding, ParsedAnalysis } from './analysis'
 import type { CohortAverage } from './cohort'
 import { thinCohortLine } from './cohort'
 import type { DeckLedger } from './derive'
-import { fmtPace } from './format'
+import { fmtPace, footnoteTail } from './format'
 import {
   Art,
   CellGrid,
@@ -43,8 +43,16 @@ import {
  *
  * The PACE footnote is computed locally too, against the archive average *for
  * this run's player-count cohort* — a solo run against your solo runs, a 2P run
- * against your 2P runs (the user's decision). A cohort too thin to average says
- * so in its own words instead of borrowing another cohort's baseline.
+ * against your 2P runs (the user's decision). A cohort too thin to average
+ * never borrows another cohort's baseline; it simply prints no comparison.
+ *
+ * **The footnote block is chips, not paragraphs.** Every footnote here is a
+ * whole sentence — the pipeline writes them that way and the export keeps them
+ * that way — and four of them stacked under a page of findings was the longest
+ * unbroken run of prose in the tab. Each chip now shows a tail of a few words
+ * and carries its sentence on `title`, so the block reads as a row of facts
+ * with the reasoning one hover away. `footnoteTail` in `format.ts` owns the
+ * shortening; nothing is edited out of the data.
  */
 
 const SEVERITY_BG = {
@@ -118,7 +126,7 @@ export function Findings({
           ))}
         </Cards>
       ) : status === 'done' && !malformed ? (
-        <Note>No findings — the pipeline reviewed this run and had nothing to flag.</Note>
+        <Note>Nothing to flag.</Note>
       ) : null}
 
       {status === 'partial' ? (
@@ -128,26 +136,57 @@ export function Findings({
       ) : null}
 
       <Footnotes>
-        <Footnote>
-          <OutlineChip>pace</OutlineChip>
-          <FootnoteText>
-            {fmtPace(perRoomAvgMs)} / room —{' '}
-            {cohort.thin
-              ? thinCohortLine(cohort)
-              : `${cohort.label.toLowerCase()} archive average ${fmtPace(cohort.perRoomAvgMs)} across ${cohort.runs} runs`}
-            {shopsWithNoCard > 0
-              ? ` · ${shopsWithNoCard} shop${shopsWithNoCard === 1 ? '' : 's'} left with no card gained`
-              : ''}
-          </FootnoteText>
-        </Footnote>
+        <PaceFootnote
+          perRoomAvgMs={perRoomAvgMs}
+          cohort={cohort}
+          shopsWithNoCard={shopsWithNoCard}
+        />
         {(analysis?.footnotes ?? []).map((note) => (
-          <Footnote key={note.chip}>
+          <Footnote key={note.chip} title={note.text}>
             <OutlineChip>{note.chip}</OutlineChip>
-            <FootnoteText>{note.text}</FootnoteText>
+            <FootnoteText>{footnoteTail(note.chip, note.text)}</FootnoteText>
           </Footnote>
         ))}
       </Footnotes>
     </>
+  )
+}
+
+/**
+ * PACE — the run's own number, and a comparison only when one exists.
+ *
+ * The visible text is the value: `37s / room`. A cohort with an average adds it
+ * in the same breath — `37s / room · archive avg 46s` — because that is the
+ * comparison the reader came for. A cohort too thin to average adds *nothing*
+ * visible: "first solo run — no archive average yet" is an explanation of an
+ * absence, and the absence is already there to see. It waits on the tooltip
+ * with the shop tally, for the reader who wonders why no average appeared.
+ */
+function PaceFootnote({
+  perRoomAvgMs,
+  cohort,
+  shopsWithNoCard
+}: {
+  perRoomAvgMs: number | null
+  cohort: CohortAverage
+  shopsWithNoCard: number
+}): JSX.Element {
+  const shops =
+    shopsWithNoCard > 0
+      ? ` · ${shopsWithNoCard} shop${shopsWithNoCard === 1 ? '' : 's'} left with no card gained`
+      : ''
+  const why = cohort.thin
+    ? thinCohortLine(cohort)
+    : `${cohort.label.toLowerCase()} archive average ${fmtPace(cohort.perRoomAvgMs)} across ${cohort.runs} runs`
+
+  return (
+    <Footnote title={`${why}${shops}`}>
+      <OutlineChip>pace</OutlineChip>
+      <FootnoteText>
+        {fmtPace(perRoomAvgMs)} / room
+        {cohort.thin ? '' : ` · archive avg ${fmtPace(cohort.perRoomAvgMs)}`}
+      </FootnoteText>
+    </Footnote>
   )
 }
 
