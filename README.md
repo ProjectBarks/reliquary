@@ -48,6 +48,11 @@ rebuilt from scratch on Electron + React.
   choose-a-card, and shop cards, alongside global tier, win-rate, pick-rate, and the owned
   cards driving each pick. An animated placeholder shows while a grade is still loading.
 - **Attack forecast** — total incoming damage and hit count from enemy intents, in combat.
+- **The Codex** — a full in-app compendium of every card, relic, and potion, powered by
+  Spire Codex community data (1M+ runs). Four views per kind — art grid, reading list,
+  S–F tier list, and a sortable metrics table — filtered by search, type, rarity, keyword,
+  and colour, sliced by cohort (Solo/2P/…/A10) and character, with pinning, comparisons,
+  and keyword tooltips throughout.
 - **Living Spire home** — the companion window opens on a living title scene: four relic gems
   orbit the spire's crown carrying Game / Overlay / Advisor / Live-data health, and one line
   under the title names what is happening (and what to do next, when something is needed).
@@ -67,6 +72,32 @@ rebuilt from scratch on Electron + React.
 </table>
 
 > The overlay shots use the built-in demo data (`SPECTRA_STUB`), hence the "stub data" badge.
+
+## The Codex
+
+Every number in the game, browsable: the same community data that powers the in-game draft
+advice, as a compendium you can read between runs. One toolbar drives all four views —
+grid, list, tier list, and table — and one cohort selection (bracket + character) governs
+every score shown.
+
+<table>
+  <tr>
+    <td width="50%"><img src="docs/screenshots/codex-tier.png" alt="Codex — S–F tier list built from community win rates" /></td>
+    <td width="50%"><img src="docs/screenshots/codex-table.png" alt="Codex — sortable metrics table with per-act pick rates" /></td>
+  </tr>
+  <tr>
+    <td align="center"><sub>Tier list — S–F bands from Codex Scores, full card art, click any entry to read it</sub></td>
+    <td align="center"><sub>Metrics table — score, elo, win/pick rates, per-act pick rates; every column sortable and explained</sub></td>
+  </tr>
+  <tr>
+    <td width="50%"><img src="docs/screenshots/codex-list.png" alt="Codex — list view with reading pane and recently viewed" /></td>
+    <td width="50%"><img src="docs/screenshots/codex-relics-table.png" alt="Codex — relics metrics table" /></td>
+  </tr>
+  <tr>
+    <td align="center"><sub>List view — framed card thumbs, tier chips, a reading pane, and your recently viewed entries</sub></td>
+    <td align="center"><sub>Relics get the same treatment — columns without data for a kind simply aren't drawn</sub></td>
+  </tr>
+</table>
 
 ## Screenshots
 
@@ -94,6 +125,8 @@ rebuilt from scratch on Electron + React.
 - **Card metadata** (names, types, costs, art) is fetched from the Untapped CDN.
 - **Advice & stats** come from the Spire Codex API (`/api/cards`,
   `/api/runs/metrics/cards`, `POST /api/draft-advice`), primed once per data version and cached.
+  The Codex tab reads the same API's full catalogs and per-cohort metrics for cards, relics,
+  and potions, cached on disk and revalidated in the background.
 - Two windows share one React bundle via hash routing: a transparent, click-through,
   always-on-top **overlay** pinned to the game window, and a normal **dashboard**.
 
