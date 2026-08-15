@@ -2,7 +2,7 @@ import { useMemo, useState } from 'react'
 import styled, { css } from 'styled-components'
 import type { Sts2Card, Sts2CardData, Sts2PileState } from '@shared/types'
 import { CardTile } from './CardTile'
-import { GripDots, SnapGuide } from './PanelChrome'
+import { GripDots } from './PanelChrome'
 import { useFloatingPanel } from '../../hooks/useFloatingPanel'
 import { BG, resolveCost } from './theme'
 import { COL_GAP, layoutTracker, type LayoutGroup, type TrackerLayout } from './trackerLayout'
@@ -125,7 +125,6 @@ export function FreeDeckTracker({
 
   return (
     <>
-      {panel.snapHint ? <SnapGuide $ax={panel.snapHint.ax} $ay={panel.snapHint.ay} /> : null}
 
       <Shell
         className="interactive"

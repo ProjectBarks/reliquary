@@ -10,9 +10,10 @@ import { useCallback, useEffect, useRef, useState } from 'react'
  * at raw pixel coordinates ends up in the wrong place — or off-screen entirely.
  *
  * So placement is stored as an ANCHOR plus an offset, not as a point. A panel
- * snapped to the bottom-right stays in the bottom-right at any resolution; only
- * a deliberately free-floating panel keeps a proportional position. Snapping is
- * therefore not decoration — it is what makes the position durable.
+ * parked near the bottom-right stays measured from the bottom-right at any
+ * resolution. The anchor is pure bookkeeping: dragging never snaps or pulls
+ * toward it (magnetic edges were tried and removed — they made dragging feel
+ * broken); the panel sits exactly where it is dropped.
  */
 
 export type AnchorX = 'left' | 'center' | 'right'
@@ -28,12 +29,10 @@ export interface PanelPlacement {
   /** Panel size in CSS px. Width drives how many columns the content uses. */
   w: number
   h: number
-  /** True when the last drop landed outside any snap zone. */
+  /** Kept for stored-placement compatibility; always true since snapping was removed. */
   free: boolean
 }
 
-/** How close (px) to an edge before it attracts. */
-const SNAP_PX = 56
 export const MIN_W = 180
 export const MAX_W = 900
 export const MIN_H = 120
@@ -69,8 +68,6 @@ export interface FloatingPanel {
   placement: PanelPlacement
   dragging: boolean
   resizing: boolean
-  /** The snap target the panel would land on right now, for live feedback. */
-  snapHint: { ax: AnchorX; ay: AnchorY } | null
   style: React.CSSProperties
   onEnter: () => void
   onLeave: () => void
@@ -97,7 +94,6 @@ export function useFloatingPanel(
   const [placement, setPlacement] = useState<PanelPlacement>(() => read(storageKey, base, minW, minH))
   const [dragging, setDragging] = useState(false)
   const [resizing, setResizing] = useState(false)
-  const [snapHint, setSnapHint] = useState<{ ax: AnchorX; ay: AnchorY } | null>(null)
 
   const ref = useRef(placement)
   ref.current = placement
@@ -148,9 +144,8 @@ export function useFloatingPanel(
 
       const left = o.rect.left + (e.clientX - o.x)
       const top = o.rect.top + (e.clientY - o.y)
-      const { ax, ay, snapped } = nearestAnchor(left, top, ref.current.w, ref.current.h, vw, vh)
-      setSnapHint(snapped ? { ax, ay } : null)
-      setPlacement((p) => toPlacement(p, left, top, vw, vh, ax, ay, snapped))
+      const { ax, ay } = nearestAnchor(left, top, ref.current.w, ref.current.h, vw, vh)
+      setPlacement((p) => toPlacement(p, left, top, vw, vh, ax, ay))
     },
     []
   )
@@ -159,7 +154,6 @@ export function useFloatingPanel(
     mode.current = 'idle'
     setDragging(false)
     setResizing(false)
-    setSnapHint(null)
     window.removeEventListener('pointermove', onMove)
     window.removeEventListener('pointerup', onUp)
     if (!isOverInteractive()) setInteractive(false)
@@ -224,7 +218,6 @@ export function useFloatingPanel(
     placement,
     dragging,
     resizing,
-    snapHint,
     style,
     onEnter: useCallback(() => setInteractive(true), [setInteractive]),
     onLeave: useCallback(() => {
@@ -249,9 +242,11 @@ export function useFloatingPanel(
 /**
  * Which anchor a rect at (left, top) should adopt.
  *
- * Distance to each edge decides it; the centre is only chosen when the panel is
- * genuinely near the middle on that axis, so "centre" never wins by accident
- * from being merely not-near-an-edge.
+ * The anchor is bookkeeping, not behavior: it decides which side the stored
+ * offset is measured from so the panel drifts sensibly across resolution and
+ * window changes. It never moves the panel — snapping was removed after real
+ * use found the magnetic pull toward edges made dragging feel broken; the
+ * panel now sits exactly where it is dropped.
  */
 function nearestAnchor(
   left: number,
@@ -260,45 +255,11 @@ function nearestAnchor(
   h: number,
   vw: number,
   vh: number
-): { ax: AnchorX; ay: AnchorY; snapped: boolean } {
-  const distLeft = left
-  const distRight = vw - (left + w)
-  const distTop = top
-  const distBottom = vh - (top + h)
-  const centreX = Math.abs(left + w / 2 - vw / 2)
-  const centreY = Math.abs(top + h / 2 - vh / 2)
-
-  let ax: AnchorX = 'left'
-  let snappedX = false
-  if (distLeft <= SNAP_PX && distLeft <= distRight) {
-    ax = 'left'
-    snappedX = true
-  } else if (distRight <= SNAP_PX) {
-    ax = 'right'
-    snappedX = true
-  } else if (centreX <= SNAP_PX) {
-    ax = 'center'
-    snappedX = true
+): { ax: AnchorX; ay: AnchorY } {
+  return {
+    ax: left + w / 2 < vw / 2 ? 'left' : 'right',
+    ay: top + h / 2 < vh / 2 ? 'top' : 'bottom'
   }
-
-  let ay: AnchorY = 'top'
-  let snappedY = false
-  if (distTop <= SNAP_PX && distTop <= distBottom) {
-    ay = 'top'
-    snappedY = true
-  } else if (distBottom <= SNAP_PX) {
-    ay = 'bottom'
-    snappedY = true
-  } else if (centreY <= SNAP_PX) {
-    ay = 'middle'
-    snappedY = true
-  }
-
-  // An un-snapped axis keeps a proportional position, expressed from whichever
-  // side it is nearer to, so it drifts sensibly when the window resizes.
-  if (!snappedX) ax = left + w / 2 < vw / 2 ? 'left' : 'right'
-  if (!snappedY) ay = top + h / 2 < vh / 2 ? 'top' : 'bottom'
-  return { ax, ay, snapped: snappedX || snappedY }
 }
 
 function toPlacement(
@@ -308,8 +269,7 @@ function toPlacement(
   vw: number,
   vh: number,
   ax: AnchorX,
-  ay: AnchorY,
-  snapped: boolean
+  ay: AnchorY
 ): PanelPlacement {
   const clampedLeft = clamp(left, 0, Math.max(0, vw - prev.w))
   const clampedTop = clamp(top, 0, Math.max(0, vh - prev.h))
@@ -325,16 +285,7 @@ function toPlacement(
       : ay === 'bottom'
         ? ((vh - prev.h - clampedTop) / vh) * 100
         : ((clampedTop + prev.h / 2 - vh / 2) / vh) * 100
-  // Snapping pulls the offset to zero on the snapped axes; that is what makes
-  // the panel sit flush rather than a few stray pixels off the edge.
-  return {
-    ...prev,
-    ax,
-    ay,
-    dx: snapped && ax !== 'center' && Math.abs(dx) < (SNAP_PX / vw) * 100 ? 0 : dx,
-    dy: snapped && ay !== 'middle' && Math.abs(dy) < (SNAP_PX / vh) * 100 ? 0 : dy,
-    free: !snapped
-  }
+  return { ...prev, ax, ay, dx, dy, free: true }
 }
 
 function clamp(n: number, lo: number, hi: number): number {

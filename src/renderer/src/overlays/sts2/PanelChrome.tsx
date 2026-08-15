@@ -1,10 +1,10 @@
-import styled, { css } from 'styled-components'
+import styled from 'styled-components'
 
 /**
  * The shared vocabulary of a free-placed overlay panel: the mark that says
- * "grab here" and the guide that says "it will land there".
+ * "grab here".
  *
- * These started inside FreeDeckTracker. They live here because a second panel
+ * This started inside FreeDeckTracker. It lives here because a second panel
  * (the attack forecast) is placed the same way, and two panels that move
  * identically must not learn to *look* like they move differently — a grip
  * drawn twice drifts apart at the first tweak.
@@ -44,41 +44,3 @@ export function GripDots(): JSX.Element {
   )
 }
 
-/**
- * Where the panel will land, drawn BEHIND it while dragging — the point is to
- * show the target region, which you cannot see if the panel covers it.
- */
-export const SnapGuide = styled.div<{ $ax: string; $ay: string }>`
-  position: absolute;
-  pointer-events: none;
-  border-radius: 12px;
-  border: 1px dashed color-mix(in oklch, var(--brand) 70%, transparent);
-  background: color-mix(in oklch, var(--brand) 8%, transparent);
-  inset: 6px;
-  ${(p) =>
-    p.$ax === 'left'
-      ? css`
-          right: 60%;
-        `
-      : p.$ax === 'right'
-        ? css`
-            left: 60%;
-          `
-        : css`
-            left: 28%;
-            right: 28%;
-          `}
-  ${(p) =>
-    p.$ay === 'top'
-      ? css`
-          bottom: 60%;
-        `
-      : p.$ay === 'bottom'
-        ? css`
-            top: 60%;
-          `
-        : css`
-            top: 28%;
-            bottom: 28%;
-          `}
-`

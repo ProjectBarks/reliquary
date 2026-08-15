@@ -2,7 +2,7 @@ import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import styled from 'styled-components'
 import type { Sts2Enemy } from '@shared/types'
 import { useFloatingPanel, type PanelPlacement } from '../../hooks/useFloatingPanel'
-import { GripDots, SnapGuide } from './PanelChrome'
+import { GripDots } from './PanelChrome'
 import { attackIntentAsset, BG } from './theme'
 
 /**
@@ -68,7 +68,6 @@ export function AttackSummary({
 
   return (
     <>
-      {panel.snapHint ? <SnapGuide $ax={panel.snapHint.ax} $ay={panel.snapHint.ay} /> : null}
 
       <Container
         ref={shellRef}
