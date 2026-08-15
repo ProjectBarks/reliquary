@@ -198,10 +198,33 @@ export interface Sts2StatPanel {
   trap?: number | null
 }
 
+/**
+ * A rectangle over the overlay in fractions [0..1]. Unlike a panel's anchor,
+ * whose x/y is the item's CENTRE, x/y here is the TOP-LEFT corner.
+ */
+export interface Sts2Rect {
+  x: number
+  y: number
+  w: number
+  h: number
+}
+
 /** Reward/merchant/event/ancient overlays render from these panels. */
 export interface Sts2LayoutState {
   source: 'cardReward' | 'chooseACard' | 'grid' | 'merchant' | 'ancient' | 'event' | 'none'
   panels: Sts2StatPanel[]
+  /**
+   * Where the GAME is drawing its own hover popups right now, read from the
+   * live scene tree. Our stat panel steps around these instead of landing on
+   * top of them — two overlapping tooltips make both unreadable, and the game's
+   * is the one the player asked for.
+   *
+   * Absent when the game is showing none, or when the read is unavailable (an
+   * older/newer build that moved the fields). Absence means "place the panel
+   * the way you always did", so the feature degrades to the previous behaviour
+   * rather than to a broken one.
+   */
+  gameTips?: { text: Sts2Rect[]; card: Sts2Rect[] }
 }
 
 /** User-toggleable overlay switches (mirrors the sts2.enable* settings). */

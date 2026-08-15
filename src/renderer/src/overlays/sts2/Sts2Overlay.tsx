@@ -119,7 +119,9 @@ export function Sts2Overlay(): JSX.Element {
       ) : null}
 
       <ErrorBoundary name="StatPanels">
-        <StatPanels panels={panels} />
+        {/* The game's own tooltip rects, so a panel steps aside instead of
+            covering the explanation the player hovered for. */}
+        <StatPanels panels={panels} gameTips={layout?.gameTips} />
       </ErrorBoundary>
     </div>
   )
