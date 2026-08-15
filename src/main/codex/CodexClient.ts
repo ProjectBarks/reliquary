@@ -1,6 +1,7 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 
 import { codexHttp } from './http'
+import { telemetry } from '../telemetry/Telemetry'
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'fs'
 import { join } from 'path'
 import { app } from 'electron'
@@ -245,6 +246,8 @@ export class CodexClient {
     confidence: 'high' | 'med' | 'low'
     known: boolean
     trap: number | null
+    /** Which table answered, for the provider's per-item debug line. */
+    matched: MetricKind | null
   } | null {
     if (!this.snap || !item.id) return null
     const id = item.id
@@ -253,7 +256,15 @@ export class CodexClient {
     const snap = this.snap
     const rows: Array<[string, string]> = []
     if (item.cost != null) rows.push(['Cost', `${item.cost}g`])
-    const unknown = { rows, tier: null, score: null, confidence: 'low', known: false, trap: null } as const
+    const unknown = {
+      rows,
+      tier: null,
+      score: null,
+      confidence: 'low',
+      known: false,
+      trap: null,
+      matched: null
+    } as const
 
     const firstSee = !this.idsSeen.has(id)
     this.idsSeen.add(id)
@@ -272,6 +283,7 @@ export class CodexClient {
 
     let m: MetricRow | undefined
     let hitKind: MetricKind | undefined
+    let hitId = id
     for (const k of probe) {
       const row = snap.metrics[k][id]
       if (row) {
@@ -281,18 +293,70 @@ export class CodexClient {
       }
     }
 
+    // Tolerant second pass. The exact id is what we expect and what the live
+    // data has always produced, so this never runs on a healthy path — it
+    // exists because "the whole kind shows no data" is the failure we keep
+    // chasing, and a build that starts handing us "relics:FROZEN_EGG" or
+    // "FrozenEgg" should degrade to a logged rescue rather than a silent blank
+    // panel. Every rescue is logged loudly BECAUSE it means the reader and the
+    // snapshot disagree about id form, which is a bug to fix upstream, not a
+    // state to settle into.
+    if (!m) {
+      for (const variant of idVariants(id)) {
+        for (const k of probe) {
+          const row = snap.metrics[k][variant]
+          if (row) {
+            m = row
+            hitKind = k
+            hitId = variant
+            break
+          }
+        }
+        if (m) break
+      }
+      if (m && hitKind) {
+        this.log(
+          `RESCUED ${item.kind} id "${id}" → "${hitId}" in ${hitKind} ` +
+            `(reader/snapshot id form disagree — fix upstream)`
+        )
+        if (firstSee) {
+          telemetry.issue('codex_id_normalized', 'warn', {
+            kind: item.kind,
+            table: hitKind,
+            raw_shape: idShape(id),
+            matched_shape: idShape(hitId)
+          })
+        }
+      }
+    }
+
     if (!m || !hitKind) {
       if (firstSee) {
-        const upper = id.toUpperCase()
-        const hint =
-          upper !== id && probe.some((k) => upper in snap.metrics[k])
-            ? ` (uppercase "${upper}" WOULD match — case mismatch!)`
-            : ''
+        // Nearest-miss diagnostics: each of these is a different upstream bug,
+        // and from the symptom alone they are indistinguishable.
+        const notes: string[] = []
+        const ci = probe
+          .flatMap((k) => Object.keys(snap.metrics[k]).map((key) => [k, key] as const))
+          .find(([, key]) => key.toLowerCase() === id.toLowerCase())
+        if (ci) notes.push(`case-insensitive match "${ci[1]}" in ${ci[0]}`)
+        if (/^[A-Za-z_]+[:./]/.test(id)) notes.push(`looks namespace-prefixed`)
+        if (id !== id.trim()) notes.push(`has surrounding whitespace`)
+        if (id in snap.names) notes.push(`present in names ("${snap.names[id]}") but in no metrics table`)
+        const inOther = METRIC_KINDS.filter((k) => !probe.includes(k) && id in snap.metrics[k])
+        if (inOther.length) notes.push(`but IS in ${inOther.join('/')} (wrong kind mapping?)`)
+
         this.log(
           `UNRESOLVED ${item.kind} id "${id}" — not in ${probe
             .map((k) => `${snap.ids[k].length}-${k}`)
-            .join('/')} vocab${hint}`
+            .join('/')} vocab` + (notes.length ? ` · ${notes.join(' · ')}` : ' · no near miss')
         )
+        telemetry.issue('codex_unresolved_id', 'warn', {
+          kind: item.kind,
+          id_shape: idShape(id),
+          id_len: id.length,
+          table_miss: probe.join('/'),
+          near_miss: notes.length ? notes.join('; ') : 'none'
+        })
       }
       return { ...unknown, rows }
     }
@@ -319,7 +383,8 @@ export class CodexClient {
       score: m.score,
       confidence: confidenceFor(m.picks),
       known: true,
-      trap: this.trapIndex(m)
+      trap: this.trapIndex(m),
+      matched: hitKind
     }
   }
 
@@ -444,6 +509,52 @@ const METRIC_KIND_OF: Record<RawItem['kind'], MetricKind | null> = {
   relic: 'relics',
   potion: 'potions',
   choice: null
+}
+
+/**
+ * Plausible alternate spellings of an id, most-likely first, for the tolerant
+ * rescue pass. Deliberately conservative: only reversible transforms of *form*
+ * (namespace prefix, case, separator), never anything that could turn one
+ * entity's id into another's.
+ */
+function idVariants(id: string): string[] {
+  const out: string[] = []
+  const push = (v: string): void => {
+    if (v && v !== id && !out.includes(v)) out.push(v)
+  }
+  const trimmed = id.trim()
+  push(trimmed)
+  // "relics:FROZEN_EGG", "RELIC.FROZEN_EGG", "potions/FIRE_POTION"
+  const stripped = trimmed.replace(/^[A-Za-z_]+[:./]/, '')
+  push(stripped)
+  for (const base of [trimmed, stripped]) {
+    push(base.toUpperCase())
+    push(base.replace(/[-\s]+/g, '_').toUpperCase())
+    // PascalCase / camelCase -> UPPER_SNAKE ("FrozenEgg" -> "FROZEN_EGG")
+    push(
+      base
+        .replace(/([a-z0-9])([A-Z])/g, '$1_$2')
+        .replace(/[-\s]+/g, '_')
+        .toUpperCase()
+    )
+  }
+  return out
+}
+
+/**
+ * The *shape* of an id, for telemetry. Never the id itself: an unresolved id is
+ * usually a real unreleased entity name, and the shape is the whole diagnosis
+ * anyway ("we sent lowerCamel, the table holds UPPER_SNAKE").
+ */
+function idShape(id: string): string {
+  const prefix = /^[A-Za-z_]+[:./]/.test(id) ? 'prefixed:' : ''
+  const body = id.replace(/^[A-Za-z_]+[:./]/, '')
+  if (/^[A-Z0-9]+(_[A-Z0-9]+)*$/.test(body)) return `${prefix}UPPER_SNAKE`
+  if (/^[a-z0-9]+(_[a-z0-9]+)*$/.test(body)) return `${prefix}lower_snake`
+  if (/^[a-z][a-zA-Z0-9]*$/.test(body)) return `${prefix}lowerCamel`
+  if (/^[A-Z][a-zA-Z0-9]*$/.test(body)) return `${prefix}PascalCase`
+  if (/^[a-z0-9]+(-[a-z0-9]+)*$/.test(body)) return `${prefix}kebab`
+  return `${prefix}other`
 }
 
 function asArray(v: any): any[] {

@@ -9,6 +9,7 @@ import { CodexClient, type DeckAdvice } from '../codex/CodexClient'
 import type {
   RawCard,
   RawEnemiesState,
+  RawHoverTips,
   RawNGameState,
   RawPileState,
   RawVisibleItems
@@ -143,6 +144,13 @@ export class Sts2ScryProvider {
   private deckSnapshot: string[] = []
   /** Last reported reason advice was skipped, so it reports on change only. */
   private lastAdviceSkip = ''
+  /**
+   * Non-card item tracing state: the screen whose items have been logged, and
+   * the kind|id pairs already printed for it. Cleared on every screen change so
+   * each visit to a shop reports afresh, but a parked cursor reports once.
+   */
+  private itemLogSource = ''
+  private itemLogSeen = new Set<string>()
   /** Last reported deck/pile sizes, so deck reads report on change only. */
   private lastDeckShape = ''
   private deckHash = ''
@@ -308,7 +316,11 @@ export class Sts2ScryProvider {
         telemetry.guard('poll_ngame', () => this.pollNGame(msg.nGame), undefined)
         telemetry.guard('poll_pile', () => this.pollPile(msg.pile), undefined)
         telemetry.guard('poll_enemies', () => this.pollEnemies(msg.enemies), undefined)
-        telemetry.guard('poll_items', () => this.pollItems(msg.items), undefined)
+        telemetry.guard(
+          'poll_items',
+          () => this.pollItems(msg.items, msg.hoverTips ?? null),
+          undefined
+        )
         break
 
       case 'readFailed':
@@ -488,10 +500,16 @@ export class Sts2ScryProvider {
     }
   }
 
-  private pollItems(raw: RawVisibleItems | null): void {
+  private pollItems(raw: RawVisibleItems | null, tips: RawHoverTips | null): void {
     const value: Sts2LayoutState = raw
       ? this.toLayoutState(raw)
       : { source: 'none', panels: [] }
+    // Carried through untouched, and only when a panel could actually be shown:
+    // it is the renderer that decides where a panel goes, and this is the only
+    // thing it was missing to keep out from under the game's own tooltip.
+    if (raw && tips && (tips.text.length > 0 || tips.card.length > 0)) {
+      value.gameTips = { text: tips.text, card: tips.card }
+    }
     const json = JSON.stringify(value)
     if (json !== this.lastLayout) {
       this.lastLayout = json
@@ -507,6 +525,19 @@ export class Sts2ScryProvider {
           this.dbg(
             `  hovered "${hp.header}" known=${hp.known} ` +
               `x=${hp.x?.toFixed(3)} y=${hp.y?.toFixed(3)} w=${hp.w?.toFixed(3)} h=${hp.h?.toFixed(3)}`
+          )
+          // The one line that says whether the game's tooltip was visible to us
+          // at the moment we placed the panel — the only way to tell "we chose
+          // to sit there" from "we never saw it" in a report from a live game.
+          const g = value.gameTips
+          this.dbg(
+            g
+              ? `  gameTips: ${g.text.length} text, ${g.card.length} card` +
+                  (g.text[0]
+                    ? ` · first text @ ${g.text[0].x.toFixed(3)},${g.text[0].y.toFixed(3)} ` +
+                      `${g.text[0].w.toFixed(3)}x${g.text[0].h.toFixed(3)}`
+                    : '')
+              : '  gameTips: none read'
           )
         }
       }
@@ -537,11 +568,49 @@ export class Sts2ScryProvider {
     // isn't known-empty → the renderer shows an animated placeholder meanwhile.
     const advicePending = !!offerKey && !advice && !this.adviceNoData.has(offerKey)
 
+    // Per-item tracing for everything that is NOT a card. Cards have always
+    // worked and would drown the signal; relics, potions and choices are the
+    // ones reported as permanently "no Codex data", and the only way to tell a
+    // reader that never produced the item from an id the snapshot rejects is to
+    // print the raw id and the lookup result side by side. Deduped per id per
+    // screen so parking the cursor on one relic doesn't spam the stream.
+    if (raw.source !== this.itemLogSource) {
+      this.itemLogSource = raw.source
+      this.itemLogSeen.clear()
+      // The composition line answers the question the per-item lines cannot:
+      // whether the reader produced any non-card items on this screen at all.
+      // "0 relic" on a shop screen is a reader bug; "3 relic" with three
+      // known=false lines below it is a vocabulary bug. Opposite fixes.
+      const counts: Record<string, number> = {}
+      for (const i of raw.items) counts[i.kind] = (counts[i.kind] ?? 0) + 1
+      const missingId = raw.items.filter((i) => !i.id).length
+      this.dbg(
+        `screen ${raw.source}: ${raw.items.length} items (` +
+          (['card', 'relic', 'potion', 'choice'] as const)
+            .map((k) => `${counts[k] ?? 0} ${k}`)
+            .join(', ') +
+          `)${missingId ? ` · ${missingId} with NULL id (dropped)` : ''}`
+      )
+    }
+
     const panels: Sts2StatPanel[] = []
     for (const item of raw.items) {
       if (!item.id) continue
       const ctx = this.codex.contextStats(item)
       const header = this.codex.displayName(item.id) ?? this.nameMap[item.id] ?? prettifyId(item.id)
+
+      if (item.kind !== 'card') {
+        const dedupe = `${item.kind}|${item.id}`
+        if (!this.itemLogSeen.has(dedupe)) {
+          this.itemLogSeen.add(dedupe)
+          this.dbg(
+            `item ${raw.source} ${item.kind} id="${item.id}" ` +
+              `known=${ctx ? ctx.known : 'null(no snapshot)'} ` +
+              `table=${ctx?.matched ?? 'none'} rows=${ctx?.rows.length ?? 0} ` +
+              `header="${header}" hovered=${item.isHovered}`
+          )
+        }
+      }
 
       if (!ctx || !ctx.known) {
         // Unresolved id: honest "no data" rather than a made-up stat line.
