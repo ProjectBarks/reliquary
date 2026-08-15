@@ -233,6 +233,10 @@ export class CodexClient {
    * Synchronous global context stats for one offered item (phase 1). Returns the
    * stat rows plus tier/score/confidence, or a known:false marker when the id is
    * not in the vocabulary. No network — reads the primed snapshot only.
+   *
+   * known:false is reserved for a genuinely unknown *id*, never a whole kind:
+   * cards, relics and potions are all primed with metrics, and event/ancient
+   * choices resolve through whichever table owns their id.
    */
   contextStats(item: RawItem): {
     rows: Array<[string, string]>
@@ -246,31 +250,58 @@ export class CodexClient {
     const id = item.id
     const kind = METRIC_KIND_OF[item.kind]
 
+    const snap = this.snap
     const rows: Array<[string, string]> = []
     if (item.cost != null) rows.push(['Cost', `${item.cost}g`])
     const unknown = { rows, tier: null, score: null, confidence: 'low', known: false, trap: null } as const
 
-    // Event choices have no entity id to look up — the header name is all there is.
-    if (!kind) return { ...unknown, rows }
-
     const firstSee = !this.idsSeen.has(id)
     this.idsSeen.add(id)
 
-    const m = this.snap.metrics[kind][id]
-    if (!m) {
+    // Which tables may answer for this item. A card/relic/potion has exactly one.
+    // An event or ancient choice has no kind of its own — but its id very often
+    // IS an entity id: the ancient options hand out a specific relic or potion,
+    // and the option's TextKey ends in that entity's id (PRECISE_SCISSORS is a
+    // relic, not a bespoke choice token). Short-circuiting on `!kind` used to
+    // print "No Codex data" under a header the very same snapshot had already
+    // named, so choices probe all three tables instead. That is unambiguous:
+    // cards, relics and potions share no ids (verified across the live
+    // snapshot — zero collisions in any pair). Genuinely non-entity options
+    // (REMOVE_CARD, GAIN_GOLD…) match nothing and still degrade honestly.
+    const probe: MetricKind[] = kind ? [kind] : METRIC_KINDS
+
+    let m: MetricRow | undefined
+    let hitKind: MetricKind | undefined
+    for (const k of probe) {
+      const row = snap.metrics[k][id]
+      if (row) {
+        m = row
+        hitKind = k
+        break
+      }
+    }
+
+    if (!m || !hitKind) {
       if (firstSee) {
         const upper = id.toUpperCase()
         const hint =
-          upper !== id && upper in this.snap.metrics[kind]
+          upper !== id && probe.some((k) => upper in snap.metrics[k])
             ? ` (uppercase "${upper}" WOULD match — case mismatch!)`
             : ''
         this.log(
-          `UNRESOLVED ${item.kind} id "${id}" — not in ${this.snap.ids[kind].length}-${kind} vocab${hint}`
+          `UNRESOLVED ${item.kind} id "${id}" — not in ${probe
+            .map((k) => `${snap.ids[k].length}-${k}`)
+            .join('/')} vocab${hint}`
         )
       }
       return { ...unknown, rows }
     }
-    if (firstSee) this.log(`resolved ${item.kind} "${id}" → tier ${m.tier}, score ${m.score}`)
+    if (firstSee) {
+      this.log(
+        `resolved ${item.kind} "${id}"${item.kind === 'choice' ? ` as ${hitKind}` : ''} → ` +
+          `tier ${m.tier}, score ${m.score}`
+      )
+    }
     this.idsResolved.add(id)
 
     // Every rated row carries tier/score/win-rate/picks. Elo and pick rate are
@@ -402,7 +433,12 @@ export class CodexClient {
 
 // ── helpers ──
 
-/** Which metrics table answers for an item, or null when nothing rates it. */
+/**
+ * Which metrics table answers for an item. `null` means "not known from the kind
+ * alone" — not "unrateable": a choice's id is looked up across all three tables
+ * (see contextStats), because ancient options are usually a relic or potion by
+ * another name.
+ */
 const METRIC_KIND_OF: Record<RawItem['kind'], MetricKind | null> = {
   card: 'cards',
   relic: 'relics',
