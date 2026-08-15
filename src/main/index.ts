@@ -4,6 +4,7 @@ import { writeFile } from 'fs/promises'
 import { join } from 'path'
 import { OverlayWindow } from './overlay/OverlayWindow'
 import { DashboardWindow } from './windows/DashboardWindow'
+import { WindowLifecycle } from './lifecycle'
 import { Sts2Stub } from './stub/sts2Stub'
 import { DemoClock, JournalDemoDriver } from './stub/journalDemoDriver'
 import {
@@ -103,7 +104,34 @@ const HIDE_OVERLAY_ACCELERATORS = [
 let hideOverlayAccelerator: string | null = null
 
 const overlay = new OverlayWindow()
-const dashboard = new DashboardWindow()
+const dashboard = new DashboardWindow(() => lifecycle.dashboardClosed())
+
+/**
+ * When this process is allowed to be alive. Closing the dashboard used to leave
+ * the overlay holding the process — and the single-instance lock — with no
+ * taskbar button and no window, forever. See `lifecycle.ts` for the state table;
+ * the short version is that the app now quits with the dashboard unless the
+ * overlay is actually drawn over a running game, and quits when that game goes.
+ *
+ * Declared after the windows it inspects and referenced only from callbacks, so
+ * neither `const` is read before it is initialised.
+ */
+const lifecycle = new WindowLifecycle({
+  hasDashboard: () => {
+    const win = dashboard.browserWindow
+    return !!win && !win.isDestroyed()
+  },
+  // Stub mode has no reader and therefore never detects anything, so a dev
+  // closing the dashboard gets a quit — which is the behaviour they want too.
+  gameEvidence: () => ({
+    detected: usingScry && processState.detected,
+    snapshotAgeMs: usingScry ? scryProvider?.snapshotAgeMs ?? null : null
+  }),
+  quit: () => app.quit(),
+  onEvent: (name, props) => telemetry.capture(name, props ?? {}),
+  onIssue: (key, severity, props) => telemetry.issue(key, severity, props ?? {}),
+  log: (line) => console.log(line)
+})
 
 let overlayHidden = false
 
@@ -415,6 +443,9 @@ function wireScry(): void {
           bounds: state.bounds
         })
       }
+      // The other end of the kept-overlay state: an overlay with no dashboard
+      // exists to sit over a running game, so when the game goes, so does it.
+      if (was.detected !== state.detected) lifecycle.processChanged()
       broadcast(IPC.Tracker, trackerState)
       pushDiagnostics()
     }
@@ -763,25 +794,35 @@ const devStubEarly = (): boolean => !!process.env['SPECTRA_STUB']
 
 const hasLock = process.env['SPECTRA_CAPTURE'] ? true : app.requestSingleInstanceLock()
 if (!hasLock) {
-  telemetry.capture('second_instance_exit')
+  // Nothing is reported from here. This runs at module load, before
+  // `telemetry.init()` — the client does not exist yet, so the old
+  // `capture('second_instance_exit')` here was dead code, and PostHog confirms
+  // it: 16 `second_instance_focus` events ingested, zero `second_instance_exit`.
+  // The surviving instance already reports the same fact with more context.
   app.quit()
 }
 app.on('second-instance', () => {
   const win = dashboard.browserWindow
-  telemetry.capture('second_instance_focus', { dashboard_recreated: !win })
+  telemetry.capture('second_instance_focus', {
+    dashboard_recreated: !win,
+    // A recreate is only legitimate in the kept-overlay state now. Anything
+    // else means the process outlived both its windows' reasons to exist.
+    game_detected: usingScry && processState.detected,
+    headless_ms: lifecycle.headlessMs()
+  })
   if (win) {
     if (win.isMinimized()) win.restore()
     win.show()
     win.focus()
     return
   }
-  // Closing the dashboard does NOT quit the app: the overlay window keeps the
-  // process — and the single-instance lock — alive in the background. Every
-  // later launch of the exe lands here, so a closed dashboard must be
-  // recreated or clicking the app icon does nothing, forever, and the app
-  // reads as "won't launch" until the zombie is killed in Task Manager.
+  // The dashboard can legitimately be absent while the overlay rides a running
+  // game (see `lifecycle.ts`). Every later launch of the exe lands here, so that
+  // dashboard must be recreated or clicking the app icon does nothing and the
+  // app reads as "won't launch".
   if (!app.isReady()) return
   const created = dashboard.create()
+  lifecycle.dashboardOpened()
   dashboard.load(process.env['ELECTRON_RENDERER_URL'])
   created.webContents.once('did-finish-load', () => {
     if (created.isDestroyed()) return
@@ -849,6 +890,10 @@ if (hasLock)
   }
 
   dashboard.create()
+  lifecycle.dashboardOpened()
+  // Armed for the whole session, not just after a close: a dashboard lost any
+  // other way (a renderer kill, a future refactor) must be caught too.
+  lifecycle.start()
   dashboard.load(devUrl)
   watchLoad('dashboard', dashboard.browserWindow)
   dashboard.browserWindow?.webContents.once('did-finish-load', () => dashboard.show())
@@ -942,8 +987,15 @@ if (hasLock)
  *  below runs exactly once instead of looping through will-quit forever. */
 let telemetryFlushed = false
 
+// `app.quit()` closes every window on its way out, and the dashboard's `closed`
+// handler is the user-intent signal for the whole lifecycle. Latch the quit
+// first so a teardown close is not counted as "the user closed the dashboard",
+// which would both double-count the metric and re-enter quit.
+app.on('before-quit', () => lifecycle.markQuitting())
+
 app.on('will-quit', (e) => {
   globalShortcut.unregisterAll()
+  lifecycle.dispose()
   scryProvider?.stop()
   stub?.stop()
   journalDemo?.stop()

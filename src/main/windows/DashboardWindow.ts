@@ -13,6 +13,13 @@ import type { WindowAction } from '@shared/types'
 export class DashboardWindow {
   private win: BrowserWindow | null = null
 
+  /**
+   * @param onClosed Fired once the window is gone. The app's lifecycle hangs off
+   *   this: with no game running there is nothing left for the process to do, so
+   *   closing this window is the user asking the app to exit — see `lifecycle.ts`.
+   */
+  constructor(private readonly onClosed: () => void = () => {}) {}
+
   create(): BrowserWindow {
     this.win = new BrowserWindow({
       width: 1000,
@@ -51,6 +58,7 @@ export class DashboardWindow {
 
     this.win.on('closed', () => {
       this.win = null
+      this.onClosed()
     })
 
     return this.win
