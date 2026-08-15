@@ -1,6 +1,7 @@
 import type { WindowBounds } from '@shared/types'
 import type {
   RawEnemiesState,
+  RawHoverTips,
   RawNGameState,
   RawPileState,
   RawVisibleItems
@@ -18,12 +19,22 @@ import type {
 
 export type HostToReader = { type: 'start' } | { type: 'stop' }
 
-/** The four raw reads that make up one poll, as a unit the cache can hold. */
+/** The raw reads that make up one poll, as a unit the cache can hold. */
 export interface RawSnapshot {
   nGame: RawNGameState | null
   pile: RawPileState | null
   enemies: RawEnemiesState | null
   items: RawVisibleItems | null
+  /**
+   * Where the GAME is drawing its own hover popups this instant.
+   *
+   * Optional, unlike its four siblings, because it is not a reading of the run:
+   * it is momentary UI geometry that exists only to keep our stat panel from
+   * covering the game's own tooltip. Nothing that reasons about a run (the
+   * journal, and the synthetic snapshots that exercise it) has any business
+   * fabricating one, so they are not made to.
+   */
+  hoverTips?: RawHoverTips | null
 }
 
 export type ReaderToHost =

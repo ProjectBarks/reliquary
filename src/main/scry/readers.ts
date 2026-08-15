@@ -17,6 +17,7 @@ import {
   NEventRoom,
   NGame,
   NGridCardHolder,
+  NHoverTipSet,
   NMerchantRoom,
   NRun,
   ReleaseInfoManager,
@@ -491,6 +492,99 @@ export function readVisibleItems(context: GodotContext): RawVisibleItems | null 
   }
 
   return null
+}
+
+// ── the game's own hover tips ────────────────────────────────────────────────
+
+/**
+ * A rectangle over the game window in screen fractions [0..1]. Unlike `RawItem`,
+ * whose cx/cy is a CENTRE, x/y here is the TOP-LEFT corner — that is what the
+ * tip controls report and what an overlap test wants.
+ */
+export interface RawRect {
+  x: number
+  y: number
+  w: number
+  h: number
+}
+
+/** Where the GAME is currently drawing its own popups. */
+export interface RawHoverTips {
+  /**
+   * The tip dictionary's `_version`. Only useful as a cheap "did the set of
+   * live tips change" signal; null when it could not be read.
+   */
+  version: number | null
+  /** Keyword / relic / effect tips, stacked vertically beside the hovered thing. */
+  text: RawRect[]
+  /** The enlarged card preview the game shows beside a hovered card. */
+  card: RawRect[]
+}
+
+/**
+ * Read the rectangles the game's own hover tips occupy.
+ *
+ * Ported from the original companion's `ScrySts2HoverTips` (decomp/scry:10122-
+ * 10210), which existed for exactly the reason we need it: its stat tip had to
+ * be placed somewhere that did not cover the game's explanation of the item
+ * being hovered. The margin fudges below are its numbers, kept because they
+ * describe the game's art, not our layout — the tip frames carry a few pixels
+ * of transparent border that would otherwise read as occupied space.
+ *
+ * Returns null when nothing can be read. Every failure mode collapses to that,
+ * and the renderer treats "no tips" as "place the panel the way you always
+ * did", so a build that renames these fields costs us the improvement and
+ * nothing else.
+ */
+export function readHoverTips(context: GodotContext): RawHoverTips | null {
+  const dict = NHoverTipSet.getActive(context)
+  if (!dict) return null
+
+  const screen = safe(() => NGame.getInstance(context).getSize(), null)
+  if (!screen || !screen[0] || !screen[1]) return null
+
+  const tips: RawHoverTips = { version: safe(() => dict.version, null), text: [], card: [] }
+  for (const set of dict.values()) {
+    if (!set) continue
+
+    const textContainer = safe(() => set._textHoverTipContainer, null)
+    if (textContainer) {
+      // One walk for the container, then each child's LOCAL offset added to it:
+      // the children are laid out by the flow container, so their own global
+      // transforms are the ones most likely to be a frame stale.
+      const base = safe(() => textContainer.computeGlobalPosition(screen), null)
+      if (base) {
+        for (const tip of safe(() => textContainer.getHoverTips(), [] as any[])) {
+          const size = safe(() => tip.getSize() as [number, number], null)
+          if (!size || size[0] === 0 || size[1] === 0) continue
+          const pos = safe(() => tip.getPosition() as [number, number], null)
+          if (!pos) continue
+          tips.text.push({
+            x: (base[0] + pos[0]) / screen[0],
+            y: (base[1] + pos[1]) / screen[1],
+            // Adjust for uneven tooltip margins (the original's constants).
+            w: (size[0] - 10.5) / screen[0],
+            h: (size[1] - 3.5) / screen[1]
+          })
+        }
+      }
+    }
+
+    const cardContainer = safe(() => set._cardHoverTipContainer, null)
+    if (cardContainer) {
+      const size = safe(() => cardContainer.getSize(), null)
+      const pos = safe(() => cardContainer.computeGlobalPosition(screen), null)
+      if (size && pos && size[0] > 0 && size[1] > 0) {
+        tips.card.push({
+          x: pos[0] / screen[0],
+          y: pos[1] / screen[1],
+          w: (size[0] - 11) / screen[0],
+          h: (size[1] - 5) / screen[1]
+        })
+      }
+    }
+  }
+  return tips
 }
 
 /** The running game's build version, used to fetch matching card metadata. */

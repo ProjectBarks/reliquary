@@ -21,6 +21,7 @@ import { isTransientRead } from './scryObject'
 import {
   readEnemiesState,
   readGameVersion,
+  readHoverTips,
   readNGameState,
   readPileState,
   readVisibleItems
@@ -136,7 +137,7 @@ function poll(): void {
   const context = conn.getContext()
   if (!context) return
 
-  // Each read stands alone. They used to be four expressions inside one
+  // Each read stands alone. They used to be several expressions inside one
   // object literal, so a dead pointer while reading room state threw before
   // the other three were evaluated and the whole snapshot was dropped — the
   // card recommendations vanished because something unrelated failed. A read
@@ -157,7 +158,12 @@ function poll(): void {
     nGame: read(() => readNGameState(context)),
     pile: read(() => readPileState(context)),
     enemies: read(() => readEnemiesState(context)),
-    items: read(() => readVisibleItems(context))
+    items: read(() => readVisibleItems(context)),
+    // Deliberately NOT counted as a failure when it throws: this read exists
+    // only to nudge a panel sideways, and letting it raise the error streak
+    // would let a cosmetic nicety restart the connection that the deck tracker
+    // and the advice depend on.
+    hoverTips: safe(() => readHoverTips(context), null)
   }
   send({ type: 'snapshot', ...snapshot })
 

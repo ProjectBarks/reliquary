@@ -255,6 +255,80 @@ export class List<T = any> extends ScryObject {
   }
 }
 
+/** How many backing slots a dictionary walk will look at before giving up. */
+const MAX_DICT_ENTRIES = 512
+
+/**
+ * Wrapper for C#'s `Dictionary<TKey, TValue>` — ITERATION ONLY.
+ *
+ * The original companion's port also implemented `FindEntry`: bucket indexing,
+ * a Win64 string hash, and a runtime-dependent "buckets are uint so subtract
+ * one" correction it had to discover by trial. None of that is needed here —
+ * the single dictionary we read (`NHoverTipSet._activeHoverTips`) is walked in
+ * full — so the lookup half is deliberately not ported rather than carried as
+ * untested code that would only be exercised the day someone needed it.
+ *
+ * `values()` walks the whole `_entries` backing array rather than the first
+ * `_count` of it, because the two are not the same list: removals leave holes
+ * in place and the live entries sit around them. A hole reads back as a null
+ * `value` (the runtime clears reference values on removal), which is also what
+ * a torn read looks like, so both are simply skipped.
+ */
+export class Dictionary<T = any> extends ScryObject {
+  private prefix: string
+  private valueCtor?: ItemCtor<T>
+
+  constructor(obj: any, valueCtor?: ItemCtor<T>) {
+    super(obj)
+    this.valueCtor = valueCtor
+    // .NET Core names these `_count`/`_entries`/`_version`; the mono-era
+    // runtimes the original also supported drop the underscore. Probe once
+    // instead of guessing — a wrong guess would read as "no entries", which is
+    // indistinguishable from an empty dictionary.
+    let prefix: string | null = null
+    for (const candidate of ['_', '']) {
+      try {
+        this.number(`${candidate}count`)
+        prefix = candidate
+        break
+      } catch {
+        /* try the other naming */
+      }
+    }
+    if (prefix === null) throw new ScryError(`${this.className} is not a Dictionary`)
+    this.prefix = prefix
+  }
+
+  get version(): number {
+    return this.number(`${this.prefix}version`) as number
+  }
+
+  get count(): number {
+    return this.number(`${this.prefix}count`) as number
+  }
+
+  /** Every occupied slot's value, in backing-array order. Empty when unreadable. */
+  values(): T[] {
+    const entries = this.array(`${this.prefix}entries`, { nullable: true })
+    if (!entries) return []
+    const out: T[] = []
+    const limit = Math.min(entries.length, MAX_DICT_ENTRIES)
+    for (let i = 0; i < limit; i++) {
+      const slot = entries.at(i)
+      if (slot === null || slot === undefined) continue
+      let value: any
+      try {
+        value = new ScryObject(slot).unsafe('value')
+      } catch {
+        continue
+      }
+      if (value === null || value === undefined) continue
+      out.push(this.valueCtor ? new this.valueCtor(value) : value)
+    }
+    return out
+  }
+}
+
 export class Stack<T = any> extends ScryObject {
   count: number
   private itemCtor?: ItemCtor<T>

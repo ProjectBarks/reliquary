@@ -152,7 +152,13 @@ export class ReaderHost {
       child.on('message', (msg: ReaderToHost) => {
         try {
           if (msg.type === 'snapshot') {
-            this.cache = { nGame: msg.nGame, pile: msg.pile, enemies: msg.enemies, items: msg.items }
+            this.cache = {
+              nGame: msg.nGame,
+              pile: msg.pile,
+              enemies: msg.enemies,
+              items: msg.items,
+              hoverTips: msg.hoverTips ?? null
+            }
             this.cachedAt = Date.now()
           } else if (msg.type === 'moduleStatus') {
             this.moduleLoaded = msg.loaded

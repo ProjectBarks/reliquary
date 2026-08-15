@@ -11,6 +11,7 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 
 import {
+  Dictionary,
   List,
   ScryObject,
   ScryGodotObject,
@@ -712,6 +713,68 @@ export class NGame extends ScryGodotObject {
     if (sceneName === NRun.ClassName) return new NRun(currentScene)
     if (sceneName === NMainMenuClassName) return new ScryObject(currentScene)
     return null
+  }
+}
+
+// ── the game's own hover tips ────────────────────────────────────────────────
+
+/**
+ * The game's tip stack: a `VFlowContainer` whose children are the individual
+ * keyword/relic/"what does this do" tips, laid out top to bottom.
+ *
+ * The children are plain Godot controls, not .NET nodes, so they are taken as
+ * raw controls (position + size) rather than wrapped — there is nothing else on
+ * them worth reading.
+ */
+export class VFlowContainer extends ScryGodotObject {
+  getHoverTips(): any[] {
+    return this.getNode().getChildren().map((node: any) => node.castControl())
+  }
+}
+
+/** The big card preview the game draws beside a hovered card. */
+export class NHoverTipCardContainer extends ScryGodotObject {}
+
+/**
+ * One live hover-tip set — the popups the GAME itself puts on screen when the
+ * player hovers a card, relic, potion or keyword.
+ *
+ * This is the piece that lets our own stat tip get out of the way instead of
+ * landing on top of the game's explanation of the same item. The sets are
+ * registered in a static dictionary keyed by their owner, so they are reachable
+ * without knowing which screen or room raised them — which matters, because
+ * every surface we anchor panels to (card reward, merchant, grid, ancient
+ * event) raises them from a different parent.
+ *
+ * Verified present in the shipping build this was written against (StS2
+ * v0.107.1): `NHoverTipSet`, `_activeHoverTips`, `_textHoverTipContainer` and
+ * `_cardHoverTipContainer` all appear in `sts2.dll`'s metadata, alongside
+ * `res://src/Core/Nodes/HoverTips/NHoverTipSet.cs`.
+ */
+export class NHoverTipSet extends ScryGodotObject {
+  static ClassName = 'MegaCrit.Sts2.Core.Nodes.HoverTips.NHoverTipSet'
+  /**
+   * The static registry of live tip sets, or null when the class has no such
+   * field (a build that renamed it) — never a throw, because "the game is not
+   * showing tips" and "we cannot see the tips" must both degrade to the same
+   * harmless thing: our panel placing itself the way it always did.
+   */
+  static getActive(context: GodotContext): Dictionary<NHoverTipSet> | null {
+    const dict = getValidOrNull(context.getClass(NHoverTipSet.ClassName), '_activeHoverTips')
+    if (!dict) return null
+    try {
+      return new Dictionary(dict, NHoverTipSet)
+    } catch {
+      return null
+    }
+  }
+  get _cardHoverTipContainer(): NHoverTipCardContainer | null {
+    const value = this.object('_cardHoverTipContainer', true)
+    return value ? new NHoverTipCardContainer(value) : null
+  }
+  get _textHoverTipContainer(): VFlowContainer | null {
+    const value = this.object('_textHoverTipContainer', true)
+    return value ? new VFlowContainer(value) : null
   }
 }
 
