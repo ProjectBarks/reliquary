@@ -48,6 +48,23 @@ const DEFAULT: PanelPlacement = {
   free: false
 }
 
+export interface FloatingPanelOptions {
+  /**
+   * Where the panel sits before the user has ever moved it. Each panel's
+   * default is its old fixed anchor, so turning free placement on moves
+   * nothing until someone drags it.
+   */
+  defaults?: Partial<PanelPlacement>
+  /**
+   * Size floor. The tracker's minimum exists because its columns need room;
+   * a content-sized panel (the attack forecast) is smaller than that and
+   * would be clamped to a rectangle it never occupies, which would throw off
+   * the anchor arithmetic that positions it.
+   */
+  minW?: number
+  minH?: number
+}
+
 export interface FloatingPanel {
   placement: PanelPlacement
   dragging: boolean
@@ -69,14 +86,26 @@ export interface FloatingPanel {
   setSize: (w: number, h: number) => void
 }
 
-export function useFloatingPanel(storageKey: string): FloatingPanel {
-  const [placement, setPlacement] = useState<PanelPlacement>(() => read(storageKey))
+export function useFloatingPanel(
+  storageKey: string,
+  options: FloatingPanelOptions = {}
+): FloatingPanel {
+  const base: PanelPlacement = { ...DEFAULT, ...options.defaults }
+  const minW = options.minW ?? MIN_W
+  const minH = options.minH ?? MIN_H
+
+  const [placement, setPlacement] = useState<PanelPlacement>(() => read(storageKey, base, minW, minH))
   const [dragging, setDragging] = useState(false)
   const [resizing, setResizing] = useState(false)
   const [snapHint, setSnapHint] = useState<{ ax: AnchorX; ay: AnchorY } | null>(null)
 
   const ref = useRef(placement)
   ref.current = placement
+  // Read inside pointer handlers, which are bound once for the life of a drag —
+  // closing over the values directly would change their identity and break the
+  // listener teardown.
+  const limits = useRef({ base, minW, minH })
+  limits.current = { base, minW, minH }
   const mode = useRef<'idle' | 'drag' | 'resize'>('idle')
   const interactive = useRef(false)
   const origin = useRef({ x: 0, y: 0, rect: { left: 0, top: 0, w: 0, h: 0 } })
@@ -109,8 +138,9 @@ export function useFloatingPanel(storageKey: string): FloatingPanel {
         // anchored edge stays put and the panel grows into open space.
         const signX = ref.current.ax === 'right' ? -1 : 1
         const signY = ref.current.ay === 'bottom' ? -1 : 1
-        const w = clamp(o.rect.w + (e.clientX - o.x) * signX, MIN_W, Math.min(MAX_W, vw - 24))
-        const h = clamp(o.rect.h + (e.clientY - o.y) * signY, MIN_H, vh - 24)
+        const { minW: lo, minH: loH } = limits.current
+        const w = clamp(o.rect.w + (e.clientX - o.x) * signX, lo, Math.min(MAX_W, vw - 24))
+        const h = clamp(o.rect.h + (e.clientY - o.y) * signY, loH, vh - 24)
         setPlacement((p) => ({ ...p, w, h }))
         return
       }
@@ -202,8 +232,12 @@ export function useFloatingPanel(storageKey: string): FloatingPanel {
     }, [setInteractive]),
     gripHandlers: { onPointerDown: (e) => begin(e, 'drag') },
     resizeHandlers: { onPointerDown: (e) => begin(e, 'resize') },
-    reset: useCallback(() => setPlacement(DEFAULT), []),
+    reset: useCallback(() => setPlacement(limits.current.base), []),
     setSize: useCallback((w: number, h: number) => {
+      // No-op guard, not an optimisation: a content-sized panel reports its
+      // measured size back through here, and an unconditional setState would
+      // re-render, re-measure, and never settle.
+      if (ref.current.w === w && ref.current.h === h) return
       // Mutate the ref too: begin() runs in the same tick and reads it before
       // React commits the state update.
       ref.current = { ...ref.current, w, h }
@@ -307,19 +341,19 @@ function clamp(n: number, lo: number, hi: number): number {
   return Math.min(hi, Math.max(lo, n))
 }
 
-function read(key: string): PanelPlacement {
+function read(key: string, base: PanelPlacement, minW: number, minH: number): PanelPlacement {
   try {
     const raw = localStorage.getItem(key)
-    if (!raw) return DEFAULT
+    if (!raw) return base
     const p = JSON.parse(raw) as Partial<PanelPlacement>
     return {
-      ...DEFAULT,
+      ...base,
       ...p,
-      w: clamp(Number(p.w) || DEFAULT.w, MIN_W, MAX_W),
-      h: clamp(Number(p.h) || DEFAULT.h, MIN_H, 4000)
+      w: clamp(Number(p.w) || base.w, minW, MAX_W),
+      h: clamp(Number(p.h) || base.h, minH, 4000)
     }
   } catch {
-    return DEFAULT
+    return base
   }
 }
 

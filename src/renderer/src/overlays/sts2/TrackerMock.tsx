@@ -1,7 +1,15 @@
 ﻿import { useMemo, useState } from 'react'
 import styled from 'styled-components'
+import type { Sts2Enemy } from '@shared/types'
+import { AttackSummary } from './AttackSummary'
 import { FreeDeckTracker } from './FreeDeckTracker'
 import { buildPile, fixtureCardData } from './trackerFixture'
+
+/** One multi-hit and one single hit: 6x3 + 9 = 27 damage across 4 hits. */
+const MOCK_ENEMIES: Sts2Enemy[] = [
+  { type: 'MultiAttackIntent', valueLabel: '6 x 3' },
+  { type: 'SingleAttackIntent', valueLabel: '9' }
+].map((intent) => ({ intents: [intent] }))
 
 /**
  * Design harness for the movable deck tracker (#/mock/tracker, dev builds
@@ -91,6 +99,7 @@ export function TrackerMock(): JSX.Element {
         <button
           onClick={() => {
             localStorage.removeItem('sts2.deckTracker.placement')
+            localStorage.removeItem('sts2.attackSummary.placement')
             location.reload()
           }}
         >
@@ -103,6 +112,15 @@ export function TrackerMock(): JSX.Element {
         pileState={pile}
         cardData={fixtureCardData()}
         isPeekButtonVisible={peek}
+      />
+
+      {/* Placed by the same hook as the tracker, so the two can be dragged
+          against each other to confirm they snap and persist identically. */}
+      <AttackSummary
+        enemies={MOCK_ENEMIES}
+        isCombatInProgress
+        currentSide={1}
+        isObscured={false}
       />
     </Stage>
   )

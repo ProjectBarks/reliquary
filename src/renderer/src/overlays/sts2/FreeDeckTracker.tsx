@@ -2,6 +2,7 @@ import { useMemo, useState } from 'react'
 import styled, { css } from 'styled-components'
 import type { Sts2Card, Sts2CardData, Sts2PileState } from '@shared/types'
 import { CardTile } from './CardTile'
+import { GripDots, SnapGuide } from './PanelChrome'
 import { useFloatingPanel } from '../../hooks/useFloatingPanel'
 import { BG, resolveCost } from './theme'
 import { COL_GAP, layoutTracker, type LayoutGroup, type TrackerLayout } from './trackerLayout'
@@ -124,8 +125,6 @@ export function FreeDeckTracker({
 
   return (
     <>
-      {/* Snap feedback is drawn behind the panel, not on it: the point is to
-          show where it will land, which you cannot see if the panel covers it. */}
       {panel.snapHint ? <SnapGuide $ax={panel.snapHint.ax} $ay={panel.snapHint.ay} /> : null}
 
       <Shell
@@ -144,11 +143,7 @@ export function FreeDeckTracker({
         }}
       >
         <TitleBar $active={active} {...panel.gripHandlers}>
-          <Grip aria-hidden>
-            <span />
-            <span />
-            <span />
-          </Grip>
+          <GripDots />
           <Title>Draw pile</Title>
           <Remaining>{drawLeft}</Remaining>
           <Close
@@ -366,21 +361,6 @@ const TitleBar = styled.div<{ $active: boolean }>`
   }
 `
 
-/** Six dots — the standard "this is a drag handle" mark, drawn not typed. */
-const Grip = styled.div`
-  display: grid;
-  grid-template-columns: repeat(2, 3px);
-  gap: 3px;
-  flex: 0 0 auto;
-  span {
-    width: 3px;
-    height: 3px;
-    border-radius: 50%;
-    background: oklch(1 0 0 / 45%);
-    box-shadow: 0 6px 0 oklch(1 0 0 / 45%);
-  }
-`
-
 const Title = styled.div`
   flex: 1;
   min-width: 0;
@@ -540,28 +520,6 @@ const ResizeHandle = styled.div<{ $active: boolean; $ax: string; $ay: string }>`
       ${(p) => (p.$ax === 'right' ? (p.$ay === 'bottom' ? 180 : 90) : p.$ay === 'bottom' ? 270 : 0)}deg
     );
   }
-`
-
-/** Where the panel will land, drawn behind it while dragging. */
-const SnapGuide = styled.div<{ $ax: string; $ay: string }>`
-  position: absolute;
-  pointer-events: none;
-  border-radius: 12px;
-  border: 1px dashed color-mix(in oklch, var(--brand) 70%, transparent);
-  background: color-mix(in oklch, var(--brand) 8%, transparent);
-  inset: 6px;
-  ${(p) =>
-    p.$ax === 'left'
-      ? css`right: 60%;`
-      : p.$ax === 'right'
-        ? css`left: 60%;`
-        : css`left: 28%; right: 28%;`}
-  ${(p) =>
-    p.$ay === 'top'
-      ? css`bottom: 60%;`
-      : p.$ay === 'bottom'
-        ? css`top: 60%;`
-        : css`top: 28%; bottom: 28%;`}
 `
 
 const Collapsed = styled.button`
