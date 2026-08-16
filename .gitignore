@@ -8,3 +8,8 @@ release/
 
 # Agent worktrees are local scratch, never part of the repo
 .claude/worktrees/
+
+# session/planning artifacts
+*plan*.md
+.claude/
+shots*/
