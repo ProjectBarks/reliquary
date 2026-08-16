@@ -76,41 +76,61 @@ function Panel({
     obstacles
   ])
 
-  // Once we have stepped around the game's tips, a poll that reports none is
-  // far more likely to be a dropped read or a frame mid-relayout than the game
-  // genuinely retracting a tooltip the player is still hovering — and at a
-  // 250ms poll, believing it would throw the panel back under the tooltip for a
-  // visible quarter of a second. The original guarded the same way
-  // (`positionedWithGameTips`). This component is keyed per hovered item, so
-  // the ref resets when the player hovers something else.
-  const placedAroundTips = useRef(false)
+  // Where we last put it, and for which item. A placement that is still clear
+  // is never revised, which is what keeps a 250ms poll from flapping the panel
+  // around: the game's tips appear, resize and settle over several frames, so
+  // consecutive polls legitimately disagree about how many tips exist and how
+  // big they are. Re-deciding on every one of those would move the panel two or
+  // three times per hover, which reads worse than the overlap did.
+  //
+  // Chasing the optimum is the wrong goal here — a tooltip that holds still and
+  // is readable beats one that keeps finding a slightly better seat. Only an
+  // actual collision earns a move. Keyed per hovered item upstream, so this
+  // resets when the player hovers something else; the anchor check covers the
+  // case where the same item's own geometry moves.
+  const held = useRef<{ anchor: string; left: number; top: number } | null>(null)
+  const anchor = `${panel.x},${panel.y},${panel.w},${panel.h}`
 
   useLayoutEffect(() => {
     const el = ref.current
     const parent = el?.offsetParent as HTMLElement | null
     if (!el || !parent) return
-    if (obstacles.length === 0 && placedAroundTips.current) return
     const parentWidth = parent.clientWidth
     const parentHeight = parent.clientHeight
     if (!parentWidth || !parentHeight) return
     const rect = el.getBoundingClientRect()
     if (!rect.width || !rect.height) return
+
+    const boxes = obstacles.map((o) => ({
+      left: o.x * parentWidth,
+      top: o.y * parentHeight,
+      width: o.w * parentWidth,
+      height: o.h * parentHeight
+    }))
+
+    // Already somewhere that works for this item? Stay there.
+    const current = held.current
+    if (current && current.anchor === anchor) {
+      const box = {
+        left: current.left,
+        top: current.top,
+        width: rect.width,
+        height: rect.height
+      }
+      if (boxes.every((o) => overlapArea(box, o) === 0)) return
+    }
+
     const placed = placePanel(
       panel,
       { width: rect.width, height: rect.height },
       { width: parentWidth, height: parentHeight },
-      obstacles.map((o) => ({
-        left: o.x * parentWidth,
-        top: o.y * parentHeight,
-        width: o.w * parentWidth,
-        height: o.h * parentHeight
-      }))
+      boxes
     )
     // Replaces the whole style object on purpose: the fallback anchors with
     // `right`, and a leftover `right` alongside a new `left` would stretch the
     // panel across the screen instead of moving it.
     setStyle({ left: placed.left, top: placed.top })
-    if (obstacles.length > 0) placedAroundTips.current = true
+    held.current = { anchor, ...placed }
     // fitKey is the serialised form of `panel` + `obstacles`; both are rebuilt
     // from IPC JSON every poll, so depending on them by identity would re-run
     // this on every tick that changed nothing.

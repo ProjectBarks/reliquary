@@ -402,6 +402,10 @@ export class ScryGodotObject extends ScryObject {
   getControl(): any {
     return this.obj.getControl(this.NativePtr)
   }
+  /** This node's raw child nodes, before any Control cast. */
+  getChildNodes(): any[] {
+    return this.getNode().getChildren()
+  }
   /** The control's on-screen size in game pixels: [width, height]. */
   getSize(): [number, number] {
     return this.getControl().getSize()

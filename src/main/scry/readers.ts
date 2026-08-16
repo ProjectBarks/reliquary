@@ -600,15 +600,45 @@ export function readHoverTips(context: GodotContext): RawHoverTips {
       // the children are laid out by the flow container, so their own global
       // transforms are the ones most likely to be a frame stale.
       const base = safe(() => textContainer.computeGlobalPosition(screen), null)
-      if (!base) hoverDbg('textContainer: computeGlobalPosition failed')
-      if (base) {
-        const children = safe(() => textContainer.getHoverTips(), null)
-        if (!children) hoverDbg('textContainer: child walk failed')
-        for (const tip of children ?? []) {
-          const size = safe(() => tip.getSize() as [number, number], null)
-          if (!size || size[0] === 0 || size[1] === 0) continue
-          const pos = safe(() => tip.getPosition() as [number, number], null)
-          if (!pos) continue
+      const nodes = safe(() => textContainer.getChildNodes(), null)
+      if (!base) drop('text', 'base', 'computeGlobalPosition failed on the container')
+      if (!nodes) drop('text', 'children', 'child-node walk threw')
+      else if (nodes.length === 0) drop('text', 'children', 'container has no child nodes')
+      if (base && nodes) {
+        for (let i = 0; i < nodes.length; i++) {
+          const node = nodes[i]
+          // Cast per child, not across the list: one non-Control sibling would
+          // otherwise throw away every tip beside it.
+          const control = safe(() => node.castControl(), null)
+          if (!control) {
+            drop('text', 'not-control', `child#${i} is not castable to a Control`)
+            continue
+          }
+          const size = safe(() => control.getSize() as [number, number], null)
+          if (!size) {
+            drop('text', 'size-err', `child#${i} getSize threw`)
+            continue
+          }
+          if (size[0] === 0 || size[1] === 0) {
+            // The expected transient: a tip that exists but has not been laid
+            // out yet this frame. Reported with its own child count, because a
+            // tip that is permanently zero while its children are not would
+            // mean the geometry lives one level deeper than assumed.
+            drop(
+              'text',
+              'zero-size',
+              `child#${i} size=${size.join('x')}, own children=${safe(
+                () => node.getChildren().length,
+                -1
+              )}`
+            )
+            continue
+          }
+          const pos = safe(() => control.getPosition() as [number, number], null)
+          if (!pos) {
+            drop('text', 'pos-err', `child#${i} getPosition threw (size was ${size.join('x')})`)
+            continue
+          }
           tips.text.push({
             x: (base[0] + pos[0]) / screen[0],
             y: (base[1] + pos[1]) / screen[1],
@@ -632,18 +662,37 @@ export function readHoverTips(context: GodotContext): RawHoverTips {
           w: (size[0] - 11) / screen[0],
           h: (size[1] - 5) / screen[1]
         })
+      } else {
+        // The card preview is genuinely absent for most hovers — it only exists
+        // when the game is previewing a card. Distinguished from a broken
+        // member path by whether the reads FAILED or merely returned zero.
+        drop(
+          'card',
+          !size ? 'size-err' : !pos ? 'pos-err' : 'zero-size',
+          `size=${size ? size.join('x') : 'THREW'} pos=${pos ? pos.join(',') : 'THREW'}` +
+            ` · own children=${safe(() => cardContainer.getChildNodes().length, -1)}`
+        )
       }
     }
   }
-  // A tip set with containers but no rectangles means the walk reached the
-  // right objects and lost them at the last step (all children zero-sized, or
-  // a position that would not compute) — a different fault from never getting
-  // there, and one that a bare "no tips" would have hidden.
   hoverDbg(
     `ok, ${sets.length} tip set(s), ${containers} container(s) → ` +
       `${tips.text.length} text + ${tips.card.length} card rects`
   )
   return tips
+}
+
+/**
+ * Report why a candidate rectangle was thrown away, once per distinct reason.
+ *
+ * Counting the rectangles that survived could never explain the ones that did
+ * not, and the plausible causes are not variations of one fault: a tip that has
+ * not been laid out yet is a transient worth waiting out, a child that will not
+ * cast to a Control is a wrong assumption about the container's contents, and a
+ * read that throws is a wrong member path. Only the reason separates them.
+ */
+function drop(kind: 'text' | 'card', why: string, detail: string): void {
+  hoverDbg(`${kind} dropped [${why}]: ${detail}`)
 }
 
 /** Failure signatures already logged, so one bad hover does not spam the log. */

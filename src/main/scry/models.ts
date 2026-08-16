@@ -727,11 +727,14 @@ export class NGame extends ScryGodotObject {
  * raw controls (position + size) rather than wrapped — there is nothing else on
  * them worth reading.
  */
-export class VFlowContainer extends ScryGodotObject {
-  getHoverTips(): any[] {
-    return this.getNode().getChildren().map((node: any) => node.castControl())
-  }
-}
+/**
+ * The tip stack itself. Its children are the individual tips, walked as raw
+ * nodes via `getChildNodes()` and cast to Controls one at a time by the reader
+ * — deliberately not the original's `children.map(castControl)`, which throws
+ * the entire list away the moment one child is not a Control, and a Godot
+ * container routinely carries non-visual children.
+ */
+export class VFlowContainer extends ScryGodotObject {}
 
 /** The big card preview the game draws beside a hovered card. */
 export class NHoverTipCardContainer extends ScryGodotObject {}
