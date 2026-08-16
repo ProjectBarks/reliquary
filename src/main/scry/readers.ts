@@ -605,46 +605,64 @@ export function readHoverTips(context: GodotContext): RawHoverTips {
 
   tips.version = safe(() => dict.version, null)
   const count = safe(() => dict.count, -1)
-  let sets: NHoverTipSet[]
+  let sets: NHoverTipSet[] = []
+  let threw: string | null = null
   try {
     sets = dict.values()
   } catch (err) {
-    return fail('values', `${err instanceof Error ? err.message : String(err)} · count=${count}`)
+    threw = err instanceof Error ? err.message : String(err)
   }
-  if (sets.length === 0) {
-    // An empty dictionary is the normal state — the game has no tips up most of
-    // the time. A dictionary that CLAIMS entries and yields none is something
-    // else, and which something else depends on whether it persists: the game
-    // rehashing the dictionary under us produces exactly this for a poll or
-    // two, while a field-layout mismatch produces it forever. Tearing is not an
-    // error and must not be reported as one — a skipped poll costs nothing,
-    // because the placement holds its last clear position through it.
-    if (count > 0) {
-      tornWalks++
-      if (++tornStreak < TORN_TOLERANCE) {
-        tips.partial = true
-        // Counted, not announced: once per order of magnitude, so a persistent
-        // background rate is still visible without a line per poll.
-        if (isMilestone(tornWalks)) {
-          hoverDbg(`transient torn walk (count=${count} yielded nothing) · ${tornWalks} so far`)
-        }
-        return tips
+  const walk = dict.lastWalk
+
+  // An empty dictionary is the normal state — the game has no tips up most of
+  // the time. A walk that THREW, or one that claimed entries and yielded none,
+  // is something else, and which something else depends only on whether it
+  // persists: the game rehashing the dictionary under us produces exactly this
+  // for a poll or two, while a field-layout mismatch produces it forever.
+  //
+  // Both incomplete cases go through the SAME streak. They used to diverge —
+  // the throw returned a hard failure immediately while the empty-but-counted
+  // case was allowed a second chance — which meant a single unlucky poll during
+  // a rehash was reported as a permanent layout break. A throw is evidence of
+  // the same kind and gets the same benefit of the doubt.
+  if (sets.length === 0 && (threw || count > 0)) {
+    tornWalks++
+    if (++tornStreak < TORN_TOLERANCE) {
+      tips.partial = true
+      // Counted, not announced: once per order of magnitude, so a persistent
+      // background rate stays visible without a line per poll.
+      if (isMilestone(tornWalks)) {
+        hoverDbg(
+          `transient incomplete walk (${threw ?? `count=${count} yielded nothing`}) · ` +
+            `${tornWalks} so far`
+        )
       }
-      return fail(
-        'values',
-        `dictionary reports count=${count} but yielded no entries on ` +
-          `${tornStreak} consecutive polls — a layout mismatch, not tearing`
-      )
+      return tips
     }
-    tornStreak = 0
+    return fail(
+      'values',
+      `${threw ?? `count=${count} yielded no entries`} · ` +
+        `slots read=${walk.slots} failed=${walk.failed} · persisted for ` +
+        `${tornStreak} consecutive polls — a layout mismatch, not tearing`
+    )
+  }
+
+  tornStreak = 0
+
+  if (walk.failed > 0) {
+    // Not a failure: individual struct slots can be unreadable while the live
+    // entries beside them come back fine. Worth one line, because a walk that
+    // is quietly losing most of its slots is a layout question in waiting.
+    hoverDbg(`${walk.failed} of ${walk.slots} entry slot(s) unreadable, ${walk.yielded} yielded`)
+  }
+
+  if (sets.length === 0) {
     // Version deliberately left out of this line: it changes constantly, and
     // the dedupe is by message, so including it would print a fresh copy of
     // "nothing here" forever and bury the line that matters.
     hoverDbg(`ok, dictionary reachable, no tip sets (count=${count})`)
     return tips
   }
-
-  tornStreak = 0
 
   let containers = 0
   for (const set of sets) {

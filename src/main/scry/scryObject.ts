@@ -331,22 +331,55 @@ export class Dictionary<T = any> extends ScryObject {
     return this.number(`${this.prefix}count`) as number
   }
 
+  /**
+   * What the most recent `values()` walk actually managed to read. Diagnostic
+   * only: "produced nothing" and "produced nothing because every slot fetch
+   * failed" are the same empty array, and only one of them is a broken layout.
+   */
+  lastWalk: { slots: number; failed: number; yielded: number } = {
+    slots: 0,
+    failed: 0,
+    yielded: 0
+  }
+
   /** Every occupied slot's value, in backing-array order. Empty when unreadable. */
   values(): T[] {
+    this.lastWalk = { slots: 0, failed: 0, yielded: 0 }
     const entries = this.array(`${this.prefix}entries`, { nullable: true })
     if (!entries) return []
+
+    // The backing array is CAPACITY, not length: a dictionary holding one entry
+    // sits in an array of three or seven, and the tail is uninitialised memory.
+    // Asking the native reader to materialise an Entry struct out of that is how
+    // a perfectly healthy dictionary produces "Internal failure while fetching
+    // array element" — so stop as soon as every live entry is accounted for.
+    // Unreadable when `_count` itself will not read, in which case walking the
+    // whole array is still better than walking none of it.
+    let live = Number.POSITIVE_INFINITY
+    try {
+      live = this.count
+    } catch {
+      /* fall back to the full walk; every slot is guarded anyway */
+    }
+
     const out: T[] = []
     const limit = Math.min(entries.length, MAX_DICT_ENTRIES)
-    for (let i = 0; i < limit; i++) {
-      const slot = entries.at(i)
-      if (slot === null || slot === undefined) continue
+    for (let i = 0; i < limit && out.length < live; i++) {
+      this.lastWalk.slots++
       let value: any
       try {
+        const slot = entries.at(i)
+        if (slot === null || slot === undefined) continue
         value = new ScryObject(slot).unsafe('value')
       } catch {
+        // One unreadable slot is not a broken dictionary. Entries are structs
+        // and a freed slot can hold anything, so a fetch that fails costs that
+        // slot and nothing else — the live entries beside it still come back.
+        this.lastWalk.failed++
         continue
       }
       if (value === null || value === undefined) continue
+      this.lastWalk.yielded++
       out.push(this.valueCtor ? new this.valueCtor(value) : value)
     }
     return out
