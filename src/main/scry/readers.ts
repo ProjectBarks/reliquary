@@ -519,6 +519,18 @@ export interface RawHoverTips {
   text: RawRect[]
   /** The enlarged card preview the game shows beside a hovered card. */
   card: RawRect[]
+  /**
+   * Null when the read worked — including when it worked and the game simply
+   * had no tips up. Otherwise the step that failed and what it saw.
+   *
+   * This exists because empty and broken were indistinguishable from outside:
+   * both produced no rectangles, so a log line saying "no tips" was true of a
+   * working reader on a quiet screen AND of a reader that could not find the
+   * game's dictionary at all. Carrying the reason over the wire — rather than
+   * only logging it in the child — means the one line the provider prints is
+   * the whole answer.
+   */
+  diag: string | null
 }
 
 /**
@@ -531,30 +543,68 @@ export interface RawHoverTips {
  * describe the game's art, not our layout — the tip frames carry a few pixels
  * of transparent border that would otherwise read as occupied space.
  *
- * Returns null when nothing can be read. Every failure mode collapses to that,
- * and the renderer treats "no tips" as "place the panel the way you always
- * did", so a build that renames these fields costs us the improvement and
- * nothing else.
+ * Never throws and never returns null: a failure reports itself in `diag` and
+ * yields no rectangles, and the renderer treats "no rectangles" as "place the
+ * panel the way you always did". A build that renames these fields costs us
+ * the improvement and nothing else — but it says so.
  */
-export function readHoverTips(context: GodotContext): RawHoverTips | null {
-  const dict = NHoverTipSet.getActive(context)
-  if (!dict) return null
+export function readHoverTips(context: GodotContext): RawHoverTips {
+  const tips: RawHoverTips = { version: null, text: [], card: [], diag: null }
+  const fail = (step: string, detail: string): RawHoverTips => {
+    tips.diag = `${step}: ${detail}`
+    hoverDbg(tips.diag)
+    return tips
+  }
+
+  let failure: string | null = null
+  const dict = NHoverTipSet.getActive(context, (step, detail) => {
+    failure = `${step}: ${detail}`
+  })
+  if (!dict) return fail('getActive', failure ?? 'returned null with no reason')
 
   const screen = safe(() => NGame.getInstance(context).getSize(), null)
-  if (!screen || !screen[0] || !screen[1]) return null
+  if (!screen || !screen[0] || !screen[1]) {
+    return fail('screenSize', `NGame control size is ${screen ? screen.join('x') : 'unreadable'}`)
+  }
 
-  const tips: RawHoverTips = { version: safe(() => dict.version, null), text: [], card: [] }
-  for (const set of dict.values()) {
+  tips.version = safe(() => dict.version, null)
+  const count = safe(() => dict.count, -1)
+  let sets: NHoverTipSet[]
+  try {
+    sets = dict.values()
+  } catch (err) {
+    return fail('values', `${err instanceof Error ? err.message : String(err)} · count=${count}`)
+  }
+  if (sets.length === 0) {
+    // An empty dictionary is the normal state — the game has no tips up most of
+    // the time — but a dictionary that CLAIMS entries and yields none is a
+    // layout mismatch wearing the same face, so the two are separated here.
+    if (count > 0) {
+      return fail('values', `dictionary reports count=${count} but yielded no entries`)
+    }
+    // Version deliberately left out of this line: it changes constantly, and
+    // the dedupe is by message, so including it would print a fresh copy of
+    // "nothing here" forever and bury the line that matters.
+    hoverDbg(`ok, dictionary reachable, no tip sets (count=${count})`)
+    return tips
+  }
+
+  let containers = 0
+  for (const set of sets) {
     if (!set) continue
 
     const textContainer = safe(() => set._textHoverTipContainer, null)
     if (textContainer) {
+      containers++
       // One walk for the container, then each child's LOCAL offset added to it:
       // the children are laid out by the flow container, so their own global
       // transforms are the ones most likely to be a frame stale.
       const base = safe(() => textContainer.computeGlobalPosition(screen), null)
+      if (!base) hoverDbg('textContainer: computeGlobalPosition failed')
       if (base) {
-        for (const tip of safe(() => textContainer.getHoverTips(), [] as any[])) {
+        const children = safe(() => textContainer.getHoverTips(), null)
+        if (!children) hoverDbg('textContainer: child walk failed')
+        for (const tip of children ?? []) {
           const size = safe(() => tip.getSize() as [number, number], null)
           if (!size || size[0] === 0 || size[1] === 0) continue
           const pos = safe(() => tip.getPosition() as [number, number], null)
@@ -572,6 +622,7 @@ export function readHoverTips(context: GodotContext): RawHoverTips | null {
 
     const cardContainer = safe(() => set._cardHoverTipContainer, null)
     if (cardContainer) {
+      containers++
       const size = safe(() => cardContainer.getSize(), null)
       const pos = safe(() => cardContainer.computeGlobalPosition(screen), null)
       if (size && pos && size[0] > 0 && size[1] > 0) {
@@ -584,7 +635,31 @@ export function readHoverTips(context: GodotContext): RawHoverTips | null {
       }
     }
   }
+  // A tip set with containers but no rectangles means the walk reached the
+  // right objects and lost them at the last step (all children zero-sized, or
+  // a position that would not compute) — a different fault from never getting
+  // there, and one that a bare "no tips" would have hidden.
+  hoverDbg(
+    `ok, ${sets.length} tip set(s), ${containers} container(s) → ` +
+      `${tips.text.length} text + ${tips.card.length} card rects`
+  )
   return tips
+}
+
+/** Failure signatures already logged, so one bad hover does not spam the log. */
+const hoverSeen = new Set<string>()
+
+/**
+ * Log a hover-tip step ONCE per distinct message. The poll runs four times a
+ * second and a shape mismatch is identical on every one of them, so an
+ * unthrottled line would bury the answer under thousands of copies of itself.
+ */
+function hoverDbg(message: string): void {
+  if (!process.env['SPECTRA_DEBUG']) return
+  if (hoverSeen.has(message)) return
+  if (hoverSeen.size > 64) hoverSeen.clear()
+  hoverSeen.add(message)
+  console.log(`[reader] hoverTips ${message}`)
 }
 
 /** The running game's build version, used to fetch matching card metadata. */

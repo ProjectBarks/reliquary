@@ -17,7 +17,8 @@ import {
   ScryGodotObject,
   Stack,
   getValid,
-  getValidOrNull
+  getValidOrNull,
+  probeFields
 } from './scryObject'
 import type { GodotContext } from './godot'
 
@@ -754,17 +755,60 @@ export class NHoverTipCardContainer extends ScryGodotObject {}
 export class NHoverTipSet extends ScryGodotObject {
   static ClassName = 'MegaCrit.Sts2.Core.Nodes.HoverTips.NHoverTipSet'
   /**
-   * The static registry of live tip sets, or null when the class has no such
-   * field (a build that renamed it) — never a throw, because "the game is not
-   * showing tips" and "we cannot see the tips" must both degrade to the same
-   * harmless thing: our panel placing itself the way it always did.
+   * The static registry of live tip sets, or null when it cannot be reached —
+   * never a throw, because "the game is not showing tips" and "we cannot see
+   * the tips" must both degrade to the same harmless thing: our panel placing
+   * itself the way it always did.
+   *
+   * `note` is how the two are told apart from outside. Each step reports what
+   * it actually saw rather than just failing, because the three candidate
+   * breaks here — the class not resolving, the static field not reading, and
+   * the dictionary's field layout differing — are indistinguishable from a null
+   * return, and only one of them is worth acting on.
    */
-  static getActive(context: GodotContext): Dictionary<NHoverTipSet> | null {
-    const dict = getValidOrNull(context.getClass(NHoverTipSet.ClassName), '_activeHoverTips')
-    if (!dict) return null
+  static getActive(
+    context: GodotContext,
+    note?: (step: string, detail: string) => void
+  ): Dictionary<NHoverTipSet> | null {
+    let classObj: any
+    try {
+      classObj = context.getClass(NHoverTipSet.ClassName)
+    } catch (err) {
+      note?.('getClass', reason(err))
+      return null
+    }
+    if (!classObj) {
+      note?.('getClass', 'returned null — class not loaded under this name')
+      return null
+    }
+
+    const dict = getValidOrNull(classObj, '_activeHoverTips')
+    if (!dict) {
+      // getValidOrNull swallows the reason by design; re-read once, loudly, so
+      // "the field is genuinely null" and "the field is not there" separate.
+      note?.(
+        '_activeHoverTips',
+        probeFields(classObj, ['_activeHoverTips', 'ActiveHoverTips', '_hoverTips'])
+      )
+      return null
+    }
+
     try {
       return new Dictionary(dict, NHoverTipSet)
-    } catch {
+    } catch (err) {
+      note?.(
+        'Dictionary',
+        `${reason(err)} · ${probeFields(dict, [
+          '_count',
+          'count',
+          '_size',
+          'Count',
+          '_entries',
+          'entries',
+          '_buckets',
+          '_version'
+        ])}`
+      )
       return null
     }
   }
@@ -963,6 +1007,11 @@ export function readPlayers(context: GodotContext, run: NRun): RunPlayers | null
     if (id) otherCharacterIds.push(id)
   }
   return { count: players.length, local, otherCharacterIds }
+}
+
+/** A throw reduced to one readable line for a diagnostic note. */
+function reason(err: unknown): string {
+  return err instanceof Error ? err.message : String(err)
 }
 
 function safeRead<T>(fn: () => T, fallback: T): T {

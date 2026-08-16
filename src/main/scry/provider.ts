@@ -527,18 +527,30 @@ export class Sts2ScryProvider {
               `x=${hp.x?.toFixed(3)} y=${hp.y?.toFixed(3)} w=${hp.w?.toFixed(3)} h=${hp.h?.toFixed(3)}`
           )
           // The one line that says whether the game's tooltip was visible to us
-          // at the moment we placed the panel — the only way to tell "we chose
-          // to sit there" from "we never saw it" in a report from a live game.
+          // at the moment we placed the panel. Three outcomes, never conflated:
+          // the read broke (and where), the read worked and the game had
+          // nothing up, or here is what we avoided. The first two used to print
+          // the same "none read", which made a working reader on a quiet screen
+          // indistinguishable from one that never found the game's dictionary.
           const g = value.gameTips
-          this.dbg(
-            g
-              ? `  gameTips: ${g.text.length} text, ${g.card.length} card` +
-                  (g.text[0]
-                    ? ` · first text @ ${g.text[0].x.toFixed(3)},${g.text[0].y.toFixed(3)} ` +
-                      `${g.text[0].w.toFixed(3)}x${g.text[0].h.toFixed(3)}`
-                    : '')
-              : '  gameTips: none read'
-          )
+          if (g) {
+            this.dbg(
+              `  gameTips: ${g.text.length} text, ${g.card.length} card` +
+                (g.text[0]
+                  ? ` · first text @ ${g.text[0].x.toFixed(3)},${g.text[0].y.toFixed(3)} ` +
+                    `${g.text[0].w.toFixed(3)}x${g.text[0].h.toFixed(3)}`
+                  : '')
+            )
+          } else if (!tips) {
+            this.dbg('  gameTips: NO READ — reader sent no hoverTips field at all')
+          } else if (tips.diag) {
+            this.dbg(`  gameTips: READ FAILED at ${tips.diag}`)
+          } else {
+            this.dbg(
+              `  gameTips: empty — read OK, game is showing no tips ` +
+                `(version=${tips.version ?? '?'})`
+            )
+          }
         }
       }
       this.cb.emit({ key: 'sts2.layoutState', value })

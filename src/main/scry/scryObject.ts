@@ -259,6 +259,30 @@ export class List<T = any> extends ScryObject {
 const MAX_DICT_ENTRIES = 512
 
 /**
+ * What a set of field names actually reads back as on a live object.
+ *
+ * Purely diagnostic, and the only honest way to answer "why did this shape not
+ * match?" from a running game: a failed read tells you a name was wrong, but
+ * not which of the plausible names is right or what type the field really is.
+ * One line of this names the layout.
+ */
+export function probeFields(obj: any, keys: string[]): string {
+  const seen: string[] = []
+  for (const key of keys) {
+    try {
+      const value = obj.get(key)
+      if (value === null || value === undefined) seen.push(`${key}=null`)
+      else if (isScryArrayLike(value)) seen.push(`${key}=array[${value.length}]`)
+      else if (typeof value === 'object') seen.push(`${key}=obj`)
+      else seen.push(`${key}=${typeof value}:${String(value)}`)
+    } catch (err) {
+      seen.push(`${key}=ERR(${err instanceof Error ? err.message.slice(0, 40) : '?'})`)
+    }
+  }
+  return seen.join(' ')
+}
+
+/**
  * Wrapper for C#'s `Dictionary<TKey, TValue>` — ITERATION ONLY.
  *
  * The original companion's port also implemented `FindEntry`: bucket indexing,

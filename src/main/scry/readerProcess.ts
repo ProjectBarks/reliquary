@@ -162,8 +162,15 @@ function poll(): void {
     // Deliberately NOT counted as a failure when it throws: this read exists
     // only to nudge a panel sideways, and letting it raise the error streak
     // would let a cosmetic nicety restart the connection that the deck tracker
-    // and the advice depend on.
-    hoverTips: safe(() => readHoverTips(context), null)
+    // and the advice depend on. `readHoverTips` reports its own failures in
+    // `diag`, so a null here means it threw outright — a fifth kind of break
+    // worth naming separately.
+    hoverTips: safe(() => readHoverTips(context), {
+      version: null,
+      text: [],
+      card: [],
+      diag: 'readHoverTips threw'
+    })
   }
   send({ type: 'snapshot', ...snapshot })
 
