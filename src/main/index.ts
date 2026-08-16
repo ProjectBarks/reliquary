@@ -107,11 +107,9 @@ const overlay = new OverlayWindow()
 const dashboard = new DashboardWindow(() => lifecycle.dashboardClosed())
 
 /**
- * When this process is allowed to be alive. Closing the dashboard used to leave
- * the overlay holding the process — and the single-instance lock — with no
- * taskbar button and no window, forever. See `lifecycle.ts` for the state table;
- * the short version is that the app now quits with the dashboard unless the
- * overlay is actually drawn over a running game, and quits when that game goes.
+ * When this process is allowed to be alive: exactly as long as the dashboard.
+ * Closing the main window is the user closing the app — unconditionally, game
+ * running or not. The overlay never keeps the process; see `lifecycle.ts`.
  *
  * Declared after the windows it inspects and referenced only from callbacks, so
  * neither `const` is read before it is initialised.
@@ -121,12 +119,6 @@ const lifecycle = new WindowLifecycle({
     const win = dashboard.browserWindow
     return !!win && !win.isDestroyed()
   },
-  // Stub mode has no reader and therefore never detects anything, so a dev
-  // closing the dashboard gets a quit — which is the behaviour they want too.
-  gameEvidence: () => ({
-    detected: usingScry && processState.detected,
-    snapshotAgeMs: usingScry ? scryProvider?.snapshotAgeMs ?? null : null
-  }),
   quit: () => app.quit(),
   onEvent: (name, props) => telemetry.capture(name, props ?? {}),
   onIssue: (key, severity, props) => telemetry.issue(key, severity, props ?? {}),
@@ -443,9 +435,6 @@ function wireScry(): void {
           bounds: state.bounds
         })
       }
-      // The other end of the kept-overlay state: an overlay with no dashboard
-      // exists to sit over a running game, so when the game goes, so does it.
-      if (was.detected !== state.detected) lifecycle.processChanged()
       broadcast(IPC.Tracker, trackerState)
       pushDiagnostics()
     }
@@ -805,8 +794,9 @@ app.on('second-instance', () => {
   const win = dashboard.browserWindow
   telemetry.capture('second_instance_focus', {
     dashboard_recreated: !win,
-    // A recreate is only legitimate in the kept-overlay state now. Anything
-    // else means the process outlived both its windows' reasons to exist.
+    // A dashboard-less process should not exist any more (closing it quits the
+    // app), so a recreate here means the quit failed — the same regression the
+    // lifecycle watchdog reports. Recovering is still better than a dead icon.
     game_detected: usingScry && processState.detected,
     headless_ms: lifecycle.headlessMs()
   })
@@ -816,10 +806,8 @@ app.on('second-instance', () => {
     win.focus()
     return
   }
-  // The dashboard can legitimately be absent while the overlay rides a running
-  // game (see `lifecycle.ts`). Every later launch of the exe lands here, so that
-  // dashboard must be recreated or clicking the app icon does nothing and the
-  // app reads as "won't launch".
+  // Only reachable if a quit failed to take. Recreate the dashboard so the
+  // launch does something visible rather than reading as "won't launch".
   if (!app.isReady()) return
   const created = dashboard.create()
   lifecycle.dashboardOpened()
