@@ -520,6 +520,18 @@ export interface RawHoverTips {
   /** The enlarged card preview the game shows beside a hovered card. */
   card: RawRect[]
   /**
+   * True when this read is known to be INCOMPLETE rather than empty: the game
+   * was mutating the tip dictionary as we walked it, so no rectangles came back
+   * and none of them can be trusted to mean "there is nothing there".
+   *
+   * The same distinction `RawPileState.deckPartial` draws, for the same reason.
+   * A torn walk and a quiet screen both produce zero rectangles, and treating
+   * the first as the second would have the panel confidently place itself where
+   * a tooltip it failed to see is sitting. Consumers hold their last known-good
+   * placement through a partial poll instead of acting on it.
+   */
+  partial: boolean
+  /**
    * Null when the read worked — including when it worked and the game simply
    * had no tips up. Otherwise the step that failed and what it saw.
    *
@@ -548,8 +560,32 @@ export interface RawHoverTips {
  * panel the way you always did". A build that renames these fields costs us
  * the improvement and nothing else — but it says so.
  */
+/**
+ * Consecutive polls whose dictionary walk came back torn, and the running total.
+ *
+ * The only state in this file, and deliberately so: "has this been failing the
+ * whole time or did it just blink?" cannot be answered from a single poll, and
+ * that question is the entire difference between a mismatch worth reporting and
+ * a race worth ignoring.
+ */
+let tornStreak = 0
+let tornWalks = 0
+
+/**
+ * How many consecutive torn walks before it stops being a race and starts being
+ * a mismatch. Four polls is a full second at the reader's cadence — orders of
+ * magnitude longer than a dictionary rehash, and short enough that a genuine
+ * layout break still names itself within a second of the first hover.
+ */
+const TORN_TOLERANCE = 4
+
+/** True at 1, 10, 100, … — for logging a rate without logging every instance. */
+function isMilestone(n: number): boolean {
+  return n > 0 && Math.log10(n) % 1 === 0
+}
+
 export function readHoverTips(context: GodotContext): RawHoverTips {
-  const tips: RawHoverTips = { version: null, text: [], card: [], diag: null }
+  const tips: RawHoverTips = { version: null, text: [], card: [], partial: false, diag: null }
   const fail = (step: string, detail: string): RawHoverTips => {
     tips.diag = `${step}: ${detail}`
     hoverDbg(tips.diag)
@@ -577,17 +613,38 @@ export function readHoverTips(context: GodotContext): RawHoverTips {
   }
   if (sets.length === 0) {
     // An empty dictionary is the normal state — the game has no tips up most of
-    // the time — but a dictionary that CLAIMS entries and yields none is a
-    // layout mismatch wearing the same face, so the two are separated here.
+    // the time. A dictionary that CLAIMS entries and yields none is something
+    // else, and which something else depends on whether it persists: the game
+    // rehashing the dictionary under us produces exactly this for a poll or
+    // two, while a field-layout mismatch produces it forever. Tearing is not an
+    // error and must not be reported as one — a skipped poll costs nothing,
+    // because the placement holds its last clear position through it.
     if (count > 0) {
-      return fail('values', `dictionary reports count=${count} but yielded no entries`)
+      tornWalks++
+      if (++tornStreak < TORN_TOLERANCE) {
+        tips.partial = true
+        // Counted, not announced: once per order of magnitude, so a persistent
+        // background rate is still visible without a line per poll.
+        if (isMilestone(tornWalks)) {
+          hoverDbg(`transient torn walk (count=${count} yielded nothing) · ${tornWalks} so far`)
+        }
+        return tips
+      }
+      return fail(
+        'values',
+        `dictionary reports count=${count} but yielded no entries on ` +
+          `${tornStreak} consecutive polls — a layout mismatch, not tearing`
+      )
     }
+    tornStreak = 0
     // Version deliberately left out of this line: it changes constantly, and
     // the dedupe is by message, so including it would print a fresh copy of
     // "nothing here" forever and bury the line that matters.
     hoverDbg(`ok, dictionary reachable, no tip sets (count=${count})`)
     return tips
   }
+
+  tornStreak = 0
 
   let containers = 0
   for (const set of sets) {
@@ -606,46 +663,11 @@ export function readHoverTips(context: GodotContext): RawHoverTips {
       else if (nodes.length === 0) drop('text', 'children', 'container has no child nodes')
       if (base && nodes) {
         for (let i = 0; i < nodes.length; i++) {
-          const node = nodes[i]
-          // Cast per child, not across the list: one non-Control sibling would
-          // otherwise throw away every tip beside it.
-          const control = safe(() => node.castControl(), null)
-          if (!control) {
-            drop('text', 'not-control', `child#${i} is not castable to a Control`)
-            continue
-          }
-          const size = safe(() => control.getSize() as [number, number], null)
-          if (!size) {
-            drop('text', 'size-err', `child#${i} getSize threw`)
-            continue
-          }
-          if (size[0] === 0 || size[1] === 0) {
-            // The expected transient: a tip that exists but has not been laid
-            // out yet this frame. Reported with its own child count, because a
-            // tip that is permanently zero while its children are not would
-            // mean the geometry lives one level deeper than assumed.
-            drop(
-              'text',
-              'zero-size',
-              `child#${i} size=${size.join('x')}, own children=${safe(
-                () => node.getChildren().length,
-                -1
-              )}`
-            )
-            continue
-          }
-          const pos = safe(() => control.getPosition() as [number, number], null)
-          if (!pos) {
-            drop('text', 'pos-err', `child#${i} getPosition threw (size was ${size.join('x')})`)
-            continue
-          }
-          tips.text.push({
-            x: (base[0] + pos[0]) / screen[0],
-            y: (base[1] + pos[1]) / screen[1],
-            // Adjust for uneven tooltip margins (the original's constants).
-            w: (size[0] - 10.5) / screen[0],
-            h: (size[1] - 3.5) / screen[1]
-          })
+          const box = measureTip(nodes[i], base, 1, (why, detail) =>
+            drop('text', why, `child#${i} ${detail}`)
+          )
+          // Adjust for uneven tooltip margins (the original's constants).
+          if (box) tips.text.push(toFraction(box, screen, 10.5, 3.5))
         }
       }
     }
@@ -653,25 +675,33 @@ export function readHoverTips(context: GodotContext): RawHoverTips {
     const cardContainer = safe(() => set._cardHoverTipContainer, null)
     if (cardContainer) {
       containers++
+      const base = safe(() => cardContainer.computeGlobalPosition(screen), null)
       const size = safe(() => cardContainer.getSize(), null)
-      const pos = safe(() => cardContainer.computeGlobalPosition(screen), null)
-      if (size && pos && size[0] > 0 && size[1] > 0) {
-        tips.card.push({
-          x: pos[0] / screen[0],
-          y: pos[1] / screen[1],
-          w: (size[0] - 11) / screen[0],
-          h: (size[1] - 5) / screen[1]
-        })
-      } else {
-        // The card preview is genuinely absent for most hovers — it only exists
-        // when the game is previewing a card. Distinguished from a broken
-        // member path by whether the reads FAILED or merely returned zero.
-        drop(
-          'card',
-          !size ? 'size-err' : !pos ? 'pos-err' : 'zero-size',
-          `size=${size ? size.join('x') : 'THREW'} pos=${pos ? pos.join(',') : 'THREW'}` +
-            ` · own children=${safe(() => cardContainer.getChildNodes().length, -1)}`
+      if (!base) {
+        drop('card', 'base', 'computeGlobalPosition failed on the container')
+      } else if (size && size[0] > 0 && size[1] > 0) {
+        tips.card.push(
+          toFraction({ x0: base[0], y0: base[1], x1: base[0] + size[0], y1: base[1] + size[1] }, screen, 11, 5)
         )
+      } else {
+        // The container itself is an unsized wrapper sitting at its parent's
+        // origin — confirmed live, 0x0 at 0,0 with one child — so its zero size
+        // means "look lower", not "nothing here".
+        const kids = safe(() => cardContainer.getChildNodes(), null)
+        if (!kids || kids.length === 0) {
+          drop(
+            'card',
+            !size ? 'size-err' : 'zero-size',
+            `size=${size ? size.join('x') : 'THREW'} with no children to descend into`
+          )
+        } else {
+          const box = union(
+            kids.map((kid: any, i: number) =>
+              measureTip(kid, base, 1, (why, detail) => drop('card', why, `child#${i} ${detail}`))
+            )
+          )
+          if (box) tips.card.push(toFraction(box, screen, 11, 5))
+        }
       }
     }
   }
@@ -680,6 +710,121 @@ export function readHoverTips(context: GodotContext): RawHoverTips {
       `${tips.text.length} text + ${tips.card.length} card rects`
   )
   return tips
+}
+
+/** A rectangle in absolute game pixels, as two corners. */
+interface PxBox {
+  x0: number
+  y0: number
+  x1: number
+  y1: number
+}
+
+/**
+ * How deep below a container to look for geometry, counting its direct children
+ * as depth 1.
+ *
+ * The container's own children are what the evidence demanded —
+ * `_cardHoverTipContainer` reads 0x0 at its parent's origin with a single child
+ * holding the actual card preview — and depth 2 is one level of slack for that
+ * same pattern repeating. It costs a handful of reads on a path that only runs
+ * while something is hovered. Deeper than that would be guessing at a tree we
+ * have not seen.
+ */
+const MAX_TIP_DESCENT = 2
+
+/**
+ * The box a tip node occupies, in game pixels, relative to `base`.
+ *
+ * A zero size here does not mean "nothing is drawn": the containers in this
+ * tree are frequently unsized wrappers sitting at their parent's origin, with
+ * the real geometry one level down. So an empty box is a reason to look lower
+ * before it is a reason to give up.
+ *
+ * The UNION of the sized descendants is returned rather than the first one. A
+ * wrapper may hold a frame and its shadow as siblings, and for the one thing
+ * these rectangles are used for — keeping our panel off the game's tooltip — a
+ * rectangle slightly too large is the harmless direction to be wrong in, while
+ * picking the wrong single child is not.
+ */
+function measureTip(
+  node: any,
+  base: [number, number],
+  depth: number,
+  drop: (why: string, detail: string) => void
+): PxBox | null {
+  // Cast per node, not across a list: one non-Control sibling must cost one tip
+  // rather than every tip beside it.
+  const control = safe(() => node.castControl(), null)
+  if (!control) {
+    drop('not-control', `depth ${depth}: not castable to a Control`)
+    return null
+  }
+  const pos = safe(() => control.getPosition() as [number, number], null)
+  if (!pos) {
+    drop('pos-err', `depth ${depth}: getPosition threw`)
+    return null
+  }
+  const size = safe(() => control.getSize() as [number, number], null)
+  if (!size) {
+    drop('size-err', `depth ${depth}: getSize threw`)
+    return null
+  }
+  const x0 = base[0] + pos[0]
+  const y0 = base[1] + pos[1]
+  if (size[0] > 0 && size[1] > 0) return { x0, y0, x1: x0 + size[0], y1: y0 + size[1] }
+
+  if (depth >= MAX_TIP_DESCENT) {
+    drop('zero-size', `depth ${depth}: 0x0 with no descent budget left`)
+    return null
+  }
+  const children = safe(() => node.getChildren(), null)
+  if (!children || children.length === 0) {
+    drop('zero-size', `depth ${depth}: 0x0 with no children to descend into`)
+    return null
+  }
+  const box = union(children.map((child: any) => measureTip(child, [x0, y0], depth + 1, drop)))
+  if (!box) {
+    drop('zero-size', `depth ${depth}: 0x0 and all ${children.length} child(ren) were unusable`)
+  }
+  return box
+}
+
+/** The smallest box containing every box given; null when none survived. */
+function union(boxes: Array<PxBox | null>): PxBox | null {
+  let result: PxBox | null = null
+  for (const box of boxes) {
+    if (!box) continue
+    result = result
+      ? {
+          x0: Math.min(result.x0, box.x0),
+          y0: Math.min(result.y0, box.y0),
+          x1: Math.max(result.x1, box.x1),
+          y1: Math.max(result.y1, box.y1)
+        }
+      : box
+  }
+  return result
+}
+
+/**
+ * Absolute game pixels to screen fractions, less the tip art's transparent
+ * border (the original's per-container constants) so the frame's margin does
+ * not read as occupied space. Clamped at zero: a rectangle smaller than its own
+ * margin would otherwise invert.
+ */
+function toFraction(
+  box: PxBox,
+  screen: [number, number],
+  marginW: number,
+  marginH: number
+): RawRect {
+  return {
+    x: box.x0 / screen[0],
+    y: box.y0 / screen[1],
+    w: Math.max(0, box.x1 - box.x0 - marginW) / screen[0],
+    h: Math.max(0, box.y1 - box.y0 - marginH) / screen[1]
+  }
 }
 
 /**

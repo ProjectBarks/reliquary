@@ -169,6 +169,7 @@ function poll(): void {
       version: null,
       text: [],
       card: [],
+      partial: true,
       diag: 'readHoverTips threw'
     })
   }

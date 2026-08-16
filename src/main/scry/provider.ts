@@ -545,6 +545,11 @@ export class Sts2ScryProvider {
             this.dbg('  gameTips: NO READ — reader sent no hoverTips field at all')
           } else if (tips.diag) {
             this.dbg(`  gameTips: READ FAILED at ${tips.diag}`)
+          } else if (tips.partial) {
+            // Not a failure and not an answer: the dictionary was mid-mutation,
+            // so this poll saw nothing and knows it. The panel keeps the
+            // position it already holds rather than acting on the absence.
+            this.dbg('  gameTips: partial — torn read, holding the last placement')
           } else {
             this.dbg(
               `  gameTips: empty — read OK, game is showing no tips ` +
