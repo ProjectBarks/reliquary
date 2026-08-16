@@ -81,6 +81,13 @@ export interface FloatingPanel {
    * of popping out to a stale desired rectangle.
    */
   setSize: (w: number, h: number) => void
+  /**
+   * Report the RENDERED box when it is smaller than the stored placement (the
+   * deck tracker's area-budget model). Pure ref write — call it every render;
+   * it never re-renders. All drag/position math then uses this box, which is
+   * the one the user is actually dragging.
+   */
+  syncVisual: (w: number, h: number) => void
 }
 
 export function useFloatingPanel(
@@ -105,6 +112,17 @@ export function useFloatingPanel(
   const mode = useRef<'idle' | 'drag' | 'resize'>('idle')
   const interactive = useRef(false)
   const origin = useRef({ x: 0, y: 0, rect: { left: 0, top: 0, w: 0, h: 0 } })
+  /**
+   * The RENDERED box, when it differs from the stored placement. The deck
+   * tracker's placement is an area budget ("the space it may use") while its
+   * shell shrinks to the packed content — but every pixel a drag computes is
+   * about the box on screen. Doing right/bottom-anchored math with the area
+   * width while the CSS positions the smaller shell made the panel jump by
+   * (area − content) at drag start and every time the anchor flipped mid-drag:
+   * the "random teleport" bug. Consumers whose rendered box IS the placement
+   * never call syncVisual and nothing changes for them.
+   */
+  const visual = useRef<{ w: number; h: number } | null>(null)
 
   const setInteractive = useCallback((v: boolean) => {
     if (interactive.current === v) return
@@ -112,14 +130,16 @@ export function useFloatingPanel(
     window.spectra?.setInteractive(v)
   }, [])
 
-  /** Live pixel rect of the panel, derived from the stored anchor. */
+  /** Live pixel rect of the panel — the box on screen, not the stored area. */
   const rectOf = useCallback((p: PanelPlacement): { left: number; top: number } => {
     const vw = window.innerWidth
     const vh = window.innerHeight
+    const w = visual.current?.w ?? p.w
+    const h = visual.current?.h ?? p.h
     const x = (p.dx / 100) * vw
     const y = (p.dy / 100) * vh
-    const left = p.ax === 'left' ? x : p.ax === 'right' ? vw - p.w - x : (vw - p.w) / 2 + x
-    const top = p.ay === 'top' ? y : p.ay === 'bottom' ? vh - p.h - y : (vh - p.h) / 2 + y
+    const left = p.ax === 'left' ? x : p.ax === 'right' ? vw - w - x : (vw - w) / 2 + x
+    const top = p.ay === 'top' ? y : p.ay === 'bottom' ? vh - h - y : (vh - h) / 2 + y
     return { left, top }
   }, [])
 
@@ -144,8 +164,10 @@ export function useFloatingPanel(
 
       const left = o.rect.left + (e.clientX - o.x)
       const top = o.rect.top + (e.clientY - o.y)
-      const { ax, ay } = nearestAnchor(left, top, ref.current.w, ref.current.h, vw, vh)
-      setPlacement((p) => toPlacement(p, left, top, vw, vh, ax, ay))
+      const vw2 = visual.current?.w ?? ref.current.w
+      const vh2 = visual.current?.h ?? ref.current.h
+      const { ax, ay } = nearestAnchor(left, top, vw2, vh2, vw, vh)
+      setPlacement((p) => toPlacement(p, left, top, vw, vh, ax, ay, vw2, vh2))
     },
     []
   )
@@ -235,6 +257,9 @@ export function useFloatingPanel(
       // React commits the state update.
       ref.current = { ...ref.current, w, h }
       setPlacement(ref.current)
+    }, []),
+    syncVisual: useCallback((w: number, h: number) => {
+      visual.current = { w, h }
     }, [])
   }
 }
@@ -269,22 +294,27 @@ function toPlacement(
   vw: number,
   vh: number,
   ax: AnchorX,
-  ay: AnchorY
+  ay: AnchorY,
+  // The box actually on screen. Defaults to the stored size; the deck tracker
+  // passes its shrunk-to-content shell so anchored math matches what the eye
+  // is dragging (see the `visual` ref).
+  boxW: number = prev.w,
+  boxH: number = prev.h
 ): PanelPlacement {
-  const clampedLeft = clamp(left, 0, Math.max(0, vw - prev.w))
-  const clampedTop = clamp(top, 0, Math.max(0, vh - prev.h))
+  const clampedLeft = clamp(left, 0, Math.max(0, vw - boxW))
+  const clampedTop = clamp(top, 0, Math.max(0, vh - boxH))
   const dx =
     ax === 'left'
       ? (clampedLeft / vw) * 100
       : ax === 'right'
-        ? ((vw - prev.w - clampedLeft) / vw) * 100
-        : ((clampedLeft + prev.w / 2 - vw / 2) / vw) * 100
+        ? ((vw - boxW - clampedLeft) / vw) * 100
+        : ((clampedLeft + boxW / 2 - vw / 2) / vw) * 100
   const dy =
     ay === 'top'
       ? (clampedTop / vh) * 100
       : ay === 'bottom'
-        ? ((vh - prev.h - clampedTop) / vh) * 100
-        : ((clampedTop + prev.h / 2 - vh / 2) / vh) * 100
+        ? ((vh - boxH - clampedTop) / vh) * 100
+        : ((clampedTop + boxH / 2 - vh / 2) / vh) * 100
   return { ...prev, ax, ay, dx, dy, free: true }
 }
 

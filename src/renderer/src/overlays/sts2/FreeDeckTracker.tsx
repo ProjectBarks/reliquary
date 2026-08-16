@@ -96,6 +96,10 @@ export function FreeDeckTracker({
   const contentH = layout.usedH + chipH + TITLEBAR_H + PAD * 2 + EDGE
   const shellW = panel.resizing ? p.w : Math.min(p.w, contentW)
   const shellH = panel.resizing ? p.h : Math.min(p.h, contentH)
+  // The hook must do its pixel math with the box on SCREEN, not the stored
+  // area budget — anchored math done with the area width teleported the shell
+  // by (area − content) at drag start and on every mid-drag anchor flip.
+  panel.syncVisual(shellW, shellH)
 
   const style: React.CSSProperties = { ...panel.style, width: shellW, height: shellH }
   if (p.ax === 'center') style.marginLeft = `calc(${p.dx}% - ${shellW / 2}px)`
