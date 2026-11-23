@@ -146,17 +146,19 @@ export function prettifyCardId(id: string): string {
 
 /**
  * A card no catalog knows, described from memory alone. The name is the
- * prettified id and the frame is colourless: memory has no display name or
- * character colour to offer, and inventing either would be worse than showing
- * plainly that this card is new. A negative cost is an X/unplayable sentinel,
- * which memory cannot tell apart, so it is left blank rather than guessed.
+ * prettified id: memory has no display name to offer, and inventing one would
+ * be worse than showing plainly that this card is new. The colour is the card's
+ * own pool, which is what the art CDN's folders are named after; an unknown
+ * colour still renders, on the colourless frame and energy icon. A negative
+ * cost is an X/unplayable sentinel, which memory cannot tell apart, so it is
+ * left blank rather than guessed.
  */
 export function synthesizeCardInfo(id: string, meta: RawCardMeta): Sts2CardInfo {
   const cost = meta.canonicalCost >= 0 ? String(meta.canonicalCost) : ''
   return {
     name: prettifyCardId(id),
     type: CARD_TYPES[meta.type] ?? '',
-    color: 'colorless',
+    color: meta.color ?? 'colorless',
     rarity: CARD_RARITIES[meta.rarity] ?? '',
     cost,
     upgrade: { cost }

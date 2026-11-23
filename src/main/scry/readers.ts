@@ -39,6 +39,24 @@ export interface RawCardMeta {
   type: number
   /** `CardRarity`: None=0 Basic=1 … Curse=9 Quest=10. */
   rarity: number
+  /**
+   * The card's colour, from its pool id: `FOOL_CARD_POOL` -> `fool`. These are
+   * exactly the folder names Untapped's art CDN files portraits under
+   * (`card_portraits/<colour>/<id>.png`), which it still updates for cards its
+   * data files never got. Null when the pool did not read.
+   */
+  color: string | null
+}
+
+/** `FOOL_CARD_POOL` -> `fool`; anything that doesn't look like a pool id -> null. */
+function poolColor(card: CardModel): string | null {
+  try {
+    const entry = card._pool?.Id.Entry
+    const m = typeof entry === 'string' ? /^([A-Z][A-Z0-9_]*?)_CARD_POOL$/.exec(entry) : null
+    return m ? m[1].toLowerCase() : null
+  } catch {
+    return null
+  }
 }
 
 /**
@@ -93,7 +111,8 @@ function cardMeta(card: CardModel, id: string): RawCardMeta | null {
     const meta: RawCardMeta = {
       canonicalCost: card.CanonicalEnergyCost,
       type: card.Type,
-      rarity: card.Rarity
+      rarity: card.Rarity,
+      color: poolColor(card)
     }
     if (!isPlausibleMeta(meta)) return null
     if (cardMetaCache.size < 4096) cardMetaCache.set(id, meta)

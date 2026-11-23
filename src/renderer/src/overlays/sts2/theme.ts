@@ -79,8 +79,15 @@ export function getCardArtUrl(color: string, id: string): string {
   return `${ART}/card_portraits/${color}/${id.toLowerCase()}.png`
 }
 
+/**
+ * Colours the CDN has an energy icon for. Every other colour (curse, status,
+ * event, token, quest, and characters newer than the icon set such as fool)
+ * 404s, which left the cost pill with no icon behind the number.
+ */
+const ENERGY_ICON_COLORS = new Set<string>([...STS2_CARD_COLORS, 'star'])
+
 export function getEnergyIcon(color: string): string {
-  return `${ART}/energy/${color}-text.png`
+  return `${ART}/energy/${ENERGY_ICON_COLORS.has(color) ? color : 'colorless'}-text.png`
 }
 
 export function getEnchantIconUrl(id: string): string {

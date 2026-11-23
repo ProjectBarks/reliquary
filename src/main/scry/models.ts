@@ -111,6 +111,11 @@ export class CardModel extends AbstractModel {
   get Rarity(): number {
     return this.number('Rarity') as number
   }
+  /** The card pool it belongs to (`FOOL_CARD_POOL`, `CURSE_CARD_POOL`, …). */
+  get _pool(): AbstractModel | null {
+    const value = this.object('_pool', true)
+    return value ? new AbstractModel(value) : null
+  }
 }
 
 // ── combat piles / creatures ─────────────────────────────────────────────────
