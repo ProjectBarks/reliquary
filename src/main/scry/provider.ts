@@ -5,6 +5,17 @@ import { telemetry } from '../telemetry/Telemetry'
 import { ReaderHost } from './ReaderHost'
 import type { RawSnapshot, ReaderToHost } from './readerProtocol'
 import { CodexClient, type DeckAdvice } from '../codex/CodexClient'
+import {
+  UNTAPPED_FALLBACK_BUILDS,
+  cardsFromCodex,
+  cardsFromUntapped,
+  isUntappedPayload,
+  mergeCardData,
+  namesFromUntapped,
+  synthesizeCardInfo,
+  untappedUrl,
+  type UntappedPayload
+} from './cardData'
 // Types only: the reads themselves now happen in the forked reader process.
 import type {
   RawCard,
@@ -18,6 +29,7 @@ import type {
   KeyedSnapshot,
   Sts2Card,
   Sts2CardData,
+  Sts2CardInfo,
   Sts2EnemiesState,
   Sts2LayoutState,
   Sts2NGameState,
@@ -42,6 +54,11 @@ import type {
 // A card offer must be stable for this many consecutive polls (~450ms at 150ms)
 // before we spend a deck-conditioned draft-advice API call on it.
 const OFFER_STABLE_POLLS = 3
+
+/** How long a non-exact card-data load stands before the same build re-checks. */
+const CARD_DATA_RECHECK_MS = 30 * 60_000
+/** Long enough for the compendium's background refetch of a stale catalog to land. */
+const CARD_DATA_STALE_RELOAD_MS = 45_000
 
 export interface ProcessState {
   detected: boolean
@@ -98,6 +115,12 @@ export interface ScryProviderCallbacks {
   onRaw?(raw: RawSnapshot, ctx: RawTapContext): void
   /** The out-of-band half of the same tap. */
   onRawSignal?(signal: RawTapSignal): void
+  /**
+   * Spire Codex's card catalog rows (the compendium's cached `/api/cards`), or
+   * null when unavailable. A card-data source in its own right now that
+   * Untapped no longer publishes new builds.
+   */
+  loadCodexCards?(): Promise<{ rows: unknown[]; stale: boolean } | null>
 }
 
 export class Sts2ScryProvider {
@@ -133,6 +156,17 @@ export class Sts2ScryProvider {
   private cardDataFetching = false
   private cardDataRetryTimer: NodeJS.Timeout | null = null
   private cardDataRetries = 0
+  /** The last build a card-data load completed for, exact or not, and when. */
+  private cardDataSettledFor: string | null = null
+  private cardDataSettledAt = 0
+  /** Merged catalog data (Untapped + Codex); null until the first load lands. */
+  private cardDataBase: Sts2CardData | null = null
+  /** Cards no catalog knows, described from memory. Survives catalog reloads. */
+  private cardDataSynth = new Map<string, Sts2CardInfo>()
+  /** True once a catalog load has finished (either way); gates synthesis. */
+  private cardDataAttempted = false
+  /** The one-shot reload armed when the Codex catalog was served stale. */
+  private cardDataStaleReload: NodeJS.Timeout | null = null
   // id -> display name, spanning cards/relics/potions (for offered-item panels).
   private nameMap: Record<string, string> = {}
 
@@ -197,6 +231,7 @@ export class Sts2ScryProvider {
   stop(): void {
     this.running = false
     if (this.cardDataRetryTimer) clearTimeout(this.cardDataRetryTimer)
+    if (this.cardDataStaleReload) clearTimeout(this.cardDataStaleReload)
     if (this.reprimeTimer) clearInterval(this.reprimeTimer)
     this.cardDataRetryTimer = null
     this.reprimeTimer = null
@@ -778,6 +813,7 @@ export class Sts2ScryProvider {
         costsX: c.costsX
       }))
     this.captureDeckSnapshot(raw)
+    this.noteUnknownCards(raw)
     return { draw: conv(raw.draw), hand: conv(raw.hand), discard: conv(raw.discard) }
   }
 
@@ -845,57 +881,153 @@ export class Sts2ScryProvider {
     this.dbg('run/character change — deck + advice state reset')
   }
 
-  // ── card metadata (CDN) ──
+  // ── card metadata (CDN + Codex + memory) ──
 
   private fetchCardData(version: string | null): void {
     if (this.cardDataFetching) return
     if (version && version === this.cardDataVersion) return
+    // A non-exact load (no Untapped file for this build) is as good as this
+    // build will get for a while; every reader restart re-sends gameVersion, and
+    // re-downloading ~430 KB each time would buy nothing.
+    if (
+      version &&
+      version === this.cardDataSettledFor &&
+      Date.now() - this.cardDataSettledAt < CARD_DATA_RECHECK_MS
+    ) {
+      return
+    }
     this.cardDataFetching = true
-    const candidates = version
-      ? [`public/${version}`, 'public/latest']
-      : ['public/latest']
-    void this.tryFetchCardData(candidates, version)
+    void this.loadCardData(version)
   }
 
-  private async tryFetchCardData(candidates: string[], version: string | null): Promise<void> {
-    for (const path of candidates) {
-      const url = `https://sts2json.untapped.gg/data/${path}/sts_data.json`
+  /** The first Untapped payload that answers, newest-matching first. */
+  private async fetchUntapped(
+    version: string | null
+  ): Promise<{ path: string; data: UntappedPayload } | null> {
+    const candidates = [
+      ...(version ? [`public/${version}`] : []),
+      'public/latest',
+      ...UNTAPPED_FALLBACK_BUILDS.map((v) => `public/${v}`)
+    ]
+    for (const path of [...new Set(candidates)]) {
       try {
-        const data = await fetchJson(url)
-        if (data && Array.isArray(data.cards)) {
-          const map: Sts2CardData = {}
-          const names: Record<string, string> = {}
-          for (const card of data.cards) {
-            if (card?.id) {
-              map[card.id] = card
-              if (card.name) names[card.id] = card.name
-            }
-          }
-          for (const list of [data.relics, data.potions]) {
-            if (Array.isArray(list)) {
-              for (const entry of list) if (entry?.id && entry.name) names[entry.id] = entry.name
-            }
-          }
-          this.nameMap = names
-          // Only record the exact game version when the version-specific path
-          // served it; if we fell back to 'latest', leave it unset so a later
-          // connect can still fetch build-specific data (don't cache latest AS
-          // the build version).
-          this.cardDataVersion = path === `public/${version}` ? version : null
-          this.cardDataFetching = false
-          this.cardDataRetries = 0
-          this.cb.emit({ key: 'sts2.cardData', value: map })
-          return
-        }
+        const data = await fetchJson(untappedUrl(path))
+        if (isUntappedPayload(data)) return { path, data }
       } catch {
         // try next candidate
       }
     }
-    // Every candidate failed (CDN blip / offline at launch). Without a retry the
-    // whole session runs with no card metadata (every card renders as a raw id),
-    // so schedule a backoff retry instead of giving up.
-    this.cardDataFetching = false
-    this.scheduleCardDataRetry()
+    return null
+  }
+
+  private async loadCardData(version: string | null): Promise<void> {
+    try {
+      const [untapped, codex] = await Promise.all([
+        this.fetchUntapped(version),
+        this.cb.loadCodexCards ? this.cb.loadCodexCards().catch(() => null) : Promise.resolve(null)
+      ])
+      const exact = !!untapped && !!version && untapped.path === `public/${version}`
+      const fromUntapped = untapped ? cardsFromUntapped(untapped.data) : {}
+      const fromCodex = cardsFromCodex(codex?.rows)
+      // A stale catalog is served while the compendium refetches it in the
+      // background; come back once for the fresh copy rather than holding the
+      // old one until the next build change.
+      if (codex?.stale && !this.cardDataStaleReload) {
+        this.cardDataStaleReload = setTimeout(() => {
+          this.cardDataSettledFor = null
+          if (this.running) this.fetchCardData(this.gameVersion)
+        }, CARD_DATA_STALE_RELOAD_MS)
+      }
+      const untappedCount = Object.keys(fromUntapped).length
+      const codexCount = Object.keys(fromCodex).length
+
+      // From here on, memory synthesis may fill gaps: either the catalogs have
+      // answered, or they failed and memory is all there is.
+      this.cardDataAttempted = true
+      if (!untappedCount && !codexCount) {
+        // Every source failed (CDN blip / offline at launch). Without a retry
+        // the whole session runs with no card metadata (every card renders as
+        // a raw id), so back off and try again instead of giving up.
+        this.scheduleCardDataRetry()
+        return
+      }
+
+      // The exact Untapped build is authoritative. Without it, Codex tracks the
+      // current game more closely than whichever older Untapped build answered.
+      const merged = exact
+        ? mergeCardData(fromUntapped, fromCodex)
+        : mergeCardData(fromCodex, fromUntapped)
+      const names: Record<string, string> = untapped ? namesFromUntapped(untapped.data) : {}
+      for (const [id, info] of Object.entries(merged)) if (info.name) names[id] = info.name
+
+      this.cardDataBase = merged
+      this.nameMap = names
+      // Only record the build as done when its own file served it, so a later
+      // connect can still pick up build-specific data once it is published.
+      this.cardDataVersion = exact ? version : null
+      this.cardDataSettledFor = version
+      this.cardDataSettledAt = Date.now()
+      this.cardDataRetries = 0
+      this.emitCardData()
+
+      const source = exact ? 'untapped_exact' : codexCount ? 'codex' : 'untapped_fallback'
+      if (!exact) {
+        console.log(
+          `[spectra] card data: no Untapped file for ${version ?? 'this build'}; using ` +
+            `${codexCount ? `Codex (${codexCount})` : ''}` +
+            `${codexCount && untapped ? ' + ' : ''}` +
+            `${untapped ? `Untapped ${untapped.path} (${untappedCount})` : ''}`
+        )
+      }
+      telemetry.capture('card_data_loaded', {
+        source,
+        game_version: version,
+        untapped_path: untapped?.path ?? null,
+        untapped_cards: untappedCount,
+        codex_cards: codexCount,
+        cards: Object.keys(merged).length
+      })
+    } catch (err) {
+      this.cardDataAttempted = true
+      telemetry.issue('card_data_load_failed', 'warn', {}, err)
+      this.scheduleCardDataRetry()
+    } finally {
+      this.cardDataFetching = false
+    }
+  }
+
+  /**
+   * Describe, from memory, any card in this read that no catalog knows — a
+   * character newer than every data source. Each id is synthesized once.
+   */
+  private noteUnknownCards(raw: RawPileState): void {
+    // Before the first catalog load settles, "unknown" only means "not loaded
+    // yet"; synthesizing then would describe cards every catalog knows.
+    if (!this.cardDataAttempted) return
+    let added = 0
+    for (const list of [raw.deck, raw.draw, raw.hand, raw.discard, raw.exhaust]) {
+      for (const c of list) {
+        if (!c.id || !c.meta) continue
+        if (this.cardDataBase?.[c.id] || this.cardDataSynth.has(c.id)) continue
+        this.cardDataSynth.set(c.id, synthesizeCardInfo(c.id, c.meta))
+        added++
+      }
+    }
+    if (!added) return
+    this.dbg(`card data: synthesized ${added} card(s) no catalog knows`)
+    telemetry.capture('card_data_synthesized', {
+      added,
+      total: this.cardDataSynth.size,
+      base_loaded: !!this.cardDataBase
+    })
+    this.emitCardData()
+  }
+
+  /** Catalog data with memory-synthesized entries filling only the gaps. */
+  private emitCardData(): void {
+    const value: Sts2CardData = { ...(this.cardDataBase ?? {}) }
+    for (const [id, info] of this.cardDataSynth) if (!(id in value)) value[id] = info
+    this.cb.emit({ key: 'sts2.cardData', value })
   }
 
   private scheduleCardDataRetry(): void {
@@ -912,7 +1044,9 @@ export class Sts2ScryProvider {
     )
     this.cardDataRetryTimer = setTimeout(() => {
       this.cardDataRetryTimer = null
-      if (this.running) this.fetchCardData(this.cardDataVersion)
+      // The running build, not `cardDataVersion`: that is only set on success,
+      // so retrying with it dropped the build-specific URL from every retry.
+      if (this.running) this.fetchCardData(this.gameVersion)
     }, delay)
   }
 }

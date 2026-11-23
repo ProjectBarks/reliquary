@@ -514,7 +514,7 @@ await section('refusing what it cannot read', async () => {
   const newer = parseSaveRun(JSON.stringify(saveJson({ schemaVersion: MAX_SAVE_SCHEMA + 1 })))
   eq('a newer schema is refused, not guessed at', newer.reason, 'unsupported-schema')
   eq('and reports the version it saw', newer.schema, MAX_SAVE_SCHEMA + 1)
-  ok('the highest verified schema is 9', MAX_SAVE_SCHEMA === 9)
+  ok('the highest verified schema is 11', MAX_SAVE_SCHEMA === 11)
 })
 
 // ── 3. matching ──────────────────────────────────────────────────────────────

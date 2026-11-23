@@ -411,6 +411,13 @@ function wireScry(): void {
     // provider, so a throw in here cannot cost the overlay a frame.
     onRaw: (raw: RawSnapshot, ctx: RawTapContext) => recorder?.observe(raw, ctx),
     onRawSignal: (signal: RawTapSignal) => recorder?.onSignal(signal),
+    // The compendium's own cached card catalog (disk-backed, 7-day TTL), so
+    // card metadata costs no extra Codex request on a warm start.
+    loadCodexCards: async () => {
+      const payload = await compendium.catalog('cards')
+      if (!('data' in payload) || !Array.isArray(payload.data)) return null
+      return { rows: payload.data as unknown[], stale: 'stale' in payload && payload.stale === true }
+    },
     onProcess: (state: ProcessState) => {
       recorder?.onProcess(state)
       const was = processState

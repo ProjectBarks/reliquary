@@ -38,6 +38,13 @@ import type { RawItem } from '../scry/readers'
  */
 const SNAPSHOT_SCHEMA = 2
 
+/**
+ * How long an unversioned snapshot stands before the next prime re-fetches it.
+ * Prime runs at launch and on each game connect, so this bounds the cost at
+ * six requests per half day while still picking up new cards the same day.
+ */
+const UNVERSIONED_MAX_AGE_MS = 12 * 60 * 60 * 1000
+
 /** The three entity families the runs API scores. Also the URL segment. */
 type MetricKind = 'cards' | 'relics' | 'potions'
 
@@ -64,6 +71,8 @@ interface Snapshot {
   schema: number
   apiVersion: number
   builtAt: number
+  /** Local epoch ms this snapshot was primed. The freshness clock when the API is unversioned. */
+  primedAt?: number
   baselineWinRate: number
   /** Vocabulary per kind — the ids the API will actually answer for. */
   ids: Record<MetricKind, string[]>
@@ -117,11 +126,20 @@ export class CodexClient {
     this.priming = true
     try {
       const ss = await this.get('/api/runs/snapshot-status')
-      const wantVersion: number = ss?.version ?? 0
+      // The API stopped publishing `version` (Nov 2026; the status now carries
+      // only building/built_at/data_through/total_runs). Defaulting it to 0
+      // made the first v0 prime match forever, so the advisor would never pick
+      // up another card. Unversioned caches are judged by age instead.
+      const versioned = typeof ss?.version === 'number'
+      const wantVersion: number = versioned ? ss.version : 0
       const building: boolean = !!ss?.building
 
       if (!this.snap) this.snap = this.loadCache()
-      if (this.snap && this.snap.apiVersion === wantVersion) {
+      const fresh =
+        !!this.snap &&
+        this.snap.apiVersion === wantVersion &&
+        (versioned || Date.now() - (this.snap.primedAt ?? 0) < UNVERSIONED_MAX_AGE_MS)
+      if (this.snap && fresh) {
         this.state = building ? 'stale' : 'ready'
         this.error = null
         this.log(`prime skip: cache fresh (v${wantVersion}, ${this.snap.ids.cards.length} cards)`)
@@ -189,6 +207,7 @@ export class CodexClient {
         schema: SNAPSHOT_SCHEMA,
         apiVersion: wantVersion,
         builtAt: ss?.built_at ?? 0,
+        primedAt: Date.now(),
         baselineWinRate: tables[0]?.baseline_win_rate ?? 0,
         ids,
         names,

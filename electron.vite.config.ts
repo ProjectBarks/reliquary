@@ -75,6 +75,30 @@ export default defineConfig({
         }
       }
     },
+    plugins: [
+      {
+        // Only reader.mjs is unpacked (package.json asarUnpack). Any code the
+        // reader shares with index.js gets hoisted into out/main/chunks/, which
+        // stays inside app.asar, and the unpacked reader dies at startup with
+        // ERR_MODULE_NOT_FOUND. Dev runs straight out of out/ and never sees it
+        // (hit while building v0.10.3), so fail the build instead.
+        name: 'reader-self-contained',
+        generateBundle(_options, bundle) {
+          const reader = Object.values(bundle).find(
+            (c) => c.type === 'chunk' && c.isEntry && c.name === 'reader'
+          )
+          if (!reader || reader.type !== 'chunk') return
+          const shared = [...reader.imports, ...reader.dynamicImports].filter((f) => f in bundle)
+          if (shared.length) {
+            this.error(
+              `reader.mjs imports shared chunk(s) ${shared.join(', ')}; it runs from ` +
+                'app.asar.unpacked and cannot load them. Keep readerProcess.ts\'s import ' +
+                'graph free of value imports from main-process modules (type imports are fine).'
+            )
+          }
+        }
+      }
+    ],
     resolve: {
       alias: { '@shared': resolve('src/shared') }
     }

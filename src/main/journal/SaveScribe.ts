@@ -94,7 +94,11 @@ export const SAVE_INDEX_SCHEMA = 1
  * files, for the same reason. Extend it after reading a real file from the new
  * build, not before.
  */
-export const MAX_SAVE_SCHEMA = 9
+// 11 (game v0.113.1) inspected 2026-11-22 against 69 schema-9 files: every key
+// read here keeps its type; the only additions are `is_custom_game` (top level)
+// and `player_stats[].is_affected_by_fur_coat`. No schema-10 file was ever
+// shipped to this profile, but 10 sits between two verified shapes.
+export const MAX_SAVE_SCHEMA = 11
 
 /** A history file is 4–300 KB. Anything past this is not one, and is not read. */
 const MAX_SAVE_BYTES = 8 * 1024 * 1024
@@ -145,6 +149,13 @@ export interface SaveIndexRow {
   runId: string | null
   /** When we last decided this. */
   at: number
+  /**
+   * For `unsupported-schema` only: the `MAX_SAVE_SCHEMA` the refusal was made
+   * under. A build that reads newer saves re-opens the file instead of
+   * trusting a refusal it would no longer make. Absent on older rows, which is
+   * read the same way: re-examine once.
+   */
+  maxSchema?: number
 }
 
 export interface SaveIndexFile {
@@ -1384,6 +1395,8 @@ export class SaveScribe {
    * what keeps a directory of sixty pre-Reliquary saves free on every sweep.
    */
   private settled(row: SaveIndexRow, name: string): boolean {
+    // Settled only under the cap it was refused at; a raised cap may accept it.
+    if (row.status === 'unsupported-schema') return row.maxSchema === MAX_SAVE_SCHEMA
     if (SETTLED.has(row.status)) return true
     if (row.status !== 'unmatched') return false
     const startTime = startTimeFromFileName(name)
@@ -1623,7 +1636,8 @@ export class SaveScribe {
       bytes: info.size,
       status,
       runId,
-      at: this.now()
+      at: this.now(),
+      ...(status === 'unsupported-schema' ? { maxSchema: MAX_SAVE_SCHEMA } : {})
     })
     this.indexDirty = true
   }
@@ -1718,12 +1732,14 @@ export function parseSaveIndex(text: string): SaveIndexFile | null {
     const mtimeMs = num(value['mtimeMs'])
     const bytes = num(value['bytes'])
     if (mtimeMs === null || bytes === null) continue
+    const maxSchema = num(value['maxSchema'])
     files[file] = {
       mtimeMs,
       bytes,
       status: status as SaveFileStatus,
       runId: str(value['runId']),
-      at: num(value['at']) ?? 0
+      at: num(value['at']) ?? 0,
+      ...(maxSchema !== null ? { maxSchema } : {})
     }
   }
   return { schema: SAVE_INDEX_SCHEMA, updatedAt: num(raw['updatedAt']) ?? 0, files }

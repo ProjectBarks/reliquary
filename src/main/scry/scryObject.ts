@@ -327,8 +327,21 @@ export class Dictionary<T = any> extends ScryObject {
     return this.number(`${this.prefix}version`) as number
   }
 
+  /**
+   * Live entries. `_count` alone is the high-water mark of used slots and still
+   * counts removed ones, which sit on the free list (`_freeCount`) — so a
+   * dictionary whose only entry was removed reads `_count=1, _freeCount=1` and
+   * is empty, not "one entry we failed to read".
+   */
   get count(): number {
-    return this.number(`${this.prefix}count`) as number
+    const used = this.number(`${this.prefix}count`) as number
+    let free = 0
+    try {
+      free = (this.number(`${this.prefix}freeCount`) as number) ?? 0
+    } catch {
+      /* older layouts without a free count: `_count` is the best we have */
+    }
+    return Math.max(0, used - free)
   }
 
   /**

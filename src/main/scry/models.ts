@@ -99,6 +99,18 @@ export class CardModel extends AbstractModel {
     const value = this.object('_deckVersion', true)
     return value ? new AbstractModel(value) : null
   }
+  // Auto-property backing fields, constant per card id. `_energyCost` is
+  // created lazily, so a deck card that has never been in combat has none;
+  // these are what the card *is*, readable either way.
+  get CanonicalEnergyCost(): number {
+    return this.number('CanonicalEnergyCost') as number
+  }
+  get Type(): number {
+    return this.number('Type') as number
+  }
+  get Rarity(): number {
+    return this.number('Rarity') as number
+  }
 }
 
 // ── combat piles / creatures ─────────────────────────────────────────────────
@@ -251,7 +263,9 @@ export class NCombatRoom extends ScryObject {
 
 export const NMerchantRoomClassName = 'MegaCrit.Sts2.Core.Nodes.Rooms.NMerchantRoom'
 export const NEventRoomClassName = 'MegaCrit.Sts2.Core.Nodes.Rooms.NEventRoom'
-export const NMainMenuClassName = 'MegaCrit.Sts2.Core.Nodes.NMainMenu'
+// Moved under Screens.MainMenu by v0.113; the old path is kept for older builds.
+export const NMainMenuClassName = 'MegaCrit.Sts2.Core.Nodes.Screens.MainMenu.NMainMenu'
+const NMainMenuLegacyClassName = 'MegaCrit.Sts2.Core.Nodes.NMainMenu'
 export const NGameOverScreenClassName =
   'MegaCrit.Sts2.Core.Nodes.Screens.GameOverScreen.NGameOverScreen'
 
@@ -712,7 +726,9 @@ export class NGame extends ScryGodotObject {
     if (currentScene === null || currentScene === undefined) return null
     const sceneName = currentScene.getClassName()
     if (sceneName === NRun.ClassName) return new NRun(currentScene)
-    if (sceneName === NMainMenuClassName) return new ScryObject(currentScene)
+    if (sceneName === NMainMenuClassName || sceneName === NMainMenuLegacyClassName) {
+      return new ScryObject(currentScene)
+    }
     return null
   }
 }

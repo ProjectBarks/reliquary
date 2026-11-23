@@ -27,6 +27,40 @@ import {
   type CardModel
 } from './models'
 
+/**
+ * What the game itself knows about a card type, read off the live `CardModel`
+ * (auto-property backing fields, constant per card id). Enough to place a card
+ * no catalog has heard of: its printed cost, its type group and its rarity.
+ * The host turns it into display data (`synthesizeCardInfo` in cardData.ts).
+ */
+export interface RawCardMeta {
+  canonicalCost: number
+  /** `CardType`: None=0 Attack=1 Skill=2 Power=3 Status=4 Curse=5 Quest=6. */
+  type: number
+  /** `CardRarity`: None=0 Basic=1 … Curse=9 Quest=10. */
+  rarity: number
+}
+
+/**
+ * True when a meta read looks like the enum/cost values it should be, not a
+ * torn read. Bounds are the v0.113.1 `CardType` (0–6) and `CardRarity` (0–10)
+ * enums. Lives here rather than in cardData.ts so the reader imports nothing
+ * from main-process modules (see the note at the top of cardData.ts).
+ */
+function isPlausibleMeta(meta: RawCardMeta): boolean {
+  return (
+    Number.isInteger(meta.type) &&
+    meta.type >= 0 &&
+    meta.type <= 6 &&
+    Number.isInteger(meta.rarity) &&
+    meta.rarity >= 0 &&
+    meta.rarity <= 10 &&
+    Number.isInteger(meta.canonicalCost) &&
+    meta.canonicalCost >= -2 &&
+    meta.canonicalCost <= 20
+  )
+}
+
 /** A card as read from memory, plus its base address for cycle de-duplication. */
 export interface RawCard {
   id: string
@@ -37,6 +71,36 @@ export interface RawCard {
   defaultCost: number | null
   isPermanent: boolean
   baseAddress: any
+  /**
+   * The card type's printed cost, type and rarity, straight from memory. Lets
+   * the host describe a card no catalog knows (a character newer than every
+   * data source). Null when the read failed or looked torn.
+   */
+  meta: RawCardMeta | null
+}
+
+/**
+ * Per-id cache of `RawCardMeta`. The three fields are constant for a card id,
+ * so they are read once per id per reader process rather than on every card of
+ * every poll. Only plausible reads are cached; a torn one is retried next time.
+ */
+const cardMetaCache = new Map<string, RawCardMeta>()
+
+function cardMeta(card: CardModel, id: string): RawCardMeta | null {
+  const hit = cardMetaCache.get(id)
+  if (hit) return hit
+  try {
+    const meta: RawCardMeta = {
+      canonicalCost: card.CanonicalEnergyCost,
+      type: card.Type,
+      rarity: card.Rarity
+    }
+    if (!isPlausibleMeta(meta)) return null
+    if (cardMetaCache.size < 4096) cardMetaCache.set(id, meta)
+    return meta
+  } catch {
+    return null
+  }
 }
 
 /**
@@ -48,8 +112,10 @@ export interface RawCard {
 export function toCardData(card: CardModel | null | undefined): RawCard | null {
   if (!card) return null
   const energyCost = card._energyCost
+  const id = card.Id.Entry
   return {
-    id: card.Id.Entry,
+    id,
+    meta: cardMeta(card, id),
     upgradeLevel: card._currentUpgradeLevel,
     enchantment: card.Enchantment?.Id.Entry ?? null,
     costsX: energyCost?.CostsX ?? false,

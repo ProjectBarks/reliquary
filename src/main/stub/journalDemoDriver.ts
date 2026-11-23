@@ -170,7 +170,8 @@ function rawCard(inst: Inst): RawCard {
     cost: cost < 0 ? null : cost,
     defaultCost: cost < 0 ? null : cost,
     isPermanent: true,
-    baseAddress: inst.addr
+    baseAddress: inst.addr,
+    meta: null
   }
 }
 
