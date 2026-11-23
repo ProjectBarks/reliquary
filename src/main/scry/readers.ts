@@ -18,13 +18,18 @@ import {
   NGame,
   NGridCardHolder,
   NHoverTipSet,
+  NMapRoomClassName,
   NMerchantRoom,
+  NRestSiteRoomClassName,
   NRun,
+  NTreasureRoomClassName,
+  isMerchantRoomClass,
   ReleaseInfoManager,
   RunManager,
   findLocalPlayer,
   readPlayers,
-  type CardModel
+  type CardModel,
+  type IOverlayScreen
 } from './models'
 
 /**
@@ -284,7 +289,14 @@ export function readEnemiesState(context: GodotContext): RawEnemiesState | null 
 }
 
 export interface RawNGameState {
+  /** combat | merchant | event | restSite | treasure | map | other, or null with no room. */
   roomType: string | null
+  /**
+   * The live class names behind `roomType` and the top overlay, so a screen
+   * the game added that no reader knows can name itself (`screen_unrecognized`)
+   * instead of silently showing nothing.
+   */
+  screen: { roomClass: string | null; overlayClass: string | null; overlayHandled: boolean }
   isMapOpen: boolean
   isTraveling: boolean
   isSubMenuOpen: boolean
@@ -342,19 +354,39 @@ export function readNGameState(context: GodotContext): RawNGameState | null {
   const currentRoom = run.getCurrentRoom()
 
   let roomType: string | null = null
-  const roomClass = currentRoom ? (currentRoom as any).className : null
+  const roomClass: string | null = currentRoom ? safe(() => currentRoom.className, null) : null
   if (roomClass === NCombatRoom.ClassName) roomType = 'combat'
-  else if (roomClass && roomClass.endsWith('NMerchantRoom')) roomType = 'merchant'
+  else if (currentRoom instanceof NMerchantRoom || isMerchantRoomClass(roomClass)) roomType = 'merchant'
   else if (roomClass && roomClass.endsWith('NEventRoom')) roomType = 'event'
+  else if (roomClass === NRestSiteRoomClassName) roomType = 'restSite'
+  else if (roomClass === NTreasureRoomClassName) roomType = 'treasure'
+  else if (roomClass === NMapRoomClassName) roomType = 'map'
   else if (currentRoom) roomType = 'other'
 
   let isGameOver = false
+  let topOverlay: IOverlayScreen | null = null
   for (const overlay of globalUi.Overlays._overlays) {
     // The overlay stack can hold an entry the game has already freed, and
     // reading its class dereferences null. Unknown class simply means "not the
     // game-over screen", which is the only thing being asked here.
     if (safe(() => overlay?.isNGameOverScreen() ?? false, false)) isGameOver = true
+    if (overlay) topOverlay = overlay
   }
+  const overlayClass = topOverlay ? safe(() => topOverlay.className, null) : null
+  // Whether any reader here knows what to do with the top overlay. Mirrors the
+  // branches in readVisibleItems plus game-over; anything else is a screen the
+  // game added that we have never been taught (the v0.113 bundle picker was).
+  const overlayHandled = topOverlay
+    ? safe(
+        () =>
+          topOverlay.isNCardRewardSelectionScreen() ||
+          topOverlay.isNChooseACardSelectionScreen() ||
+          topOverlay.isNSimpleCardSelectScreen() ||
+          topOverlay.isNCardGridSelectionScreen() ||
+          topOverlay.isNGameOverScreen(),
+        false
+      )
+    : true
 
   const inspectCard = safe(() => nGame.InspectCardScreen?.getControl()?.isVisible() ?? false, false)
   const inspectRelic = safe(
@@ -372,6 +404,7 @@ export function readNGameState(context: GodotContext): RawNGameState | null {
 
   return {
     roomType,
+    screen: { roomClass, overlayClass, overlayHandled },
     isMapOpen: safe(() => globalUi.MapScreen.IsOpen, false),
     isTraveling: safe(() => globalUi.MapScreen.IsTraveling, false),
     isSubMenuOpen: safe(() => globalUi.SubmenuStack.Stack._submenus.count > 0, false),
@@ -515,8 +548,7 @@ export function readVisibleItems(context: GodotContext): RawVisibleItems | null 
 
   // 2) Merchant room stock.
   const room = run.getCurrentRoom()
-  const roomClass = room ? (room as any).className : null
-  if (roomClass === NMerchantRoom.ClassName) {
+  if (room instanceof NMerchantRoom) {
     const inv = (room as NMerchantRoom).Inventory
     if (!inv.IsOpen) return { source: 'merchant', items: [] }
     const items: RawItem[] = []
@@ -550,7 +582,7 @@ export function readVisibleItems(context: GodotContext): RawVisibleItems | null 
   }
 
   // 3) Ancient event choices.
-  if (roomClass === NEventRoom.ClassName) {
+  if (room instanceof NEventRoom) {
     const ancient = (room as NEventRoom).getAncientLayout()
     if (ancient) {
       const containerPos = ancient._optionsContainer.computeGlobalPosition(screenSize)

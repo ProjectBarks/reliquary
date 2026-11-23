@@ -126,7 +126,7 @@ export function characterName(character: string | null | undefined): string {
  * that came back garbled) resolves to the colourless frame rather than to
  * nothing, so the plaque's left edge is always drawn.
  */
-const CHARACTER_TINTS = new Set(['ironclad', 'silent', 'regent', 'necrobinder', 'defect'])
+const CHARACTER_TINTS = new Set(['ironclad', 'silent', 'regent', 'necrobinder', 'defect', 'fool'])
 
 export function characterTint(character: string | null | undefined): {
   frame: string

@@ -88,6 +88,12 @@ export interface Sts2CardInfo {
   cost?: string
   starCost?: string
   upgrade?: { cost: string }
+  /**
+   * The cost pill's energy icon as a data URL, lifted from the player's own
+   * game files. Only set for colours the art CDN has no icon for (a character
+   * newer than it); everything else uses the CDN icon for `color`.
+   */
+  energyIcon?: string
 }
 
 export type Sts2CardData = Record<string, Sts2CardInfo>

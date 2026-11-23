@@ -153,14 +153,21 @@ export function prettifyCardId(id: string): string {
  * cost is an X/unplayable sentinel, which memory cannot tell apart, so it is
  * left blank rather than guessed.
  */
-export function synthesizeCardInfo(id: string, meta: RawCardMeta): Sts2CardInfo {
+export function synthesizeCardInfo(
+  id: string,
+  meta: RawCardMeta,
+  /** From the player's own game pack (see gamePack.ts), when it could be read. */
+  fromGame: { title?: string | null; energyIcon?: string | null } = {}
+): Sts2CardInfo {
   const cost = meta.canonicalCost >= 0 ? String(meta.canonicalCost) : ''
-  return {
-    name: prettifyCardId(id),
+  const info: Sts2CardInfo = {
+    name: fromGame.title || prettifyCardId(id),
     type: CARD_TYPES[meta.type] ?? '',
     color: meta.color ?? 'colorless',
     rarity: CARD_RARITIES[meta.rarity] ?? '',
     cost,
     upgrade: { cost }
   }
+  if (fromGame.energyIcon) info.energyIcon = fromGame.energyIcon
+  return info
 }

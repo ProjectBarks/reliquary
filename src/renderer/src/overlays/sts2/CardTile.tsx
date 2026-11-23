@@ -4,6 +4,7 @@ import { OutlinedText } from './OutlinedText'
 import {
   costColor,
   costStroke,
+  energyIconFor,
   frameColor,
   getCardArtUrl,
   getEnchantIconUrl,
@@ -51,7 +52,7 @@ export function CardTile({
       {jsonCard ? (
         <RowArt style={{ backgroundImage: `url(${getCardArtUrl(jsonCard.color, card.id)})` }} />
       ) : null}
-      <Cost $icon={getEnergyIcon(jsonCard?.color ?? 'colorless')} style={{ width: iconSize, height: iconSize }}>
+      <Cost $icon={energyIconFor(jsonCard)} style={{ width: iconSize, height: iconSize }}>
         <OutlinedText
           text={resolveCost(card, jsonCard) ?? '?'}
           fill={costColor(card.cost, card.defaultCost)}

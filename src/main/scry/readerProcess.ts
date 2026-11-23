@@ -78,7 +78,8 @@ function detect(): void {
       detected: true,
       pid: proc.pid,
       bounds: proc.bounds,
-      active: proc.active
+      active: proc.active,
+      exePath: proc.exePath
     })
     if (!conn.isConnected() || conn.connectedPid !== proc.pid) {
       const ok = conn.connect(proc.pid)

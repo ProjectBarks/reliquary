@@ -267,6 +267,18 @@ export class NCombatRoom extends ScryObject {
 // ── run / global UI ──────────────────────────────────────────────────────────
 
 export const NMerchantRoomClassName = 'MegaCrit.Sts2.Core.Nodes.Rooms.NMerchantRoom'
+/**
+ * v0.113 turned NMerchantRoom into a base class: a shop's scene is now
+ * NStandardMerchantRoom (or the new NBlitzMerchantRoom), so an exact match on
+ * NMerchantRoom stopped seeing shops at all. Any `N…MerchantRoom` is a shop;
+ * `Inventory` lives on the base class and is inherited.
+ */
+export function isMerchantRoomClass(name: string | null | undefined): boolean {
+  return !!name && /^MegaCrit\.Sts2\.Core\.Nodes\.Rooms\.N[A-Za-z]*MerchantRoom$/.test(name)
+}
+export const NRestSiteRoomClassName = 'MegaCrit.Sts2.Core.Nodes.Rooms.NRestSiteRoom'
+export const NTreasureRoomClassName = 'MegaCrit.Sts2.Core.Nodes.Rooms.NTreasureRoom'
+export const NMapRoomClassName = 'MegaCrit.Sts2.Core.Nodes.Rooms.NMapRoom'
 export const NEventRoomClassName = 'MegaCrit.Sts2.Core.Nodes.Rooms.NEventRoom'
 // Moved under Screens.MainMenu by v0.113; the old path is kept for older builds.
 export const NMainMenuClassName = 'MegaCrit.Sts2.Core.Nodes.Screens.MainMenu.NMainMenu'
@@ -693,13 +705,20 @@ export class NRun extends ScryObject {
     const value = this.object('GlobalUi', true)
     return value ? new NGlobalUi(value) : null
   }
+  /**
+   * The room scene, wrapped by kind where a reader needs its fields. Any other
+   * room (rest site, treasure, map, a future one) comes back as a plain
+   * ScryObject rather than null: null used to mean both "no room" and "a room
+   * we have no wrapper for", which made every rest site read as no room at all.
+   */
   getCurrentRoom(): NCombatRoom | ScryObject | null {
     const currentScene = this._roomContainer?._currentScene
-    const sceneName = currentScene?.getClassName()
+    if (currentScene === null || currentScene === undefined) return null
+    const sceneName = currentScene.getClassName()
     if (sceneName === NCombatRoom.ClassName) return new NCombatRoom(currentScene)
-    if (sceneName === NMerchantRoomClassName) return new NMerchantRoom(currentScene)
+    if (isMerchantRoomClass(sceneName)) return new NMerchantRoom(currentScene)
     if (sceneName === NEventRoomClassName) return new NEventRoom(currentScene)
-    return null
+    return new ScryObject(currentScene)
   }
   /** Topmost overlay screen (card reward/selection/game-over), or null. */
   getCurrentOverlay(): IOverlayScreen | null {

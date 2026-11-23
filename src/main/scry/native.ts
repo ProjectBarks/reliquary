@@ -105,6 +105,8 @@ export interface WindowInfo {
 }
 export interface NodeNativeModule {
   getWindowInfo(windowClassName: string, windowName: string): WindowInfo
+  /** Windows only: the full path of a process's executable. */
+  getExecPath?(pid: number): string
 }
 
 let nativeCache: NodeNativeModule | null = null

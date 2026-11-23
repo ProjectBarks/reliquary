@@ -618,6 +618,7 @@ export class JournalDemoDriver {
     if (!this.inRun) return { nGame: null, pile: null, enemies: null, items: null }
     const nGame: RawNGameState = {
       roomType: this.roomType,
+      screen: { roomClass: null, overlayClass: null, overlayHandled: true },
       isMapOpen: this.traveling,
       isTraveling: this.traveling,
       isSubMenuOpen: false,

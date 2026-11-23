@@ -13,6 +13,7 @@ export const STS2_CARD_COLORS = [
   'regent',
   'necrobinder',
   'defect',
+  'fool',
   'colorless'
 ] as const
 
@@ -59,12 +60,15 @@ export function costColor(cost: number | null, defaultCost: number | null): stri
   return 'var(--sts-color-cream)'
 }
 
+// Each pool's `EnergyOutlineColor`, as sts2.dll defines it (the five originals
+// match these exactly; fool read from FoolCardPool in v0.113.1).
 const COST_STROKE: Record<string, string> = {
   ironclad: '#802020',
   silent: '#1a6625',
   defect: '#1d5673',
   necrobinder: '#803367',
-  regent: '#803d0e'
+  regent: '#803d0e',
+  fool: '#5a4411'
 }
 
 export function costStroke(color: string): string {
@@ -82,12 +86,27 @@ export function getCardArtUrl(color: string, id: string): string {
 /**
  * Colours the CDN has an energy icon for. Every other colour (curse, status,
  * event, token, quest, and characters newer than the icon set such as fool)
- * 404s, which left the cost pill with no icon behind the number.
+ * 404s, which left the cost pill with no icon behind the number. A newer
+ * character's own icon arrives on the card data instead (`energyIcon`, read
+ * from the player's game files); see `energyIconFor`.
  */
-const ENERGY_ICON_COLORS = new Set<string>([...STS2_CARD_COLORS, 'star'])
+const ENERGY_ICON_COLORS = new Set<string>([
+  'ironclad',
+  'silent',
+  'regent',
+  'necrobinder',
+  'defect',
+  'colorless',
+  'star'
+])
 
 export function getEnergyIcon(color: string): string {
   return `${ART}/energy/${ENERGY_ICON_COLORS.has(color) ? color : 'colorless'}-text.png`
+}
+
+/** The icon a card's cost sits on: the game's own when the card carries one, else the CDN's. */
+export function energyIconFor(json?: Sts2CardInfo): string {
+  return json?.energyIcon ?? getEnergyIcon(json?.color ?? 'colorless')
 }
 
 export function getEnchantIconUrl(id: string): string {

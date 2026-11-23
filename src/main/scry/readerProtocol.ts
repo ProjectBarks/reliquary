@@ -49,6 +49,8 @@ export type ReaderToHost =
       pid: number | null
       bounds: WindowBounds | null
       active: boolean
+      /** The game executable's full path, when it could be resolved. The host opens the pack beside it. */
+      exePath?: string | null
     }
   | { type: 'connect'; ok: boolean; pid: number; error: string | null }
   | { type: 'processGone' }

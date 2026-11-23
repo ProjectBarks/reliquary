@@ -14,8 +14,10 @@ import {
   namesFromUntapped,
   synthesizeCardInfo,
   untappedUrl,
+  type RawCardMeta,
   type UntappedPayload
 } from './cardData'
+import { GamePack } from './gamePack'
 // Types only: the reads themselves now happen in the forked reader process.
 import type {
   RawCard,
@@ -165,6 +167,14 @@ export class Sts2ScryProvider {
   private cardDataSynth = new Map<string, Sts2CardInfo>()
   /** True once a catalog load has finished (either way); gates synthesis. */
   private cardDataAttempted = false
+  /** `room:<class>` / `overlay:<class>` keys already reported as unrecognized. */
+  private reportedScreens = new Set<string>()
+  /** What each synthesized card was built from, so a later game-pack load can redo it. */
+  private cardDataSynthMeta = new Map<string, RawCardMeta>()
+  /** The game pack last opened (by path), and what it gave us. */
+  private gamePackPath: string | null = null
+  private gameTitles: Record<string, string> = {}
+  private gameEnergyIcons: Record<string, string> = {}
   /** The one-shot reload armed when the Codex catalog was served stale. */
   private cardDataStaleReload: NodeJS.Timeout | null = null
   // id -> display name, spanning cards/relics/potions (for offered-item panels).
@@ -291,6 +301,7 @@ export class Sts2ScryProvider {
 
       case 'process':
         this.detected = msg.detected
+        if (msg.detected && msg.exePath) void this.loadGamePack(msg.exePath)
         this.cb.onProcess({
           detected: msg.detected,
           pid: msg.pid,
@@ -425,7 +436,32 @@ export class Sts2ScryProvider {
     this.cb.emit({ key: 'sts2.layoutState', value: { source: 'none', panels: [] } })
   }
 
+  /**
+   * Report, once per class per session, any room or overlay screen no reader
+   * understands. The overlay shows nothing on such a screen, which looks
+   * exactly like a bug from the player's side and is invisible from ours; the
+   * class name is what turns "it doesn't detect this screen" into a fix.
+   */
+  private noteScreen(raw: RawNGameState): void {
+    const { roomClass, overlayClass, overlayHandled } = raw.screen ?? {}
+    const short = (c: string): string => c.slice(c.lastIndexOf('.') + 1)
+    const report = (kind: 'room' | 'overlay', cls: string): void => {
+      const key = `${kind}:${cls}`
+      if (this.reportedScreens.has(key)) return
+      this.reportedScreens.add(key)
+      this.dbg(`screen not recognized: ${kind} ${cls}`)
+      telemetry.issue('screen_unrecognized', 'info', {
+        kind,
+        class_name: short(cls),
+        game_version: this.gameVersion
+      })
+    }
+    if (raw.roomType === 'other' && roomClass) report('room', roomClass)
+    if (overlayClass && overlayHandled === false) report('overlay', overlayClass)
+  }
+
   private pollNGame(raw: RawNGameState | null): void {
+    if (raw) this.noteScreen(raw)
     const value: Sts2NGameState = raw
       ? {
           room: raw.roomType ? { type: raw.roomType } : null,
@@ -961,6 +997,9 @@ export class Sts2ScryProvider {
       for (const [id, info] of Object.entries(merged)) if (info.name) names[id] = info.name
 
       this.cardDataBase = merged
+      // The game's own titles fill whatever the catalogs don't name (a newer
+      // character's cards on a reward screen), never overriding them.
+      for (const [id, title] of Object.entries(this.gameTitles)) names[id] ??= title
       this.nameMap = names
       // Only record the build as done when its own file served it, so a later
       // connect can still pick up build-specific data once it is published.
@@ -1009,7 +1048,8 @@ export class Sts2ScryProvider {
       for (const c of list) {
         if (!c.id || !c.meta) continue
         if (this.cardDataBase?.[c.id] || this.cardDataSynth.has(c.id)) continue
-        this.cardDataSynth.set(c.id, synthesizeCardInfo(c.id, c.meta))
+        this.cardDataSynthMeta.set(c.id, c.meta)
+        this.cardDataSynth.set(c.id, this.synthesize(c.id, c.meta))
         added++
       }
     }
@@ -1021,6 +1061,49 @@ export class Sts2ScryProvider {
       base_loaded: !!this.cardDataBase
     })
     this.emitCardData()
+  }
+
+  private synthesize(id: string, meta: RawCardMeta): Sts2CardInfo {
+    return synthesizeCardInfo(id, meta, {
+      title: this.gameTitles[id],
+      energyIcon: meta.color ? this.gameEnergyIcons[meta.color] : null
+    })
+  }
+
+  /**
+   * Open the game's own resource pack beside its executable and take the real
+   * card titles and any energy icons the CDN lacks. Best effort: on failure the
+   * synthesized cards keep their prettified names and the colourless icon.
+   */
+  private async loadGamePack(exePath: string): Promise<void> {
+    const path = GamePack.pathFor(exePath)
+    if (path === this.gamePackPath) return
+    this.gamePackPath = path
+    let pack: GamePack | null = null
+    try {
+      pack = await GamePack.open(path)
+      const [titles, icons] = await Promise.all([pack.cardTitles(), pack.energyIcons()])
+      if (this.gamePackPath !== path) return // a different game process took over
+      this.gameTitles = titles
+      for (const [id, title] of Object.entries(titles)) this.nameMap[id] ??= title
+      this.gameEnergyIcons = icons
+      for (const [id, meta] of this.cardDataSynthMeta) this.cardDataSynth.set(id, this.synthesize(id, meta))
+      if (this.cardDataSynth.size) this.emitCardData()
+      this.dbg(
+        `game pack: ${pack.fileCount} files, ${Object.keys(titles).length} card titles, ` +
+          `energy icons for ${Object.keys(icons).join(', ') || 'none'}`
+      )
+      telemetry.capture('game_pack_loaded', {
+        files: pack.fileCount,
+        card_titles: Object.keys(titles).length,
+        energy_icons: Object.keys(icons)
+      })
+    } catch (err) {
+      telemetry.issue('game_pack_unreadable', 'warn', {}, err)
+      this.dbg(`game pack unreadable: ${err instanceof Error ? err.message : String(err)}`)
+    } finally {
+      await pack?.close()
+    }
   }
 
   /** Catalog data with memory-synthesized entries filling only the gaps. */

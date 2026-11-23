@@ -23,6 +23,24 @@ export interface GameProcess {
   pid: number
   bounds: { x: number; y: number; width: number; height: number }
   active: boolean
+  /** The game executable's path, or null when it could not be resolved. */
+  exePath: string | null
+}
+
+/** Executable path per pid: it cannot change for a live process, so resolve it once. */
+let exePathCache: { pid: number; path: string | null } | null = null
+
+function exePathOf(pid: number): string | null {
+  if (exePathCache?.pid === pid) return exePathCache.path
+  let path: string | null = null
+  try {
+    const value = loadNodeNative().module?.getExecPath?.(pid)
+    path = typeof value === 'string' && value ? value : null
+  } catch {
+    path = null
+  }
+  exePathCache = { pid, path }
+  return path
 }
 
 export class ScryConnection {
@@ -47,7 +65,8 @@ export class ScryConnection {
       proc: {
         pid: info.pid,
         bounds: { x: rect.x, y: rect.y, width: rect.width, height: rect.height },
-        active: info.active
+        active: info.active,
+        exePath: exePathOf(info.pid)
       },
       error: null
     }
